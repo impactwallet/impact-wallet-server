@@ -12,6 +12,7 @@ import { Org, OrgDocument } from './schema/org.schema';
 import { AddMemberToOrgDto } from 'src/members/dto/members.dto';
 import { MembersService } from 'src/members/members.service';
 import { Member } from 'src/members/schema/member.schema';
+import { Request } from 'express';
 
 @Injectable()
 export class OrgsService {

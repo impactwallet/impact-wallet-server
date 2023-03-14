@@ -7,6 +7,7 @@ import { CreateOrgDto } from './dto/create-org.dto';
 import { OrgsFilter } from './dto/orgs.filter.dto';
 import { AddMemberToOrgDto } from 'src/members/dto/members.dto';
 import { Member } from 'src/members/schema/member.schema';
+import { Request } from 'express';
 
 @ApiTags('Orgs')
 @Controller('orgs')

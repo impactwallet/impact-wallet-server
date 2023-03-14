@@ -13,129 +13,132 @@ import { UsersFilter } from './dto/users.filter.dto';
 import { omit } from 'lodash';
 import { SearchUserByNicknameDto } from './dto/search-user-by-nickname.dto';
 import { NicknameEmptyException } from 'src/exceptions/nickname-empty.exception';
+import { Request } from 'express';
 
 @Injectable()
 export class UsersService {
 
-    constructor(@InjectModel(User.name) private userRepository: Model<UserDocument>,
-        private jwtService: JwtService,
-        private apiService: ApiService) { };
+  constructor(
+    @InjectModel(User.name) private userRepository: Model<UserDocument>,
+    private jwtService: JwtService,
+    private apiService: ApiService
+  ) { }
 
-    async getUsersByNicknamePrivate(name: String): Promise<User[]> {
-        const regex = new RegExp(name.toString(), 'i');
-        const users = await this.userRepository.find({ nickname: regex }).populate('orgs').exec();
-        if (!users) throw new NotFoundException(`User with nickname '${name}' not found`);
-        return users;
-    }
+  async getUsersByNicknamePrivate(name: string): Promise<User[]> {
+    const regex = new RegExp(name.toString(), 'i');
+    const users = await this.userRepository.find({ nickname: regex }).populate('orgs').exec();
+    if (!users) throw new NotFoundException(`User with nickname '${name}' not found`);
+    return users;
+  }
 
-    async userExist(searchUserByNicknameDto: SearchUserByNicknameDto) {
-        const user = await this.userRepository.findOne({ nickname: searchUserByNicknameDto.nickname }).exec();        
-        if (!user) throw new NotFoundException(`User with nickname '${searchUserByNicknameDto.nickname}' not found`);
-        return searchUserByNicknameDto.nickname;
-    }
+  async userExist(searchUserByNicknameDto: SearchUserByNicknameDto) {
+    const user = await this.userRepository.findOne({ nickname: searchUserByNicknameDto.nickname }).exec();        
+    if (!user) throw new NotFoundException(`User with nickname '${searchUserByNicknameDto.nickname}' not found`);
+    return searchUserByNicknameDto.nickname;
+  }
 
-    async getUsersByQuery(query: UsersFilter, req: Request): Promise<User[]> {
-        await this.getUserFromToken(req);
+  async getUsersByQuery(query: UsersFilter, req: Request): Promise<User[]> {
+    await this.getUserFromToken(req);
 
-        if (query.exactMatch) {
+    if (query.exactMatch) {
 
-            return await this.getUsersByQueryWithExactMatch(query);
-
-        }
-
-        return await this.getUsersWithFilter(query);
-    }
-
-    async createUser(userDto: CreateUserDto, image: any): Promise<CreateUserResponseDto> {
-        if (!userDto.nickname) throw new NicknameEmptyException('Nickname is empty');
-        const oldUser = await this.userRepository.findOne({ nickname: userDto.nickname }).exec();
-        if (oldUser) throw new DuplicateNameException(`User with nickname '${userDto.nickname}' already exists`);
-
-        if (image) {
-            const imageB64 = image.buffer.toString('base64')
-            userDto.avatar = imageB64;
-        }
-
-        const newUser = new this.userRepository(userDto);
-        const password = uuid();
-        newUser.wallet = await this.apiService.createWallet(password);
-
-        newUser.password = await bcrypt.hash(password, 5);
-        await newUser.save();
-
-        return await this.generateToken(newUser, password);
-    }
-
-
-    async getByUserId(id: String, req: Request): Promise<Object> {
-        await this.getUserFromToken(req);
-        let user = await this.userRepository.findById(id);
-        if (!user) throw new NotFoundException(`User with id '${user.id}' not found`);
-        return omit(user.toObject(), ['password']);
-    }
-
-    private async generateToken(user: User, password: string): Promise<CreateUserResponseDto> {
-        const payload = { name: user.name, nickname: user.nickname, wallet: user.wallet }
-        let response: CreateUserResponseDto = {
-            secretLink: password,
-            token: this.jwtService.sign(payload)
-        }
-
-        return response;
-    }
-
-    async getUserFromToken(req: Request): Promise<User> {
-        const authHeader = req.headers['authorization'];
-        if (!authHeader) throw new UnauthorizedException({ message: 'User not authorized' });
-        const bearer = authHeader.split(' ')[0]
-        const token = authHeader.split(' ')[1]
-        if (bearer !== 'Bearer' || !token) {
-            throw new UnauthorizedException({ message: 'User not authorized' })
-        }
-        const user = this.jwtService.verify(token);
-        return user;
+      return await this.getUsersByQueryWithExactMatch(query);
 
     }
 
-    private async getUsersByQueryWithExactMatch(query: UsersFilter): Promise<User[]> {
+    return await this.getUsersWithFilter(query);
+  }
 
-        const regex = {};
-        if (query.name) {
-            regex['name'] = query.name
-        }
+  async createUser(userDto: CreateUserDto, image: any): Promise<CreateUserResponseDto> {
+    if (!userDto.nickname) throw new NicknameEmptyException('Nickname is empty');
+    const oldUser = await this.userRepository.findOne({ nickname: userDto.nickname }).exec();
+    if (oldUser) throw new DuplicateNameException(`User with nickname '${userDto.nickname}' already exists`);
 
-        if (query.nickname) {
-            regex['nickname'] = query.nickname;
-        }
-
-
-        let users = await this.userRepository.find(regex).exec();
-        let response = [];
-        users.map(user => {
-            response.push(omit(user.toObject(), ['password']));
-        })
-        return response;
-
+    if (image) {
+      const imageB64 = image.buffer.toString('base64')
+      userDto.avatar = imageB64;
     }
 
-    private async getUsersWithFilter(query: UsersFilter): Promise<User[]> {
+    const newUser = new this.userRepository(userDto);
+    const password = uuid();
+    newUser.wallet = await this.apiService.createWallet(password);
 
-        const regex = {};
-        if (query.name) {
-            regex['name'] = new RegExp(query.name);
-        }
-        if (query.nickname) {
-            regex['nickname'] = new RegExp(query.nickname);
-        }
+    newUser.password = await bcrypt.hash(password, 5);
+    await newUser.save();
 
-        console.log(regex);
+    return await this.generateToken(newUser, password);
+  }
 
-        let users = await this.userRepository.find(regex).exec();
-        let response = [];
-        users.map(user => {
-            response.push(omit(user.toObject(), ['password']));
-        })
-        return response;
+
+  async getByUserId(id: string, req: Request): Promise<Omit<User, 'password'>> {
+    await this.getUserFromToken(req);
+    const user = await this.userRepository.findById(id);
+    if (!user) throw new NotFoundException(`User with id '${user.id}' not found`);
+    return omit(user.toObject(), ['password']);
+  }
+
+  private async generateToken(user: User, password: string): Promise<CreateUserResponseDto> {
+    const payload = { name: user.name, nickname: user.nickname, wallet: user.wallet }
+    const response: CreateUserResponseDto = {
+      secretLink: password,
+      token: this.jwtService.sign(payload),
     }
+
+    return response;
+  }
+
+  async getUserFromToken(req: Request): Promise<User> {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader) throw new UnauthorizedException({ message: 'User not authorized' });
+    const bearer = authHeader.split(' ')[0]
+    const token = authHeader.split(' ')[1]
+    if (bearer !== 'Bearer' || !token) {
+      throw new UnauthorizedException({ message: 'User not authorized' })
+    }
+    const user = this.jwtService.verify(token);
+    return user;
+
+  }
+
+  private async getUsersByQueryWithExactMatch(query: UsersFilter): Promise<User[]> {
+
+    const regex = {};
+    if (query.name) {
+      regex['name'] = query.name
+    }
+
+    if (query.nickname) {
+      regex['nickname'] = query.nickname;
+    }
+
+
+    const users = await this.userRepository.find(regex).exec();
+    const response = [];
+    users.map(user => {
+      response.push(omit(user.toObject(), ['password']));
+    })
+    return response;
+
+  }
+
+  private async getUsersWithFilter(query: UsersFilter): Promise<User[]> {
+
+    const regex = {};
+    if (query.name) {
+      regex['name'] = new RegExp(query.name);
+    }
+    if (query.nickname) {
+      regex['nickname'] = new RegExp(query.nickname);
+    }
+
+    console.log(regex);
+
+    const users = await this.userRepository.find(regex).exec();
+    const response = [];
+    users.map(user => {
+      response.push(omit(user.toObject(), ['password']));
+    })
+    return response;
+  }
 
 }

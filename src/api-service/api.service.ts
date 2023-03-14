@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { HttpService } from "@nestjs/axios";
-import { map, catchError, firstValueFrom, lastValueFrom } from 'rxjs';
+import { map, catchError, firstValueFrom } from 'rxjs';
 import { AxiosRequestConfig } from 'axios';
 
 @Injectable()
@@ -44,7 +44,7 @@ export class ApiService {
         headers.append("Content-Type", "application/json");
         headers.append("x-api-key", "xdKM4xYv9r-uONmT");
 
-        let formData = new FormData();
+        const formData = new FormData();
         formData.append("network", "devnet");
         formData.append("wallet", wallet);
         formData.append("name", orgName);
@@ -55,7 +55,7 @@ export class ApiService {
             timeout: 100000
         };
 
-        let requestOptions = {
+        const requestOptions = {
             method: 'POST',
             body: formData,
             redirect: 'follow'

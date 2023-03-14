@@ -1,3 +1,4 @@
+import * as mongooseAutoPopulate from 'mongoose-autopopulate';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { UsersModule } from './users/users.module';
@@ -13,11 +14,11 @@ import { OffersModule } from './offers/offers.module';
     UsersModule,
     OrgsModule,
     ApiServiceModule,
-    MongooseModule.forRoot('mongodb+srv://vitko:jhCn7xn2m2JJ9l8q@cluster0.dg4ud.mongodb.net/?retryWrites=true&w=majority', {
+    MongooseModule.forRoot(process.env.MONGODB_URI, {
       connectionFactory: (connection) => {
-        connection.plugin(require('mongoose-autopopulate'));
+        connection.plugin(mongooseAutoPopulate);
         return connection;
-      }
+      },
     }),
     MembersModule,
     OffersModule,
