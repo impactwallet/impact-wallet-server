@@ -30,6 +30,7 @@ module.exports = {
         "ArrayExpression": 1,
       },
     ],
-    "function-paren-newline": ["error", "multiline"]
+    "function-paren-newline": ["error", "multiline"],
+    "semi": ["error", "always"]
   },
 };

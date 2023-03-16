@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Post, Query, HttpStatus, UploadedFile, UseInterceptors } from '@nestjs/common';
-import { HttpCode, Req } from '@nestjs/common/decorators';
+import { HttpCode, Req, Headers } from '@nestjs/common/decorators';
 import { ApiConsumes, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { FileInterceptor } from "@nestjs/platform-express";
 import { CreateUserDto } from './dto/create-user.dto';
@@ -9,6 +9,7 @@ import { CreateUserResponseDto } from './dto/create-user.response.dto';
 import { UsersFilter } from './dto/users.filter.dto';
 import { SearchUserByNicknameDto } from './dto/search-user-by-nickname.dto';
 import { Request } from 'express';
+import { ApiMockHeader } from '../headers/mock';
 
 @ApiTags('Users')
 @Controller('users')
@@ -21,13 +22,15 @@ export class UsersController {
   @ApiConsumes('form-data')
   @ApiResponse({ status: 201, type: CreateUserResponseDto  })
   @Post()
-  @UseInterceptors(FileInterceptor('image'))
+  @UseInterceptors(FileInterceptor('avatar'))
   @HttpCode(HttpStatus.CREATED)
+  @ApiMockHeader('If true wallet creation is skipped')
   createUser(
     @Body() createUserDto: CreateUserDto,
-      @UploadedFile() image
+      @UploadedFile() avatar,
+      @Headers('mock') mock
   ): Promise<CreateUserResponseDto> {
-    return this.userService.createUser(createUserDto, image)
+    return this.userService.createUser(createUserDto, avatar, mock);
   }
 
 

@@ -13,40 +13,44 @@ import { Request } from 'express';
 @Controller('orgs')
 export class OrgsController {
 
-    constructor(private readonly orgsService: OrgsService) {
-    }
+  constructor(private readonly orgsService: OrgsService) {
+  }
 
-    @ApiOperation({ summary: 'Create organization' })
-    @ApiResponse({ status: 201, type: Org })
-    @Post()
-    @UseInterceptors(FileInterceptor('image'))
-    @HttpCode(HttpStatus.CREATED)
-    createOrg(@Body() createOrgDto: CreateOrgDto,
-        @UploadedFile() image,
-        @Req() req: Request): Promise<Org> {
-        return this.orgsService.createOrg(createOrgDto, image, req)
-    }
+  @ApiOperation({ summary: 'Create organization' })
+  @ApiResponse({ status: 201, type: Org })
+  @Post()
+  @UseInterceptors(FileInterceptor('image'))
+  @HttpCode(HttpStatus.CREATED)
+  createOrg(
+    @Body() createOrgDto: CreateOrgDto,
+      @UploadedFile() image,
+      @Req() req: Request
+  ): Promise<Org> {
+    return this.orgsService.createOrg(createOrgDto, image, req)
+  }
 
-    @ApiOperation({ summary: 'Get organization by query' })
-    @ApiResponse({ status: 200, type: [Org] })
-    @Get()
-    getOrgsByQuery(@Query() query: OrgsFilter, @Req() req: Request): Promise<Org[]> {
-        return this.orgsService.getOrgsByQuery(query, req);
-    }
+  @ApiOperation({ summary: 'Get organizations' })
+  @ApiResponse({ status: 200, type: [Org] })
+  @Get()
+  getOrgsByQuery(@Query() query: OrgsFilter, @Req() req: Request) {
+    return this.orgsService.getOrgsByQuery(query, req);
+  }
 
-    @ApiOperation({ summary: 'Get organization by id' })
-    @ApiResponse({ status: 200, type: Org })
-    @Get(':id')
-    getByUserId(@Param('id') id: string, @Req() req: Request): Promise<Object> {
-        return this.orgsService.getByOrgId(id, req);
-    }
+  @ApiOperation({ summary: 'Get organization by id' })
+  @ApiResponse({ status: 200, type: Org })
+  @Get(':id')
+  getByUserId(@Param('id') id: string, @Req() req: Request) {
+    return this.orgsService.getByOrgId(id, req);
+  }
 
-    @ApiOperation({ summary: 'Add member to organization' })
-    @ApiResponse({ status: 200, type: Member })
-    @Post(':id/users')
-    @HttpCode(HttpStatus.CREATED)
-    addMemberToOrg(@Param('id') id: string, @Body() addMemberToOrg: AddMemberToOrgDto,
-        @Req() req: Request): Promise<Member> {
-        return this.orgsService.addMemberToOrg(id, addMemberToOrg, req);
-    }
+  @ApiOperation({ summary: 'Add member to organization' })
+  @ApiResponse({ status: 200, type: Member })
+  @Post(':id/users')
+  @HttpCode(HttpStatus.CREATED)
+  addMemberToOrg(
+    @Param('id') id: string, @Body() addMemberToOrg: AddMemberToOrgDto,
+      @Req() req: Request
+  ): Promise<Member> {
+    return this.orgsService.addMemberToOrg(id, addMemberToOrg, req);
+  }
 }
