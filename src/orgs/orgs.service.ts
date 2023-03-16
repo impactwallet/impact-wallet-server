@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { omit } from 'lodash';
+import { isEmpty, omit } from 'lodash';
 import { v4 as uuid } from 'uuid';
 import { Model } from 'mongoose';
 import { ApiService } from 'src/api-service/api.service';
@@ -13,6 +13,7 @@ import { AddMemberToOrgDto } from 'src/members/dto/members.dto';
 import { MembersService } from 'src/members/members.service';
 import { Member } from 'src/members/schema/member.schema';
 import { Request } from 'express';
+import { OrgUsernameFilter } from './dto/org-username.filter.dto';
 
 @Injectable()
 export class OrgsService {
@@ -28,7 +29,7 @@ export class OrgsService {
     const oldOrg = await this.orgRepository.findOne({ name: orgsDto.name }).exec();
     if (oldOrg) throw new DuplicateNameException(`Organization with name '${orgsDto.name}' already exists`);
     if (image) {
-      const imageB64 = image.buffer.toString('base64')
+      const imageB64 = image.buffer.toString('base64');
       orgsDto.logo = imageB64;
     }
 
@@ -38,7 +39,6 @@ export class OrgsService {
     newOrg.wallet = await this.apiService.createWallet(newOrg.password);
     // let token = await this.apiService.createFungibleTokensForOrganization(newOrg.name, newOrg.wallet);
     newOrg.token = uuid();
-    newOrg.mint = uuid();
 
     return await newOrg.save();
   }
@@ -73,10 +73,21 @@ export class OrgsService {
   async addMemberToOrg(id: string, addMemberToOrg: AddMemberToOrgDto, req: Request): Promise<Member> {
     await this.usersService.getUserFromToken(req);
     const org = await this.orgRepository.findById(id);
-    const member = await this.memberService.createMember(addMemberToOrg)
+    const member = await this.memberService.createMember(addMemberToOrg);
     org.members.push(member);
     org.save();
     return this.memberService.createMember(addMemberToOrg);
+  }
+
+  async findOrgByUsername(filters: OrgUsernameFilter, req: Request) {
+    await this.usersService.getUserFromToken(req);
+    const query = {
+      username: filters.searchTerm,
+    };
+    const orgs = await this.orgRepository.find(query);
+    if (isEmpty(orgs)) {
+      throw new NotFoundException();
+    }
   }
 
 }

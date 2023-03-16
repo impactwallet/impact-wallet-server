@@ -8,6 +8,7 @@ import { OrgsFilter } from './dto/orgs.filter.dto';
 import { AddMemberToOrgDto } from 'src/members/dto/members.dto';
 import { Member } from 'src/members/schema/member.schema';
 import { Request } from 'express';
+import { OrgUsernameFilter } from './dto/org-username.filter.dto';
 
 @ApiTags('Orgs')
 @Controller('orgs')
@@ -15,6 +16,15 @@ export class OrgsController {
 
   constructor(private readonly orgsService: OrgsService) {
   }
+
+  @ApiOperation({ summary: 'Check if an organization exists' })
+  @ApiResponse({ status: 200, description: 'Organization exists' })
+  @ApiResponse({ status: 404, description: 'Organization does not exist' })
+  @Get('username')
+  findOrgByUsername(@Query() query: OrgUsernameFilter, @Req() req) {
+    return this.orgsService.findOrgByUsername(query, req);
+  }
+
 
   @ApiOperation({ summary: 'Create organization' })
   @ApiResponse({ status: 201, type: Org })
@@ -26,7 +36,7 @@ export class OrgsController {
       @UploadedFile() image,
       @Req() req: Request
   ): Promise<Org> {
-    return this.orgsService.createOrg(createOrgDto, image, req)
+    return this.orgsService.createOrg(createOrgDto, image, req);
   }
 
   @ApiOperation({ summary: 'Get organizations' })

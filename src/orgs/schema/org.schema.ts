@@ -8,8 +8,12 @@ export type OrgDocument = HydratedDocument<Org>;
 @Schema()
 export class Org {
 
+  @ApiProperty({ example: 'impact_wallet', description: 'Unique username of organization' })
+  @Prop({ unique: true, required: true })
+    username: string;
+
   @ApiProperty({ example: 'Impact-Wallet', description: 'Name of organizations' })
-  @Prop({unique: true})
+  @Prop({ required: true })
     name: string;
 
   @ApiProperty({ example: 'Turn your time into equity', description: 'Information about the organization' })
@@ -25,7 +29,7 @@ export class Org {
     treasure: number;
 
   @ApiProperty({ example: 'jpg, png', description: 'Logo organization' })
-  @Prop()
+  @Prop({ required: true })
     logo: string;
 
   @ApiProperty({ example: '6ZMDvWkKG9v7GhoTjCPd9FyVCQ36YVxxsB7W57At9ShD', description: 'Organization wallet' })
@@ -36,11 +40,10 @@ export class Org {
   @Prop()
     token: string;
 
-  @ApiProperty({ example: 'EAmTA4TiEPShWKgy3G1iYyco3suogTocZVVbAwqjoPKV', description: 'Organization mint' })
-  @Prop()
-    mint: string;
-
-  @ApiProperty({ example: '["0b1bd52d-7d8e-4518-b0a3-13ae5ad52d47","0sdfsdf-7234g-4sdf8-b13vc-dfcvb52d47"]', description: 'members of organization' })
+  @ApiProperty({
+    example: '["0b1bd52d-7d8e-4518-b0a3-13ae5ad52d47","0sdfsdf-7234g-4sdf8-b13vc-dfcvb52d47"]',
+    description: 'Members of organization',
+  })
   @Prop({ type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Member' }] })
     members: Member[];
     
