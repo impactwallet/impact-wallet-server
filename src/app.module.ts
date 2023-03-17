@@ -7,10 +7,12 @@ import { ApiServiceModule } from './api-service/api.module';
 import { MembersModule } from './members/members.module';
 import { OffersService } from './offers/offers.service';
 import { OffersModule } from './offers/offers.module';
+import { AuthModule } from './auth/auth.module';
 
 
 @Module({
   imports: [
+    AuthModule,
     UsersModule,
     OrgsModule,
     ApiServiceModule,

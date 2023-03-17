@@ -9,7 +9,7 @@ import { User, UserDocument } from './schema/user.schema';
 import { ApiService } from 'src/api-service/api.service';
 import { CreateUserResponseDto } from './dto/create-user.response.dto';
 import { UsersFilter } from './dto/users.filter.dto';
-import { get, omit } from 'lodash';
+import { get, isNil, omit } from 'lodash';
 import { SearchUserByNicknameDto } from './dto/search-user-by-nickname.dto';
 import { Request } from 'express';
 
@@ -112,7 +112,13 @@ export class UsersService {
     if (bearer !== 'Bearer' || !token) {
       throw new UnauthorizedException({ message: 'User not authorized' });
     }
-    const user = this.jwtService.verify(token);
+    const payload = this.jwtService.verify(token);
+    const user = await this.userRepository.findById(get(payload, '_id'));
+
+    if (isNil(user)) {
+      throw new UnauthorizedException({ message: 'User not authorized' });
+    }
+
     return user;
   }
 
