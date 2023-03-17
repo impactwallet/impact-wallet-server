@@ -30,7 +30,7 @@ export class UsersController {
       @UploadedFile() avatar,
       @Headers('mock') mock
   ): Promise<CreateUserResponseDto> {
-    return this.userService.createUser(createUserDto, avatar, mock);
+    return this.userService.createUser(createUserDto, avatar, mock === 'true');
   }
 
 

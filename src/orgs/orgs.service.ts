@@ -1,10 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { isEmpty, omit } from 'lodash';
+import { ConflictException, HttpException, Injectable, NotFoundException } from '@nestjs/common';
+import * as bcrypt from 'bcryptjs';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { get, isEmpty, omit } from 'lodash';
 import { v4 as uuid } from 'uuid';
-import { Model } from 'mongoose';
+import mongoose, { Model } from 'mongoose';
 import { ApiService } from 'src/api-service/api.service';
-import { DuplicateNameException } from 'src/exceptions/duplicate-name.exception';
 import { UsersService } from 'src/users/users.service';
 import { CreateOrgDto } from './dto/create-org.dto';
 import { OrgsFilter } from './dto/orgs.filter.dto';
@@ -19,28 +19,50 @@ import { OrgUsernameFilter } from './dto/org-username.filter.dto';
 export class OrgsService {
   constructor(
     @InjectModel(Org.name) private orgRepository: Model<OrgDocument>,
+    @InjectConnection() private readonly connection: mongoose.Connection,
     private memberService: MembersService,
     private usersService: UsersService,
     private apiService: ApiService
   ) { }
 
-  async createOrg(orgsDto: CreateOrgDto, image: any, req: Request): Promise<Org> {
+  async createOrg(orgsDto: CreateOrgDto, logo: any, mock: boolean, req: Request) {
     await this.usersService.getUserFromToken(req);
-    const oldOrg = await this.orgRepository.findOne({ name: orgsDto.name }).exec();
-    if (oldOrg) throw new DuplicateNameException(`Organization with name '${orgsDto.name}' already exists`);
-    if (image) {
-      const imageB64 = image.buffer.toString('base64');
+    debugger;
+    if (logo) {
+      const imageB64 = logo.buffer.toString('base64');
       orgsDto.logo = imageB64;
     }
 
+    const session = await this.connection.startSession();
     const newOrg = new this.orgRepository(orgsDto);
 
-    newOrg.password = uuid();
-    newOrg.wallet = await this.apiService.createWallet(newOrg.password);
-    // let token = await this.apiService.createFungibleTokensForOrganization(newOrg.name, newOrg.wallet);
-    newOrg.token = uuid();
+    await session.withTransaction(async () => {
+      try {
+        await newOrg.save({ session });
+      } catch (error) {
+        if (error.code === 11000) {
+          throw new ConflictException({ error });
+        }
+        throw new HttpException(error, 400);
+      }
+      try {
+        if (!mock) {
+          const password = uuid();
+          newOrg.wallet = await this.apiService.createWallet(password);
+          newOrg.password = await bcrypt.hash(password, 5);
+        }
 
-    return await newOrg.save();
+        await newOrg.save({ session });
+      } catch (error) {
+        const code = get(error, 'response.status', 400);
+        const message = get(error, 'message', '');
+        throw new HttpException({ message }, code);
+      }
+    });
+
+    await session.endSession();
+
+    return newOrg;
   }
 
   async getOrgsByQuery(query: OrgsFilter, req: Request) {

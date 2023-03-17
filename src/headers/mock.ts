@@ -4,4 +4,5 @@ export const ApiMockHeader = (description: string) => ApiHeader({
   name: 'mock',
   description,
   enum: ['true', 'false'],
+  required: false,
 });

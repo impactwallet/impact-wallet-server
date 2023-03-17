@@ -76,7 +76,7 @@ export class UsersService {
 
         await newUser.save({ session });
       } catch (error) {
-        const code = get(error, 'response.status', 500);
+        const code = get(error, 'response.status', 400);
         const message = get(error, 'message', '');
         throw new HttpException({ message }, code);
       }

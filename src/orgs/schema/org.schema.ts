@@ -6,6 +6,15 @@ import { Member } from 'src/members/schema/member.schema';
 export type OrgDocument = HydratedDocument<Org>;
 
 @Schema()
+export class OrgSettings {
+  @ApiProperty({ example: '30', description: 'Reserved for organization needs' })
+  @Prop({ default: 0 })
+    treasury: number;
+}
+
+export const OrgSettingsSchema = SchemaFactory.createForClass(OrgSettings);
+
+@Schema()
 export class Org {
 
   @ApiProperty({ example: 'impact_wallet', description: 'Unique username of organization' })
@@ -23,10 +32,6 @@ export class Org {
   @ApiProperty({ example: 'https://impact-wallet.com', description: 'Organization link' })
   @Prop()
     link: string;
-
-  @ApiProperty({ example: '30', description: 'Reserved for organization needs' })
-  @Prop()
-    treasure: number;
 
   @ApiProperty({ example: 'jpg, png', description: 'Logo organization' })
   @Prop({ required: true })
@@ -47,8 +52,11 @@ export class Org {
   @Prop({ type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Member' }] })
     members: Member[];
     
-  @Prop()
+  @Prop({ select: false })
     password: string;
+
+  @Prop({ _id: false, type: OrgSettingsSchema, default: new OrgSettings()})
+    settings: OrgSettings;
 
 }
 

@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { HttpService } from "@nestjs/axios";
-import { map, catchError, firstValueFrom } from 'rxjs';
+import { firstValueFrom } from 'rxjs';
 import { AxiosRequestConfig } from 'axios';
+import { get } from 'lodash';
 
 @Injectable()
 export class ApiService {
@@ -18,26 +19,17 @@ export class ApiService {
       headers: Object.fromEntries(headers.entries()),
     };
 
-    const request = JSON.stringify({
+    const body = JSON.stringify({
       "password": password,
     });
+    try {
 
-    return await firstValueFrom(this.http
-      .post(
-        `${this.baseUrl}/semi_wallet/create`,
-        request,
-        config
-      )
-      .pipe(
-        map((res) => res.data?.result),
-        map((result) => {
-          return result?.wallet_address;
-        }),
-      )
-      .pipe(catchError((err) => {
-        err.message = `Error creating wallet: ${err.message}`;
-        throw err;
-      })),);
+      const response = await firstValueFrom(this.http.post(`${this.baseUrl}/semi_wallet/create`, body, config));
+      return get(response, 'data.result.wallet_address');
+    } catch (err) {
+      err.message = `Error creating wallet: ${err.message}`;
+      throw err;
+    }
   }
 
 
