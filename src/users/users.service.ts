@@ -84,7 +84,12 @@ export class UsersService {
 
     await session.endSession();
 
-    const payload = { name: newUser.name, nickname: newUser.nickname, wallet: newUser.wallet };
+    const payload = {
+      _id: newUser._id,
+      name: newUser.name,
+      nickname: newUser.nickname,
+      wallet: newUser.wallet,
+    };
     return {
       secretLink,
       token: this.jwtService.sign(payload),
@@ -100,7 +105,7 @@ export class UsersService {
   }
 
   async getUserFromToken(req: Request): Promise<User> {
-    const authHeader = req.headers['authorization'];
+    const authHeader: string = req.headers['authorization'];
     if (!authHeader) throw new UnauthorizedException({ message: 'User not authorized' });
     const bearer = authHeader.split(' ')[0];
     const token = authHeader.split(' ')[1];
@@ -109,7 +114,6 @@ export class UsersService {
     }
     const user = this.jwtService.verify(token);
     return user;
-
   }
 
   private async getUsersByQueryWithExactMatch(query: UsersFilter): Promise<User[]> {

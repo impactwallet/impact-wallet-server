@@ -53,18 +53,19 @@ export class OrgsController {
   @ApiOperation({ summary: 'Get organization by id' })
   @ApiResponse({ status: 200, type: Org })
   @Get(':id')
-  getByUserId(@Param('id') id: string, @Req() req: Request) {
+  getByOrgId(@Param('id') id: string, @Req() req: Request) {
     return this.orgsService.getByOrgId(id, req);
   }
 
   @ApiOperation({ summary: 'Add member to organization' })
   @ApiResponse({ status: 200, type: Member })
-  @Post(':id/users')
+  @Post(':orgId/members')
   @HttpCode(HttpStatus.CREATED)
   addMemberToOrg(
-    @Param('id') id: string, @Body() addMemberToOrg: AddMemberToOrgDto,
+    @Param('orgId') orgId: string,
+      @Body() member: AddMemberToOrgDto,
       @Req() req: Request
   ): Promise<Member> {
-    return this.orgsService.addMemberToOrg(id, addMemberToOrg, req);
+    return this.orgsService.addMemberToOrg(orgId, member, req);
   }
 }

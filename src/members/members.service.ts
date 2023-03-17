@@ -7,15 +7,15 @@ import { Member, MemberDocument } from './schema/member.schema';
 @Injectable()
 export class MembersService {
 
-    constructor(@InjectModel(Member.name) private memberRepository: Model<MemberDocument>) { }
+  constructor(@InjectModel(Member.name) private memberRepository: Model<MemberDocument>) { }
 
 
-    async createMember(memberDto: AddMemberToOrgDto): Promise<Member> {
+  async createMember(memberDto: AddMemberToOrgDto): Promise<Member> {
 
-        const member = new this.memberRepository(memberDto);
+    const member = new this.memberRepository(memberDto);
 
-        return await member.save();
-    }
+    return await member.save();
+  }
 
 
 

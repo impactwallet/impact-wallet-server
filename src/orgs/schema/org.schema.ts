@@ -1,7 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { ApiProperty } from '@nestjs/swagger';
-import mongoose, { HydratedDocument } from 'mongoose';
-import { Member } from 'src/members/schema/member.schema';
+import { HydratedDocument } from 'mongoose';
 
 export type OrgDocument = HydratedDocument<Org>;
 
@@ -44,13 +43,6 @@ export class Org {
   @ApiProperty({ example: 'msLadpoohjKhd621CPd9FyVCQ36YVsxxsB7W57At9ShM', description: 'Organization token' })
   @Prop()
     token: string;
-
-  @ApiProperty({
-    example: '["0b1bd52d-7d8e-4518-b0a3-13ae5ad52d47","0sdfsdf-7234g-4sdf8-b13vc-dfcvb52d47"]',
-    description: 'Members of organization',
-  })
-  @Prop({ type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Member' }] })
-    members: Member[];
     
   @Prop({ select: false })
     password: string;

@@ -1,41 +1,41 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { ApiProperty } from '@nestjs/swagger';
 import mongoose, { HydratedDocument } from 'mongoose';
-import { User } from 'src/users/schema/user.schema';
+import { Role } from '../enum/roles.enum';
 
 export type MemberDocument = HydratedDocument<Member>;
 
 @Schema()
 export class Member {
 
-    @ApiProperty({ example: 'CEO', description: 'Occupation in organization' })
-    @Prop()
+  @Prop({ required: true })
     occupation: string;
 
-    @ApiProperty({ example: 'Member, Admin or Co-Owner', description: 'Role in organization' })
-    @Prop()
-    role: Role;
+  @Prop({ enum: Object.keys(Role), required: true })
+    role: string;
 
-    @ApiProperty({ example: '1.5', description: 'Impact ratio' })
-    @Prop()
+  @Prop({ default: 1 })
     impactRatio: number;
 
-    @ApiProperty({ example: '1500', description: 'Monthly compensation' })
-    @Prop()
+  @Prop()
+    isMonthlyCompensated: boolean;
+
+  @Prop()
     monthlyCompensation: number;
 
-    @ApiProperty({ example: 'false', description: 'Auto contribution' })
-    @Prop()
+  @Prop({ default: true })
     autoContribution: boolean;
 
-    @ApiProperty({ example: 'agreement.pdf', description: 'Work agreement' })
-    @Prop()
+  @Prop()
     agreement: string;
 
-    @ApiProperty({ example: '0b1bd52d-7d8e-4518-b0a3-13ae5ad52d47', description: 'User id' })
-    @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
-    user: User;
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true })
+    userId: string;
+
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Org', required: true })
+    orgId: string;
 
 }
 
 export const MemberSchema = SchemaFactory.createForClass(Member);
+
+MemberSchema.index({ userId: 1, orgId: 1 }, { unique: true });
