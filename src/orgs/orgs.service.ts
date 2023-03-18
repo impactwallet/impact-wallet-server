@@ -1,10 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { omit } from 'lodash';
+import { BadRequestException, ConflictException, HttpException, Injectable, NotFoundException } from '@nestjs/common';
+import * as bcrypt from 'bcryptjs';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { get, isEmpty, omit } from 'lodash';
 import { v4 as uuid } from 'uuid';
-import { Model } from 'mongoose';
+import mongoose, { Model, Types } from 'mongoose';
 import { ApiService } from 'src/api-service/api.service';
-import { DuplicateNameException } from 'src/exceptions/duplicate-name.exception';
 import { UsersService } from 'src/users/users.service';
 import { CreateOrgDto } from './dto/create-org.dto';
 import { OrgsFilter } from './dto/orgs.filter.dto';
@@ -12,94 +12,115 @@ import { Org, OrgDocument } from './schema/org.schema';
 import { AddMemberToOrgDto } from 'src/members/dto/members.dto';
 import { MembersService } from 'src/members/members.service';
 import { Member } from 'src/members/schema/member.schema';
+import { Request } from 'express';
+import { OrgUsernameFilter } from './dto/org-username.filter.dto';
 
 @Injectable()
 export class OrgsService {
-    constructor(@InjectModel(Org.name) private orgRepository: Model<OrgDocument>,
-        private memberService: MembersService,
-        private usersService: UsersService,
-        private apiService: ApiService) { };
+  constructor(
+    @InjectModel(Org.name) private orgRepository: Model<OrgDocument>,
+    @InjectConnection() private readonly connection: mongoose.Connection,
+    private memberService: MembersService,
+    private usersService: UsersService,
+    private apiService: ApiService
+  ) { }
 
-    async createOrg(orgsDto: CreateOrgDto, image: any, req: Request): Promise<Org> {
-        await this.usersService.getUserFromToken(req);
-        const oldOrg = await this.orgRepository.findOne({ name: orgsDto.name }).exec();
-        if (oldOrg) throw new DuplicateNameException(`Organization with name '${orgsDto.name}' already exists`);
-        if (image) {
-            const imageB64 = image.buffer.toString('base64')
-            orgsDto.logo = imageB64;
+  async createOrg(orgsDto: CreateOrgDto, logo: any, mock: boolean, req: Request) {
+    debugger;
+    await this.usersService.getUserFromToken(req);
+    if (logo) {
+      const imageB64 = logo.buffer.toString('base64');
+      orgsDto.logo = imageB64;
+    }
+
+    const session = await this.connection.startSession();
+    const newOrg = new this.orgRepository(orgsDto);
+
+    await session.withTransaction(async () => {
+      try {
+        await newOrg.save({ session });
+      } catch (error) {
+        if (error.code === 11000) {
+          throw new ConflictException({ error });
+        }
+        throw new HttpException(error, 400);
+      }
+      try {
+        if (!mock) {
+          const password = uuid();
+          newOrg.wallet = await this.apiService.createWallet(password);
+          newOrg.password = await bcrypt.hash(password, 5);
         }
 
-        const newOrg = new this.orgRepository(orgsDto);
+        await newOrg.save({ session });
+      } catch (error) {
+        const code = get(error, 'response.status', 400);
+        const message = get(error, 'message', '');
+        throw new HttpException({ message }, code);
+      }
+    });
 
-        newOrg.password = uuid();
-        newOrg.wallet = await this.apiService.createWallet(newOrg.password);
-        // let token = await this.apiService.createFungibleTokensForOrganization(newOrg.name, newOrg.wallet);
-        newOrg.token = uuid();
-        newOrg.mint = uuid();
+    await session.endSession();
 
-        return await newOrg.save();
+    return newOrg;
+  }
+
+  async getOrgsByQuery(query: OrgsFilter, req: Request) {
+    await this.usersService.getUserFromToken(req);
+
+    return this.getOrgsWithFilter(query);
+  }
+
+  async getByOrgId(id: string, req: Request) {
+    await this.usersService.getUserFromToken(req);
+    const org = await this.orgRepository.findById(id);
+    if (!org) throw new NotFoundException(`Organization not found`);
+    return org;
+  }
+
+  private getOrgsWithFilter(queryParams: OrgsFilter) {
+
+    const dbQuery = {};
+    if (queryParams.name) {
+      dbQuery['name'] = new RegExp(queryParams.name, 'i');
     }
 
-    async getOrgsByQuery(query: OrgsFilter, req: Request): Promise<Org[]> {
-        await this.usersService.getUserFromToken(req);
+    return this.orgRepository.find(dbQuery);
+  }
 
-        if (query.exactMatch) {
+  async addMemberToOrg(orgId: string, addMemberToOrg: AddMemberToOrgDto, req: Request): Promise<Member> {
+    await this.usersService.getUserFromToken(req);
 
-            return await this.getOrgsByQueryWithExactMatch(query);
-
-        }
-
-        return await this.getOrgsWithFilter(query);
+    addMemberToOrg.org = orgId;
+    
+    try {
+      const member = await this.memberService.createMember(addMemberToOrg);
+      return member;
+    } catch (error) {
+      if (error.code === 11000) {
+        throw new ConflictException({ error });
+      }
+      throw new BadRequestException(error);
     }
+  }
 
-    async getByOrgId(id: String, req: Request): Promise<Object> {
-        await this.usersService.getUserFromToken(req);
-        let org = await this.orgRepository.findById(id).populate({path : 'members', populate : { path : 'user'}});
-        if (!org) throw new NotFoundException(`Organization with id '${org.id}' not found`);
-        return omit(org.toObject(), ['password']);
+  async findOrgByUsername(filters: OrgUsernameFilter, req: Request) {
+    await this.usersService.getUserFromToken(req);
+    const query = {
+      username: filters.searchTerm,
+    };
+    const orgs = await this.orgRepository.find(query);
+    if (isEmpty(orgs)) {
+      throw new NotFoundException();
     }
+  }
 
-    private async getOrgsByQueryWithExactMatch(query: OrgsFilter): Promise<Org[]> {
-
-        const regex = {};
-        if (query.name) {
-            regex['name'] = query.name
-        }
-
-        let orgs = await this.orgRepository.find(regex).populate({path : 'members', populate : { path : 'user'}}).exec();
-
-        let response = [];
-        orgs.map(org => {
-            response.push(omit(org.toObject(), ['password']));
-        })
-        return response;
-    }
-
-    private async getOrgsWithFilter(query: OrgsFilter): Promise<Org[]> {
-
-        const regex = {};
-        if (query.name) {
-            regex['name'] = new RegExp(query.name);
-        }
-
-        console.log(regex);
-
-        let orgs = await this.orgRepository.find(regex).populate({path : 'members', populate : { path : 'user'}}).exec();
-
-        let response = [];
-        orgs.map(org => {
-            response.push(omit(org.toObject(), ['password']));
-        })
-        return response;
-    }
-
-    async addMemberToOrg(id: string, addMemberToOrg: AddMemberToOrgDto, req: Request): Promise<Member> {
-        await this.usersService.getUserFromToken(req);
-        let org = await this.orgRepository.findById(id);
-        const member = await this.memberService.createMember(addMemberToOrg)
-        org.members.push(member);
-        org.save();
-        return this.memberService.createMember(addMemberToOrg);
-    }
+  async getOrgMembers(orgId: string, req: Request) {
+    await this.usersService.getUserFromToken(req);
+    const query = {
+      org: new Types.ObjectId(orgId),
+    };
+    return this.memberService.getMembers(query, 'user');
+  }
 
 }

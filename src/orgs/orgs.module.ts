@@ -8,11 +8,13 @@ import { ApiServiceModule } from 'src/api-service/api.module';
 import { MembersModule } from 'src/members/members.module';
 
 @Module({
-    imports: [MongooseModule.forFeature([{ name: Org.name, schema: OrgSchema }]),
-        UsersModule,
-        MembersModule,
-        ApiServiceModule],
-    providers: [OrgsService],
-    controllers: [OrgsController]
+  imports: [
+    MongooseModule.forFeature([{ name: Org.name, schema: OrgSchema }]),
+    UsersModule,
+    MembersModule,
+    ApiServiceModule,
+  ],
+  providers: [OrgsService],
+  controllers: [OrgsController],
 })
 export class OrgsModule { }
