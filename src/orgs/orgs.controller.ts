@@ -52,9 +52,9 @@ export class OrgsController {
 
   @ApiOperation({ summary: 'Get organization by id' })
   @ApiResponse({ status: 200, type: Org })
-  @Get(':id')
-  getByOrgId(@Param('id') id: string, @Req() req: Request) {
-    return this.orgsService.getByOrgId(id, req);
+  @Get(':orgId')
+  getByOrgId(@Param('orgId') orgId: string, @Req() req: Request) {
+    return this.orgsService.getByOrgId(orgId, req);
   }
 
   @ApiOperation({ summary: 'Add member to organization' })

@@ -73,9 +73,9 @@ export class OrgsService {
 
   async getByOrgId(id: string, req: Request) {
     await this.usersService.getUserFromToken(req);
-    const org = await this.orgRepository.findById(id).populate({path : 'members', populate : { path : 'user'}});
-    if (!org) throw new NotFoundException(`Organization with id '${org.id}' not found`);
-    return omit(org.toObject(), ['password']);
+    const org = await this.orgRepository.findById(id);
+    if (!org) throw new NotFoundException(`Organization not found`);
+    return org;
   }
 
   private getOrgsWithFilter(queryParams: OrgsFilter) {

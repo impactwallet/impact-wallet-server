@@ -16,7 +16,8 @@ import { AuthModule } from './auth/auth.module';
     UsersModule,
     OrgsModule,
     ApiServiceModule,
-    MongooseModule.forRoot(process.env.MONGODB_URI, {
+    // MongooseModule.forRoot(process.env.MONGODB_URI, {
+    MongooseModule.forRoot('mongodb+srv://vitko:jhCn7xn2m2JJ9l8q@cluster0.dg4ud.mongodb.net/?retryWrites=true&w=majority', {
       connectionFactory: (connection) => {
         connection.plugin(mongooseAutoPopulate);
         return connection;
