@@ -24,10 +24,10 @@ export class User {
   @Prop()
     wallet: string;
 
-  @Prop()
+  @Prop({ select: false })
     password: string;
 
-  @Prop()
+  @Prop({ select: false })
     secretLink: string;
 
 }

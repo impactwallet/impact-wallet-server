@@ -25,7 +25,7 @@ export class AddMemberToOrgDto {
     agreement: string;
 
   @ApiProperty({ example: '0b1bd52d-7d8e-4518-b0a3-13ae5ad52d47', description: 'User id' })
-    userId: string;
+    user: string;
 
-  orgId: string;
+  org: string;
 }

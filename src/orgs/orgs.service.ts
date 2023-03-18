@@ -91,7 +91,7 @@ export class OrgsService {
   async addMemberToOrg(orgId: string, addMemberToOrg: AddMemberToOrgDto, req: Request): Promise<Member> {
     await this.usersService.getUserFromToken(req);
 
-    addMemberToOrg.orgId = orgId;
+    addMemberToOrg.org = orgId;
     
     try {
       const member = await this.memberService.createMember(addMemberToOrg);

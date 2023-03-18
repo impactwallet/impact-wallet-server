@@ -10,6 +10,7 @@ import { UsersFilter } from './dto/users.filter.dto';
 import { SearchUserByNicknameDto } from './dto/search-user-by-nickname.dto';
 import { Request } from 'express';
 import { ApiMockHeader } from '../headers/mock';
+import { Member } from '../members/schema/member.schema';
 
 @ApiTags('Users')
 @Controller('users')
@@ -53,5 +54,12 @@ export class UsersController {
   @Get(':id')
   getByUserId(@Param('id') id: string, @Req() req: Request) {
     return this.userService.getByUserId(id, req);
+  }
+
+  @ApiOperation({ summary: 'Get users memberships' })
+  @ApiResponse({ status: 200, type: [Member] })
+  @Get(':userId/memberships')
+  getUserMemberships(@Param('userId') userId: string, @Req() req: Request) {
+    return this.userService.getUserMemberships(userId, req);
   }
 }

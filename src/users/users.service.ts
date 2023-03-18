@@ -12,6 +12,7 @@ import { UsersFilter } from './dto/users.filter.dto';
 import { get, isNil, omit } from 'lodash';
 import { SearchUserByNicknameDto } from './dto/search-user-by-nickname.dto';
 import { Request } from 'express';
+import { MembersService } from '../members/members.service';
 
 @Injectable()
 export class UsersService {
@@ -21,6 +22,7 @@ export class UsersService {
     @InjectConnection() private readonly connection: mongoose.Connection,
     private jwtService: JwtService,
     private apiService: ApiService,
+    private membersService: MembersService,
   ) { }
 
   async getUsersByNicknamePrivate(name: string): Promise<User[]> {
@@ -120,6 +122,12 @@ export class UsersService {
     }
 
     return user;
+  }
+
+  async getUserMemberships(userId: string, req: Request) {
+    await this.getUserFromToken(req);
+    const filters = { userId };
+    return this.membersService.getMembers(filters, 'org');
   }
 
   private async getUsersByQueryWithExactMatch(query: UsersFilter): Promise<User[]> {
