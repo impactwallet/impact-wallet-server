@@ -124,9 +124,9 @@ export class UsersService {
     return user;
   }
 
-  async getUserMemberships(userId: string, req: Request) {
+  async getUserMemberships(user: string, req: Request) {
     await this.getUserFromToken(req);
-    const filters = { userId };
+    const filters = { user };
     return this.membersService.getMembers(filters, 'org');
   }
 

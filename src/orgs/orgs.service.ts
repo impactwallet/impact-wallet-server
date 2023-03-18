@@ -3,7 +3,7 @@ import * as bcrypt from 'bcryptjs';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { get, isEmpty, omit } from 'lodash';
 import { v4 as uuid } from 'uuid';
-import mongoose, { Model } from 'mongoose';
+import mongoose, { Model, Types } from 'mongoose';
 import { ApiService } from 'src/api-service/api.service';
 import { UsersService } from 'src/users/users.service';
 import { CreateOrgDto } from './dto/create-org.dto';
@@ -113,6 +113,14 @@ export class OrgsService {
     if (isEmpty(orgs)) {
       throw new NotFoundException();
     }
+  }
+
+  async getOrgMembers(orgId: string, req: Request) {
+    await this.usersService.getUserFromToken(req);
+    const query = {
+      org: new Types.ObjectId(orgId),
+    };
+    return this.memberService.getMembers(query, 'user');
   }
 
 }

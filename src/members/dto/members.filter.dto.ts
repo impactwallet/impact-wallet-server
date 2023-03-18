@@ -1,3 +1,6 @@
+import { Types } from "mongoose";
+
 export class MembersFilterDto {
-  userId: string;
+  user?: string | Types.ObjectId;
+  org?: string | Types.ObjectId;
 }

@@ -68,4 +68,11 @@ export class OrgsController {
   ): Promise<Member> {
     return this.orgsService.addMemberToOrg(orgId, member, req);
   }
+
+  @ApiOperation({ summary: 'Get org members' })
+  @ApiResponse({ status: 200, type: [Member] })
+  @Get(':orgId/members')
+  getOrgMembers(@Param('orgId') orgId: string, @Req() req: Request) {
+    return this.orgsService.getOrgMembers(orgId, req);
+  }
 }

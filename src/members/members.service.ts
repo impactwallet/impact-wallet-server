@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { isNil, omitBy } from 'lodash';
+import { isUndefined, omitBy } from 'lodash';
 import { Model } from 'mongoose';
 import { AddMemberToOrgDto } from './dto/members.dto';
 import { MembersFilterDto } from './dto/members.filter.dto';
@@ -17,7 +17,7 @@ export class MembersService {
   }
 
   getMembers(filters: MembersFilterDto, populate?: any) {
-    const query = omitBy({ ...filters }, isNil);
+    const query = omitBy({ ...filters }, isUndefined);
 
     return this.memberRepository.find(query).populate(populate);
   }
