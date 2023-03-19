@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, UnauthorizedException, ConflictException, HttpException } from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/mongoose';
-import { JwtService } from "@nestjs/jwt";
+import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { v4 as uuid } from 'uuid';
 import mongoose, { Model } from 'mongoose';
@@ -70,9 +70,8 @@ export class UsersService {
       }
       try {
         if (!mock) {
-          const password = uuid();
-          newUser.wallet = await this.apiService.createWallet(password);
-          newUser.password = await bcrypt.hash(password, 5);
+          newUser.password = uuid();
+          newUser.wallet = await this.apiService.createWallet(newUser.password);
         }
         newUser.secretLink = await bcrypt.hash(secretLink, 5);
 
@@ -99,11 +98,8 @@ export class UsersService {
   }
 
 
-  async getByUserId(id: string, req: Request): Promise<Omit<User, 'password'>> {
-    await this.getUserFromToken(req);
-    const user = await this.userRepository.findById(id);
-    if (!user) throw new NotFoundException(`User with id '${user.id}' not found`);
-    return omit(user.toObject(), ['password']);
+  getByUserId(id: string) {
+    return this.userRepository.findById(id);
   }
 
   async getUserFromToken(req: Request): Promise<User> {

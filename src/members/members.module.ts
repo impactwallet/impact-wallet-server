@@ -6,6 +6,6 @@ import { Member, MemberSchema } from './schema/member.schema';
 @Module({
   imports: [MongooseModule.forFeature([{ name: Member.name, schema: MemberSchema }])],
   providers: [MembersService],
-  exports: [MembersService]
+  exports: [MembersService],
 })
 export class MembersModule { }

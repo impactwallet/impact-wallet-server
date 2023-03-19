@@ -1,7 +1,7 @@
-import { ApiProperty } from "@nestjs/swagger";
-import { Role } from "../enum/roles.enum";
+import { ApiProperty } from '@nestjs/swagger';
+import { Role } from '../enum/roles.enum';
 
-export class AddMemberToOrgDto {
+export class MemberDto {
 
   @ApiProperty({ example: 'CEO', description: 'Occupation in organization' })
     occupation: string;

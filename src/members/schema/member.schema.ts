@@ -23,7 +23,7 @@ export class Member {
     impactRatio: number;
 
   @ApiProperty({ example: false })
-  @Prop()
+  @Prop({ default: false })
     isMonthlyCompensated: boolean;
 
   @ApiProperty({ example: 3000 })

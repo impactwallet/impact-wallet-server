@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import {JwtModule} from "@nestjs/jwt";
+import { JwtModule } from '@nestjs/jwt';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ApiServiceModule } from 'src/api-service/api.module';
 import { MembersModule } from '../members/members.module';

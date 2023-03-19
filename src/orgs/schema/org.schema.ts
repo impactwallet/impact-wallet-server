@@ -40,6 +40,9 @@ export class Org {
   @Prop()
     wallet: string;
 
+  @Prop()
+    mint: string;
+
   @ApiProperty({ example: 'msLadpoohjKhd621CPd9FyVCQ36YVsxxsB7W57At9ShM', description: 'Organization token' })
   @Prop()
     token: string;
