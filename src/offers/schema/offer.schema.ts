@@ -7,6 +7,7 @@ import { User } from '../../users/schema/user.schema';
 import { OfferStatus } from '../enum/statuses.enum';
 
 export type OfferDocument = HydratedDocument<Offer>;
+export type MemberProspectDocument = HydratedDocument<MemberProspect>;
 
 @Schema()
 export class MemberProspect {
@@ -46,7 +47,7 @@ export class MemberProspect {
 
 export const MemberProspectSchema = SchemaFactory.createForClass(MemberProspect);
 
-@Schema()
+@Schema({ timestamps: true })
 export class Offer {
 
   @ApiProperty({ example: 'Approved', description: 'Offer status', enum: Object.values(OfferStatus) })
@@ -59,7 +60,7 @@ export class Offer {
 
   @ApiProperty({ description: 'Member to create' })
   @Prop({ type: MemberProspectSchema, _id: false, required: true })
-    memberProspect: MemberProspect;
+    memberProspect: MemberProspectDocument;
 
 }
 

@@ -13,7 +13,7 @@ export class OrgSettings {
 
 export const OrgSettingsSchema = SchemaFactory.createForClass(OrgSettings);
 
-@Schema()
+@Schema({ timestamps: true })
 export class Org {
 
   @ApiProperty({ example: 'impact_wallet', description: 'Unique username of organization' })

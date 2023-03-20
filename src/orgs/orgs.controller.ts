@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query, Req, UploadedFile, UseInterceptors, Headers, NotFoundException } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query, Req, UploadedFile, UseInterceptors, Headers, NotFoundException, Patch, ValidationPipe } from '@nestjs/common';
 import { ApiConsumes, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Org } from './schema/org.schema';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -16,6 +16,7 @@ import { OffersService } from '../offers/offers.service';
 import { isNil } from 'lodash';
 import { OfferDto } from '../offers/dto/offer.dto';
 import { OfferFiltersDto } from '../offers/dto/offer-filters.dto';
+import { OfferStatusBodyDto } from '../offers/dto/offer-status.dto';
 
 @ApiTags('Orgs')
 @Controller('orgs')
@@ -128,5 +129,25 @@ export class OrgsController {
   ) {
     await this.usersService.getUserFromToken(req);
     return this.offersService.getOrgOfferById(orgId, offerId);
+  }
+
+  @ApiOperation({ summary: 'Accept/decline offer' })
+  @ApiResponse({ status: 200, description: 'Offer status updated and new member added to the org' })
+  @ApiResponse({ status: 403, description: 'Offer already accepted/declined' })
+  @Patch(':orgId/offers/:offerId')
+  async updateOfferStatus(
+  @Param('orgId') orgId: string,
+    @Param('offerId') offerId: string,
+    @Body(new ValidationPipe()) body: OfferStatusBodyDto,
+    @Req() req: Request,
+  ) {
+    await this.usersService.getUserFromToken(req);
+
+    const org = await this.orgsService.getByOrgId(orgId);
+    if (isNil(org)) {
+      throw new NotFoundException({ message: 'Organization not found' });
+    }
+
+    return this.offersService.updateOfferStatus(orgId, offerId, body);
   }
 }

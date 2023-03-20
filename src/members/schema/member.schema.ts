@@ -7,7 +7,7 @@ import { Role } from '../enum/roles.enum';
 
 export type MemberDocument = HydratedDocument<Member>;
 
-@Schema()
+@Schema({ timestamps: true })
 export class Member {
 
   @ApiProperty({ example: 'CEO' })
