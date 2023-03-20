@@ -1,4 +1,4 @@
-import { HttpException, Injectable } from '@nestjs/common';
+import { HttpException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { isNil } from 'lodash';
 import mongoose, { Model } from 'mongoose';
@@ -30,5 +30,17 @@ export class OffersService {
       query['status'] = filters.status;
     }
     return this.offerRepository.find(query);
+  }
+
+  async getOrgOfferById(orgId: string, offerId: string) {
+    const query = {
+      _id: new mongoose.Types.ObjectId(offerId),
+      org: new mongoose.Types.ObjectId(orgId),
+    };
+    const offer = await this.offerRepository.findOne(query);
+    if (isNil(offer)) {
+      throw new NotFoundException('Offer not found');
+    }
+    return offer;
   }
 }

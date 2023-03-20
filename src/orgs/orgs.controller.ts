@@ -117,4 +117,16 @@ export class OrgsController {
     await this.usersService.getUserFromToken(req);
     return this.offersService.getOrgOffers(orgId, filters);
   }
+
+  @ApiOperation({ summary: 'Get org offer by ID' })
+  @ApiResponse({ status: 200, type: Offer })
+  @Get(':orgId/offers/:offerId')
+  async getOrgOfferById(
+  @Param('orgId') orgId: string,
+    @Param('offerId') offerId: string,
+    @Req() req: Request,
+  ) {
+    await this.usersService.getUserFromToken(req);
+    return this.offersService.getOrgOfferById(orgId, offerId);
+  }
 }
