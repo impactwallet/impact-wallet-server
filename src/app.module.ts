@@ -7,6 +7,7 @@ import { ApiServiceModule } from './api-service/api.module';
 import { MembersModule } from './members/members.module';
 import { OffersModule } from './offers/offers.module';
 import { AuthModule } from './auth/auth.module';
+import { ContributionsModule } from './contributions/contributions.module';
 
 
 @Module({
@@ -24,6 +25,7 @@ import { AuthModule } from './auth/auth.module';
     }),
     MembersModule,
     OffersModule,
+    ContributionsModule,
   ],
 })
 

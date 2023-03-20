@@ -17,6 +17,8 @@ import { isNil } from 'lodash';
 import { OfferDto } from '../offers/dto/offer.dto';
 import { OfferFiltersDto } from '../offers/dto/offer-filters.dto';
 import { OfferStatusBodyDto } from '../offers/dto/offer-status.dto';
+import { StartContributionDto } from '../contributions/dto/start-contribution.dto';
+import { ContributionsService } from '../contributions/contributions.service';
 
 @ApiTags('Orgs')
 @Controller('orgs')
@@ -25,6 +27,7 @@ export class OrgsController {
     private readonly orgsService: OrgsService,
     private readonly usersService: UsersService,
     private readonly offersService: OffersService,
+    private readonly contributionsService: ContributionsService,
   ) {
   }
 
@@ -149,5 +152,24 @@ export class OrgsController {
     }
 
     return this.offersService.updateOfferStatus(orgId, offerId, body);
+  }
+
+  @ApiOperation({ summary: 'Start contribution' })
+  @ApiResponse({ status: 201, description: 'New contribution' })
+  @Post(':orgId/contributions')
+  @HttpCode(HttpStatus.CREATED)
+  async startContribution(
+  @Param('orgId') orgId: string,
+    @Body(new ValidationPipe()) body: StartContributionDto,
+    @Req() req: Request,
+  ) {
+    await this.usersService.getUserFromToken(req);
+
+    const org = await this.orgsService.getByOrgId(orgId);
+    if (isNil(org)) {
+      throw new NotFoundException({ message: 'Organization not found' });
+    }
+
+    return this.contributionsService.startContribution(orgId, body);
   }
 }
