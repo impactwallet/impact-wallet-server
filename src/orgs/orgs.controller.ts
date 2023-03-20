@@ -15,6 +15,7 @@ import { UsersService } from '../users/users.service';
 import { OffersService } from '../offers/offers.service';
 import { isNil } from 'lodash';
 import { OfferDto } from '../offers/dto/offer.dto';
+import { OfferFiltersDto } from '../offers/dto/offer-filters.dto';
 
 @ApiTags('Orgs')
 @Controller('orgs')
@@ -107,5 +108,13 @@ export class OrgsController {
     }
 
     return this.offersService.createOffer(orgId, offer);
+  }
+
+  @ApiOperation({ summary: 'Get org offers' })
+  @ApiResponse({ status: 200, type: [Offer] })
+  @Get(':orgId/offers')
+  async getOrgOffers(@Param('orgId') orgId: string, @Query() filters: OfferFiltersDto, @Req() req: Request) {
+    await this.usersService.getUserFromToken(req);
+    return this.offersService.getOrgOffers(orgId, filters);
   }
 }

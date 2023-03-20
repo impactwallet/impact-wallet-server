@@ -57,7 +57,7 @@ export class Offer {
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Org', required: true })
     org: string | Org;
 
-  @ApiProperty({ example: '0b1bd52d-7d8e-4518-b0a3-13ae5ad52d47', description: 'Member to create' })
+  @ApiProperty({ description: 'Member to create' })
   @Prop({ type: MemberProspectSchema, _id: false, required: true })
     memberProspect: MemberProspect;
 

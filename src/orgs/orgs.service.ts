@@ -13,7 +13,6 @@ import { MembersService } from 'src/members/members.service';
 import { Member } from 'src/members/schema/member.schema';
 import { Request } from 'express';
 import { OrgUsernameFilter } from './dto/org-username.filter.dto';
-import { firstValueFrom, of, delay } from 'rxjs';
 
 @Injectable()
 export class OrgsService {
@@ -48,8 +47,6 @@ export class OrgsService {
         if (!mock) {
           newOrg.password = uuid();
           newOrg.wallet = await this.apiService.createWallet(newOrg.password);
-          // wait here because Shyft allows 1 request/ses in free plan
-          await firstValueFrom(of(null).pipe(delay(3000)));
           newOrg.mint = await this.apiService.createFungibleTokensForOrganization(newOrg);
         }
 

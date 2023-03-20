@@ -1,6 +1,8 @@
 import { HttpException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { isNil } from 'lodash';
+import mongoose, { Model } from 'mongoose';
+import { OfferFiltersDto } from './dto/offer-filters.dto';
 import { OfferDto } from './dto/offer.dto';
 import { Offer, OfferDocument } from './schema/offer.schema';
 
@@ -18,5 +20,15 @@ export class OffersService {
     } catch (error) {
       throw new HttpException(error, 400);
     }
+  }
+
+  getOrgOffers(orgId: string, filters: OfferFiltersDto) {
+    const query = {
+      org: new mongoose.Types.ObjectId(orgId),
+    };
+    if (!isNil(filters.status)) {
+      query['status'] = filters.status;
+    }
+    return this.offerRepository.find(query);
   }
 }

@@ -13,6 +13,6 @@ export class OfferDto {
 
   org: string;
 
-  @ApiProperty({ example: '0b1bd52d-7d8e-4518-b0a3-13ae5ad52d47', description: 'Member to create' })
+  @ApiProperty({ description: 'Member to create' })
     memberProspect: MemberProspectDto;
 }

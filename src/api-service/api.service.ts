@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import * as FormData from 'form-data';
-import { delay, firstValueFrom, of } from 'rxjs';
+import { firstValueFrom } from 'rxjs';
 import { AxiosRequestConfig } from 'axios';
 import { Keypair, Transaction, Connection, clusterApiUrl, Cluster, PublicKey, SystemProgram, TransactionSignature, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { decode } from 'bs58';
@@ -161,7 +161,6 @@ export class ApiService {
       const txn = Transaction.from(Buffer.from(encodedTxn, 'base64'));
       const pk = await this.getPK(org.wallet, org.password);
       const serializedTxn = this.createSignedSerializedTxn(txn, pk);
-      await firstValueFrom(of(null).pipe(delay(3000)));
       await this.sendTxn(serializedTxn);
       return mint;
     } catch (err) {
