@@ -13,7 +13,7 @@ export class OrgSettings {
 
 export const OrgSettingsSchema = SchemaFactory.createForClass(OrgSettings);
 
-@Schema()
+@Schema({ timestamps: true })
 export class Org {
 
   @ApiProperty({ example: 'impact_wallet', description: 'Unique username of organization' })
@@ -40,6 +40,9 @@ export class Org {
   @Prop()
     wallet: string;
 
+  @Prop()
+    mint: string;
+
   @ApiProperty({ example: 'msLadpoohjKhd621CPd9FyVCQ36YVsxxsB7W57At9ShM', description: 'Organization token' })
   @Prop()
     token: string;
@@ -49,6 +52,10 @@ export class Org {
 
   @Prop({ _id: false, type: OrgSettingsSchema, default: new OrgSettings()})
     settings: OrgSettings;
+
+  @ApiProperty({ example: 0 })
+  @Prop({ type: Number, default: 0 })
+    lamportsMinted: number;
 
 }
 

@@ -1,19 +1,19 @@
 import { BadRequestException, ConflictException, HttpException, Injectable, NotFoundException } from '@nestjs/common';
-import * as bcrypt from 'bcryptjs';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { get, isEmpty, omit } from 'lodash';
+import { get, isEmpty } from 'lodash';
 import { v4 as uuid } from 'uuid';
-import mongoose, { Model, Types } from 'mongoose';
+import mongoose, { ClientSession, Model, Types } from 'mongoose';
 import { ApiService } from 'src/api-service/api.service';
 import { UsersService } from 'src/users/users.service';
 import { CreateOrgDto } from './dto/create-org.dto';
 import { OrgsFilter } from './dto/orgs.filter.dto';
 import { Org, OrgDocument } from './schema/org.schema';
-import { AddMemberToOrgDto } from 'src/members/dto/members.dto';
+import { MemberDto } from 'src/members/dto/members.dto';
 import { MembersService } from 'src/members/members.service';
 import { Member } from 'src/members/schema/member.schema';
 import { Request } from 'express';
 import { OrgUsernameFilter } from './dto/org-username.filter.dto';
+import { MemberEquityDto } from '../members/dto/member-equity.dto';
 
 @Injectable()
 export class OrgsService {
@@ -26,7 +26,6 @@ export class OrgsService {
   ) { }
 
   async createOrg(orgsDto: CreateOrgDto, logo: any, mock: boolean, req: Request) {
-    debugger;
     await this.usersService.getUserFromToken(req);
     if (logo) {
       const imageB64 = logo.buffer.toString('base64');
@@ -47,9 +46,9 @@ export class OrgsService {
       }
       try {
         if (!mock) {
-          const password = uuid();
-          newOrg.wallet = await this.apiService.createWallet(password);
-          newOrg.password = await bcrypt.hash(password, 5);
+          newOrg.password = uuid();
+          newOrg.wallet = await this.apiService.createWallet(newOrg.password);
+          newOrg.mint = await this.apiService.createFungibleTokensForOrganization(newOrg);
         }
 
         await newOrg.save({ session });
@@ -71,10 +70,9 @@ export class OrgsService {
     return this.getOrgsWithFilter(query);
   }
 
-  async getByOrgId(id: string, req: Request) {
-    await this.usersService.getUserFromToken(req);
-    const org = await this.orgRepository.findById(id);
-    if (!org) throw new NotFoundException(`Organization not found`);
+  async getByOrgId(id: string, session?: ClientSession) {
+    const org = await this.orgRepository.findById(id).session(session);
+    if (!org) throw new NotFoundException('Organization not found');
     return org;
   }
 
@@ -88,7 +86,7 @@ export class OrgsService {
     return this.orgRepository.find(dbQuery);
   }
 
-  async addMemberToOrg(orgId: string, addMemberToOrg: AddMemberToOrgDto, req: Request): Promise<Member> {
+  async addMemberToOrg(orgId: string, addMemberToOrg: MemberDto, req: Request): Promise<Member> {
     await this.usersService.getUserFromToken(req);
 
     addMemberToOrg.org = orgId;
@@ -121,6 +119,23 @@ export class OrgsService {
       org: new Types.ObjectId(orgId),
     };
     return this.memberService.getMembers(query, 'user');
+  }
+
+  updateMinted(orgId: string | mongoose.Types.ObjectId, amount: number, session?: ClientSession) {
+    return this.orgRepository.updateOne(
+      { _id: new mongoose.Types.ObjectId(orgId) },
+      { $inc: { lamportsMinted: amount } }
+    ).session(session);
+  }
+
+  async getMemberEquity(orgId: string, memberId: string): Promise<MemberEquityDto> {
+    const org = await this.getByOrgId(orgId);
+    const member = await this.memberService.getMemberById(memberId);
+
+    return {
+      lamportsEarned: member.lamportsEarned,
+      equity: member.lamportsEarned / org.lamportsMinted,
+    };
   }
 
 }

@@ -6,6 +6,8 @@ import { OrgsService } from './orgs.service';
 import { UsersModule } from 'src/users/users.module';
 import { ApiServiceModule } from 'src/api-service/api.module';
 import { MembersModule } from 'src/members/members.module';
+import { OffersModule } from '../offers/offers.module';
+import { ContributionsModule } from '../contributions/contributions.module';
 
 @Module({
   imports: [
@@ -13,6 +15,8 @@ import { MembersModule } from 'src/members/members.module';
     UsersModule,
     MembersModule,
     ApiServiceModule,
+    OffersModule,
+    ContributionsModule,
   ],
   providers: [OrgsService],
   controllers: [OrgsController],

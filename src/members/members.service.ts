@@ -1,8 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { isUndefined, omitBy } from 'lodash';
-import { Model } from 'mongoose';
-import { AddMemberToOrgDto } from './dto/members.dto';
+import { isNil, isUndefined, omitBy } from 'lodash';
+import mongoose, { ClientSession, Model, ObjectId, PopulateOptions } from 'mongoose';
+import { MemberDto } from './dto/members.dto';
 import { MembersFilterDto } from './dto/members.filter.dto';
 import { Member, MemberDocument } from './schema/member.schema';
 
@@ -11,7 +11,7 @@ export class MembersService {
 
   constructor(@InjectModel(Member.name) private memberRepository: Model<MemberDocument>) { }
 
-  async createMember(memberDto: AddMemberToOrgDto): Promise<Member> {
+  async createMember(memberDto: MemberDto): Promise<Member> {
     const member = new this.memberRepository(memberDto);
     return member.save();
   }
@@ -20,5 +20,35 @@ export class MembersService {
     const query = omitBy({ ...filters }, isUndefined);
 
     return this.memberRepository.find(query).populate(populate);
+  }
+
+  async getMemberById(memberId: string, populate?: PopulateOptions) {
+    let query = this.memberRepository.findById(
+      new mongoose.Types.ObjectId(memberId),
+    );
+
+    if (!isNil(populate)) {
+      query = query.populate(populate);
+    }
+
+    const member = await query.exec();
+
+    if (isNil(member)) {
+      throw new NotFoundException('Member not found');
+    }
+
+    return member;
+  }
+
+  updateContributed(
+    memberId: string | mongoose.Types.ObjectId,
+    duration: number,
+    lamportsEarned: number,
+    session?: ClientSession,
+  ) {
+    return this.memberRepository.updateOne(
+      { _id: new mongoose.Types.ObjectId(memberId) },
+      { $inc: { contributed: duration, lamportsEarned } }
+    ).session(session);
   }
 }

@@ -5,9 +5,9 @@ import { UsersModule } from './users/users.module';
 import { OrgsModule } from './orgs/orgs.module';
 import { ApiServiceModule } from './api-service/api.module';
 import { MembersModule } from './members/members.module';
-import { OffersService } from './offers/offers.service';
 import { OffersModule } from './offers/offers.module';
 import { AuthModule } from './auth/auth.module';
+import { ContributionsModule } from './contributions/contributions.module';
 
 
 @Module({
@@ -25,8 +25,8 @@ import { AuthModule } from './auth/auth.module';
     }),
     MembersModule,
     OffersModule,
+    ContributionsModule,
   ],
-  providers: [OffersService],
 })
 
 export class AppModule { }
