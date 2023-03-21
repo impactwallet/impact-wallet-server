@@ -102,10 +102,9 @@ export class OrgsService {
     }
   }
 
-  async findOrgByUsername(filters: OrgUsernameFilter, req: Request) {
-    await this.usersService.getUserFromToken(req);
+  async findOrgByUsername(filters: OrgUsernameFilter) {
     const query = {
-      username: filters.searchTerm,
+      username: { $regex: new RegExp(`^${filters.searchTerm}$`, 'i') },
     };
     const orgs = await this.orgRepository.find(query);
     if (isEmpty(orgs)) {
@@ -134,7 +133,7 @@ export class OrgsService {
 
     return {
       lamportsEarned: member.lamportsEarned,
-      equity: member.lamportsEarned / org.lamportsMinted,
+      equity: !org.lamportsMinted ? 0 : member.lamportsEarned / org.lamportsMinted,
     };
   }
 

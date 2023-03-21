@@ -40,8 +40,9 @@ export class OrgsController {
   @ApiResponse({ status: 200, description: 'Organization exists' })
   @ApiResponse({ status: 404, description: 'Organization does not exist' })
   @Get('username')
-  findOrgByUsername(@Query() query: OrgUsernameFilter, @Req() req) {
-    return this.orgsService.findOrgByUsername(query, req);
+  async findOrgByUsername(@Query() query: OrgUsernameFilter, @Req() req: Request) {
+    await this.usersService.getUserFromToken(req);
+    return this.orgsService.findOrgByUsername(query);
   }
 
 
