@@ -11,7 +11,7 @@ import { Org } from '../orgs/schema/org.schema';
 @Injectable()
 export class ApiService {
   baseUrl = 'https://api.shyft.to/sol/v1';
-  network: Cluster = 'devnet';
+  network: Cluster = 'mainnet-beta';
   connection = new Connection(clusterApiUrl(this.network), 'confirmed');
 
   constructor(private http: HttpService) { }
