@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, HttpException, Injectable, NotF
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { get, isEmpty } from 'lodash';
 import { v4 as uuid } from 'uuid';
-import mongoose, { Model, Types } from 'mongoose';
+import mongoose, { ClientSession, Model, Types } from 'mongoose';
 import { ApiService } from 'src/api-service/api.service';
 import { UsersService } from 'src/users/users.service';
 import { CreateOrgDto } from './dto/create-org.dto';
@@ -69,8 +69,8 @@ export class OrgsService {
     return this.getOrgsWithFilter(query);
   }
 
-  async getByOrgId(id: string) {
-    const org = await this.orgRepository.findById(id);
+  async getByOrgId(id: string, session?: ClientSession) {
+    const org = await this.orgRepository.findById(id).session(session);
     if (!org) throw new NotFoundException('Organization not found');
     return org;
   }
@@ -118,6 +118,13 @@ export class OrgsService {
       org: new Types.ObjectId(orgId),
     };
     return this.memberService.getMembers(query, 'user');
+  }
+
+  updateMinted(orgId: string | mongoose.Types.ObjectId, amount: number, session?: ClientSession) {
+    return this.orgRepository.updateOne(
+      { _id: new mongoose.Types.ObjectId(orgId) },
+      { $inc: { lamportsMinted: amount } }
+    ).session(session);
   }
 
 }

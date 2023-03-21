@@ -53,6 +53,10 @@ export class Org {
   @Prop({ _id: false, type: OrgSettingsSchema, default: new OrgSettings()})
     settings: OrgSettings;
 
+  @ApiProperty({ example: 0 })
+  @Prop({ type: Number, default: 0 })
+    lamportsMinted: number;
+
 }
 
 export const OrgSchema = SchemaFactory.createForClass(Org);

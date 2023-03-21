@@ -1,8 +1,8 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { ApiProperty } from '@nestjs/swagger';
 import mongoose, { HydratedDocument } from 'mongoose';
-import { Org } from '../../orgs/schema/org.schema';
-import { User } from '../../users/schema/user.schema';
+import { Org, OrgDocument } from '../../orgs/schema/org.schema';
+import { User, UserDocument } from '../../users/schema/user.schema';
 import { Role } from '../enum/roles.enum';
 
 export type MemberDocument = HydratedDocument<Member>;
@@ -39,15 +39,19 @@ export class Member {
 
   @ApiProperty({ example: 'ID or object' })
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true })
-    user: string | User;
+    user: string | UserDocument;
 
   @ApiProperty({ example: 'ID or object' })
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Org', required: true })
-    org: string | Org;
+    org: string | OrgDocument;
 
   @ApiProperty({ example: 0 })
   @Prop({ type: Number, default: 0 })
     contributed: number;
+
+  @ApiProperty({ example: 0 })
+  @Prop({ type: Number, default: 0 })
+    lamportsEarned: number;
 
 }
 

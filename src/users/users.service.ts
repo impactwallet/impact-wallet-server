@@ -102,7 +102,7 @@ export class UsersService {
     return this.userRepository.findById(id);
   }
 
-  async getUserFromToken(req: Request): Promise<User> {
+  async getUserFromToken(req: Request): Promise<UserDocument> {
     const authHeader: string = req.headers['authorization'];
     if (!authHeader) throw new UnauthorizedException({ message: 'User not authorized' });
     const bearer = authHeader.split(' ')[0];

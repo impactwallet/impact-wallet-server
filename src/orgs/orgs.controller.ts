@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query, Req, UploadedFile, UseInterceptors, Headers, NotFoundException, Patch, ValidationPipe } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query, Req, UploadedFile, UseInterceptors, Headers, NotFoundException, Patch, ValidationPipe, Delete } from '@nestjs/common';
 import { ApiConsumes, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Org } from './schema/org.schema';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -19,11 +19,15 @@ import { OfferFiltersDto } from '../offers/dto/offer-filters.dto';
 import { OfferStatusBodyDto } from '../offers/dto/offer-status.dto';
 import { StartContributionDto } from '../contributions/dto/start-contribution.dto';
 import { ContributionsService } from '../contributions/contributions.service';
+import { InjectConnection } from '@nestjs/mongoose';
+import mongoose from 'mongoose';
+import { Contribution, ContributionDocument } from '../contributions/schema/contribution.schema';
 
 @ApiTags('Orgs')
 @Controller('orgs')
 export class OrgsController {
   constructor(
+    @InjectConnection() private readonly connection: mongoose.Connection,
     private readonly orgsService: OrgsService,
     private readonly usersService: UsersService,
     private readonly offersService: OffersService,
@@ -155,7 +159,7 @@ export class OrgsController {
   }
 
   @ApiOperation({ summary: 'Start contribution' })
-  @ApiResponse({ status: 201, description: 'New contribution' })
+  @ApiResponse({ status: 201, description: 'New contribution', type: Contribution })
   @Post(':orgId/contributions')
   @HttpCode(HttpStatus.CREATED)
   async startContribution(
@@ -163,13 +167,40 @@ export class OrgsController {
     @Body(new ValidationPipe()) body: StartContributionDto,
     @Req() req: Request,
   ) {
-    await this.usersService.getUserFromToken(req);
+    const user = await this.usersService.getUserFromToken(req);
 
     const org = await this.orgsService.getByOrgId(orgId);
     if (isNil(org)) {
       throw new NotFoundException({ message: 'Organization not found' });
     }
 
-    return this.contributionsService.startContribution(orgId, body);
+    return this.contributionsService.startContribution(orgId, body, user);
+  }
+
+  @ApiOperation({ summary: 'Stop contribution' })
+  @ApiResponse({ status: 200, description: 'Stopped contribution', type: Contribution })
+  @Delete(':orgId/contributions/:contributionId')
+  async stopContribution(
+  @Param('orgId') orgId: string,
+    @Param('contributionId') contributionId: string,
+    @Req() req: Request,
+  ) {
+    const user = await this.usersService.getUserFromToken(req);
+
+    let contribution: ContributionDocument;
+    const session = await this.connection.startSession();
+    await session.withTransaction(async () => {
+      const org = await this.orgsService.getByOrgId(orgId, session);
+      if (isNil(org)) {
+        throw new NotFoundException({ message: 'Organization not found' });
+      }
+
+      contribution = await this.contributionsService.stopContribution(orgId, contributionId, user, session);
+
+      await this.orgsService.updateMinted(org._id, contribution.lamportsEarned, session);
+    });
+    await session.endSession();
+
+    return contribution;
   }
 }

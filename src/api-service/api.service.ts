@@ -81,7 +81,8 @@ export class ApiService {
       encoded_transaction: txn,
     });
     try {
-      await firstValueFrom(this.http.post(`${this.baseUrl}/transaction/send_txn`, body, config));
+      const response = await firstValueFrom(this.http.post(`${this.baseUrl}/transaction/send_txn`, body, config));
+      return get(response, 'data.result.signature');
     } catch (err) {
       err.message = `Error sending transaction: ${err.message}`;
       throw err;
@@ -165,6 +166,37 @@ export class ApiService {
       return mint;
     } catch (err) {
       err.message = `Error creating token: ${err.message}`;
+      throw err;
+    }
+  }
+
+  async mintToken(org: Org, receiver: string, amount: number) {
+    const headers = this.commonHeaders;
+    headers.set('Content-Type', 'application/json');
+
+    const config: AxiosRequestConfig = {
+      headers: Object.fromEntries(headers),
+    };
+
+    const body = JSON.stringify({
+      network: this.network,
+      wallet: org.wallet,
+      receiver,
+      token_address: org.mint,
+      amount,
+    });
+
+    try {
+      const response = await firstValueFrom(
+        this.http.post(`${this.baseUrl}/token/mint_detach`, body, config),
+      );
+      const encodedTxn = get(response, 'data.result.encoded_transaction');
+      const txn = Transaction.from(Buffer.from(encodedTxn, 'base64'));
+      const pk = await this.getPK(org.wallet, org.password);
+      const serializedTxn = this.createSignedSerializedTxn(txn, pk);
+      return this.sendTxn(serializedTxn);
+    } catch (err) {
+      err.message = `Error minting token: ${err.message}`;
       throw err;
     }
   }
