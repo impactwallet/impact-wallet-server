@@ -52,6 +52,18 @@ export class ContributionsService {
       );
     }
 
+    pipelines.push(
+      {
+        $lookup: {
+          from: 'orgs',
+          localField: 'org',
+          foreignField: '_id',
+          as: 'org',
+        },
+      },
+      { $addFields: { org: { $first: '$org' } } },
+    );
+
     return this.contributionModel.aggregate(pipelines);
   }
 
@@ -138,6 +150,9 @@ export class ContributionsService {
     await this.membersService.updateContributed(member._id, duration, lamportsEarned, session);
     await contribution.save({ session });
 
-    return this.contributionModel.findById(contribution._id).session(session);
+    return this.contributionModel
+      .findById(contribution._id)
+      .populate('org')
+      .session(session);
   }
 }

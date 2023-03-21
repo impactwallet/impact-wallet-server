@@ -22,6 +22,7 @@ import { ContributionsService } from '../contributions/contributions.service';
 import { InjectConnection } from '@nestjs/mongoose';
 import mongoose from 'mongoose';
 import { Contribution, ContributionDocument } from '../contributions/schema/contribution.schema';
+import { MemberEquityDto } from '../members/dto/member-equity.dto';
 
 @ApiTags('Orgs')
 @Controller('orgs')
@@ -92,6 +93,18 @@ export class OrgsController {
   @Get(':orgId/members')
   getOrgMembers(@Param('orgId') orgId: string, @Req() req: Request) {
     return this.orgsService.getOrgMembers(orgId, req);
+  }
+
+  @ApiOperation({ summary: 'Get member equity info' })
+  @ApiResponse({ status: 200, type: MemberEquityDto })
+  @Get(':orgId/members/:memberId/equity')
+  async getMemberEquity(
+  @Param('orgId') orgId: string,
+    @Param('memberId') memberId: string,
+    @Req() req: Request,
+  ) {
+    await this.usersService.getUserFromToken(req);
+    return this.orgsService.getMemberEquity(orgId, memberId);
   }
 
   @ApiOperation({ summary: 'Create new offer' })

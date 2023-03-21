@@ -13,6 +13,7 @@ import { MembersService } from 'src/members/members.service';
 import { Member } from 'src/members/schema/member.schema';
 import { Request } from 'express';
 import { OrgUsernameFilter } from './dto/org-username.filter.dto';
+import { MemberEquityDto } from '../members/dto/member-equity.dto';
 
 @Injectable()
 export class OrgsService {
@@ -125,6 +126,16 @@ export class OrgsService {
       { _id: new mongoose.Types.ObjectId(orgId) },
       { $inc: { lamportsMinted: amount } }
     ).session(session);
+  }
+
+  async getMemberEquity(orgId: string, memberId: string): Promise<MemberEquityDto> {
+    const org = await this.getByOrgId(orgId);
+    const member = await this.memberService.getMemberById(memberId);
+
+    return {
+      lamportsEarned: member.lamportsEarned,
+      equity: member.lamportsEarned / org.lamportsMinted,
+    };
   }
 
 }
