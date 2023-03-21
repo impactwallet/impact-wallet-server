@@ -13,6 +13,7 @@ import * as moment from 'moment';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { ApiService } from '../api-service/api.service';
 import { OrgDocument } from '../orgs/schema/org.schema';
+import { ContributionsFilterDto } from './dto/contributions-filter.dto';
 
 @Injectable()
 export class ContributionsService {
@@ -21,6 +22,38 @@ export class ContributionsService {
     private readonly membersService: MembersService,
     private readonly apiService: ApiService,
   ) {}
+
+  getContributions(filter: ContributionsFilterDto) {
+    const query = {};
+    const pipelines: any[] = [{ $match: query }];
+
+    if (!isNil(filter.orgId)) {
+      query['org'] = new mongoose.Types.ObjectId(filter.orgId);
+    }
+    if (!isNil(filter.isStopped)) {
+      if (filter.isStopped === 'true') {
+        query['stoppedAt'] = { $type: mongoose.mongo.BSONType.date };
+      } else if (filter.isStopped === 'false') {
+        query['stoppedAt'] = null;
+      }
+    }
+    if (!isNil(filter.userId)) {
+      pipelines.push(
+        {
+          $lookup: {
+            from: 'members',
+            localField: 'member',
+            foreignField: '_id',
+            as: 'member',
+          },
+        },
+        { $addFields: { member: { $first: '$member' } } },
+        { $match: { 'member.user': new mongoose.Types.ObjectId(filter.userId) } }
+      );
+    }
+
+    return this.contributionModel.aggregate(pipelines);
+  }
 
   async startContribution(orgId: string, body: StartContributionDto, user: UserDocument) {
     const { memberId } = body;
@@ -53,7 +86,7 @@ export class ContributionsService {
     });
 
     try {
-      return await contribution.save();
+      return (await contribution.save()).populate('org');
     } catch (error) {
       throw new BadRequestException({ error });
     }
