@@ -13,7 +13,7 @@ import { ApiMockHeader } from '../headers/mock';
 import { Offer } from '../offers/schema/offer.schema';
 import { UsersService } from '../users/users.service';
 import { OffersService } from '../offers/offers.service';
-import { get, isEmpty, isNil } from 'lodash';
+import { isNil } from 'lodash';
 import { OfferDto } from '../offers/dto/offer.dto';
 import { OfferFiltersDto } from '../offers/dto/offer-filters.dto';
 import { OfferStatusBodyDto } from '../offers/dto/offer-status.dto';
@@ -24,7 +24,6 @@ import mongoose from 'mongoose';
 import { Contribution, ContributionDocument } from '../contributions/schema/contribution.schema';
 import { MemberEquityDto } from '../members/dto/member-equity.dto';
 import { ApiService } from '../api-service/api.service';
-import { MintStatus } from './enum/mint-status';
 
 @ApiTags('Orgs')
 @Controller('orgs')

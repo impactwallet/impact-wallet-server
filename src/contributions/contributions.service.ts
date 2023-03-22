@@ -125,7 +125,10 @@ export class ContributionsService {
     }
 
     if (!isNil(contribution.stoppedAt)) {
-      throw new ForbiddenException('Contribution already stopped');
+      throw new ForbiddenException({
+        message: 'Contribution already stopped',
+        contribution,
+      });
     }
 
     const org: OrgDocument = contribution.org as OrgDocument;
