@@ -93,7 +93,7 @@ export class UsersService {
       wallet: newUser.wallet,
     };
     return {
-      secretLink,
+      secretLink: `https://app.impactwallet.xyz/restore/${secretLink}`,
       token: this.jwtService.sign(payload),
     };
   }

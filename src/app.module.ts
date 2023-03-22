@@ -16,8 +16,7 @@ import { ContributionsModule } from './contributions/contributions.module';
     UsersModule,
     OrgsModule,
     ApiServiceModule,
-    // MongooseModule.forRoot(process.env.MONGODB_URI, {
-    MongooseModule.forRoot('mongodb+srv://vitko:jhCn7xn2m2JJ9l8q@cluster0.dg4ud.mongodb.net/?retryWrites=true&w=majority', {
+    MongooseModule.forRoot(process.env.MONGODB_URI, {
       connectionFactory: (connection) => {
         connection.plugin(mongooseAutoPopulate);
         return connection;

@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, HttpException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { get, isEmpty } from 'lodash';
+import { get, isEmpty, isNil } from 'lodash';
 import { v4 as uuid } from 'uuid';
 import mongoose, { ClientSession, Model, Types } from 'mongoose';
 import { ApiService } from 'src/api-service/api.service';
@@ -17,6 +17,8 @@ import { MemberEquityDto } from '../members/dto/member-equity.dto';
 import { delay, firstValueFrom, of } from 'rxjs';
 import { MintInfoDto } from './dto/mint-info.dto';
 import { MintStatus } from './enum/mint-status';
+
+const MINT_STATUS_RETRIES = 5;
 
 @Injectable()
 export class OrgsService {
@@ -166,6 +168,36 @@ export class OrgsService {
       { $set: mintInfo },
       { session },
     );
+  }
+
+  async ensureMint(orgId: string, session?: ClientSession) {
+    const org = await this.getByOrgId(orgId, '+password', session);
+
+    await this.ensureMintNotInProgress(orgId, session);
+
+    if (!isNil(org.mint) && !isEmpty(org.mint)) {
+      return;
+    }
+
+    try {
+      let mintInfo = { mint: null, mintError: null, mintStatus: MintStatus.inProgress };
+      const mint = await this.apiService.createFungibleTokensForOrganization(org);
+      org.mint = mint;
+      mintInfo = { mint, mintError: null, mintStatus: MintStatus.success };
+      await this.updateMint(org._id, mintInfo, session);
+    } catch (err) {
+      const mintInfo = { mint: null, mintError: get(err, 'message', err), mintStatus: MintStatus.error };
+      this.updateMint(org._id, mintInfo, session);
+      throw err;
+    }
+  }
+
+  async ensureMintNotInProgress(orgId: string, session?: ClientSession, retries = MINT_STATUS_RETRIES) {
+    const org = await this.getByOrgId(orgId, null, session);
+    if (org.mintStatus === MintStatus.inProgress && retries > 0) {
+      await firstValueFrom(of(true).pipe(delay(2000)));
+      return this.ensureMintNotInProgress(orgId, session, --retries);
+    }
   }
 
 }

@@ -208,24 +208,13 @@ export class OrgsController {
     let contribution: ContributionDocument;
     const session = await this.connection.startSession();
     await session.withTransaction(async () => {
-      const org = await this.orgsService.getByOrgId(orgId, '+password', session);
+      const org = await this.orgsService.getByOrgId(orgId, null, session);
       if (isNil(org)) {
         throw new NotFoundException({ message: 'Organization not found' });
       }
 
-      if (isNil(org.mint) || isEmpty(org.mint)) {
-        try {
-          let mintInfo = { mint: null, mintError: null, mintStatus: MintStatus.inProgress };
-          const mint = await this.apiService.createFungibleTokensForOrganization(org);
-          org.mint = mint;
-          mintInfo = { mint, mintError: null, mintStatus: MintStatus.success };
-          await this.orgsService.updateMint(org._id, mintInfo, session);
-        } catch (err) {
-          const mintInfo = { mint: null, mintError: get(err, 'message', err), mintStatus: MintStatus.error };
-          this.orgsService.updateMint(org._id, mintInfo, session);
-          throw err;
-        }
-      }
+      await this.orgsService.ensureMint(orgId, session);
+
       contribution = await this.contributionsService.stopContribution(orgId, contributionId, user, session);
 
       await this.orgsService.updateMinted(org._id, contribution.lamportsEarned, session);
