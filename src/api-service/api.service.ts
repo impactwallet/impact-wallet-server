@@ -77,7 +77,7 @@ export class ApiService {
         blockhash: blockhash.blockhash,
         lastValidBlockHeight: blockhash.lastValidBlockHeight,
         signature,
-      });
+      }, 'finalized');
       await this.sendNotification(`New wallet created: ${walletAddress}`);
       return walletAddress;
     } catch (err) {

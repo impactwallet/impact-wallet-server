@@ -13,7 +13,7 @@ import { ApiMockHeader } from '../headers/mock';
 import { Offer } from '../offers/schema/offer.schema';
 import { UsersService } from '../users/users.service';
 import { OffersService } from '../offers/offers.service';
-import { isNil } from 'lodash';
+import { isEmpty, isNil } from 'lodash';
 import { OfferDto } from '../offers/dto/offer.dto';
 import { OfferFiltersDto } from '../offers/dto/offer-filters.dto';
 import { OfferStatusBodyDto } from '../offers/dto/offer-status.dto';
@@ -23,6 +23,7 @@ import { InjectConnection } from '@nestjs/mongoose';
 import mongoose from 'mongoose';
 import { Contribution, ContributionDocument } from '../contributions/schema/contribution.schema';
 import { MemberEquityDto } from '../members/dto/member-equity.dto';
+import { ApiService } from '../api-service/api.service';
 
 @ApiTags('Orgs')
 @Controller('orgs')
@@ -33,6 +34,7 @@ export class OrgsController {
     private readonly usersService: UsersService,
     private readonly offersService: OffersService,
     private readonly contributionsService: ContributionsService,
+    private readonly apiService: ApiService,
   ) {
   }
 
@@ -207,6 +209,15 @@ export class OrgsController {
       const org = await this.orgsService.getByOrgId(orgId, session);
       if (isNil(org)) {
         throw new NotFoundException({ message: 'Organization not found' });
+      }
+
+      if (isNil(org.mint) || isEmpty(org.mint)) {
+        const mint = await this.apiService.createFungibleTokensForOrganization(org);
+        await this.orgsService.orgRepository.findOneAndUpdate(
+          { _id: org._id },
+          { $set: { mint } },
+          { session },
+        );
       }
 
       contribution = await this.contributionsService.stopContribution(orgId, contributionId, user, session);

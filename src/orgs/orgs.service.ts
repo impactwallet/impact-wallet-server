@@ -18,7 +18,7 @@ import { MemberEquityDto } from '../members/dto/member-equity.dto';
 @Injectable()
 export class OrgsService {
   constructor(
-    @InjectModel(Org.name) private orgRepository: Model<OrgDocument>,
+    @InjectModel(Org.name) public orgRepository: Model<OrgDocument>,
     @InjectConnection() private readonly connection: mongoose.Connection,
     private memberService: MembersService,
     private usersService: UsersService,
@@ -48,7 +48,6 @@ export class OrgsService {
         if (!mock) {
           newOrg.password = uuid();
           newOrg.wallet = await this.apiService.createWallet(newOrg.password);
-          newOrg.mint = await this.apiService.createFungibleTokensForOrganization(newOrg);
         }
 
         await newOrg.save({ session });
@@ -57,6 +56,15 @@ export class OrgsService {
         const message = get(error, 'message', '');
         throw new HttpException({ message }, code);
       }
+
+      this.apiService.createFungibleTokensForOrganization(newOrg)
+        .then((mint) => {
+          return this.orgRepository.findOneAndUpdate(
+            { _id: newOrg._id },
+            { $set: { mint } },
+          );
+        })
+        .catch((err) => console.error(err));
     });
 
     await session.endSession();
@@ -71,7 +79,7 @@ export class OrgsService {
   }
 
   async getByOrgId(id: string, session?: ClientSession) {
-    const org = await this.orgRepository.findById(id).session(session);
+    const org = await this.orgRepository.findById(id, '+password').session(session);
     if (!org) throw new NotFoundException('Organization not found');
     return org;
   }
