@@ -1,4 +1,5 @@
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty } from '@nestjs/swagger';
+import { MemberDto } from '../../members/dto/members.dto';
 
 export class OrgSettingsDto {
   @ApiProperty({ example: 30, description: 'Treasury of organization', default: 0, type: String })
@@ -23,5 +24,8 @@ export class CreateOrgDto {
 
   @ApiProperty({ example: 'jpg, png', description: 'Logo organization', required: true })
     logo: string;
+
+  @ApiProperty({ example: 'Member object', description: 'First member', required: true })
+    member: MemberDto;
 
 }

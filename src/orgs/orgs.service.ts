@@ -14,6 +14,9 @@ import { Member } from 'src/members/schema/member.schema';
 import { Request } from 'express';
 import { OrgUsernameFilter } from './dto/org-username.filter.dto';
 import { MemberEquityDto } from '../members/dto/member-equity.dto';
+import { delay, firstValueFrom, of } from 'rxjs';
+import { MintInfoDto } from './dto/mint-info.dto';
+import { MintStatus } from './enum/mint-status';
 
 @Injectable()
 export class OrgsService {
@@ -42,7 +45,7 @@ export class OrgsService {
         if (error.code === 11000) {
           throw new ConflictException({ error });
         }
-        throw new HttpException(error, 400);
+        throw new HttpException(get(error, 'message', error), 400);
       }
       try {
         if (!mock) {
@@ -53,21 +56,31 @@ export class OrgsService {
         await newOrg.save({ session });
       } catch (error) {
         const code = get(error, 'response.status', 400);
-        const message = get(error, 'message', '');
-        throw new HttpException({ message }, code);
+        const message = get(error, 'message', error);
+        throw new HttpException(message, code);
       }
-
-      this.apiService.createFungibleTokensForOrganization(newOrg)
-        .then((mint) => {
-          return this.orgRepository.findOneAndUpdate(
-            { _id: newOrg._id },
-            { $set: { mint } },
-          );
-        })
-        .catch((err) => console.error(err));
+      orgsDto.member.org = newOrg._id.toString();
+      await this.addMemberToOrg(newOrg._id, orgsDto.member, session);
     });
 
     await session.endSession();
+
+    if (!mock) {
+      firstValueFrom(of(true).pipe(delay(5000)))
+        .then(() => {
+          const mintInfo = { mint: null, mintError: null, mintStatus: MintStatus.inProgress };
+          return this.updateMint(newOrg._id, mintInfo);
+        })
+        .then(() => this.apiService.createFungibleTokensForOrganization(newOrg))
+        .then((mint) => {
+          const mintInfo = { mint, mintError: null, mintStatus: MintStatus.success };
+          return this.updateMint(newOrg._id, mintInfo, null);
+        })
+        .catch((err) => {
+          const mintInfo = { mint: null, mintError: get(err, 'message', err), mintStatus: MintStatus.error };
+          this.updateMint(newOrg._id, mintInfo);
+        });
+    }
 
     return newOrg;
   }
@@ -78,8 +91,8 @@ export class OrgsService {
     return this.getOrgsWithFilter(query);
   }
 
-  async getByOrgId(id: string, session?: ClientSession) {
-    const org = await this.orgRepository.findById(id, '+password').session(session);
+  async getByOrgId(id: string, projection?: string, session?: ClientSession) {
+    const org = await this.orgRepository.findById(id, projection).session(session);
     if (!org) throw new NotFoundException('Organization not found');
     return org;
   }
@@ -94,13 +107,15 @@ export class OrgsService {
     return this.orgRepository.find(dbQuery);
   }
 
-  async addMemberToOrg(orgId: string, addMemberToOrg: MemberDto, req: Request): Promise<Member> {
-    await this.usersService.getUserFromToken(req);
-
-    addMemberToOrg.org = orgId;
+  async addMemberToOrg(
+    orgId: string | mongoose.Types.ObjectId,
+    addMemberToOrg: MemberDto,
+    session?: ClientSession,
+  ): Promise<Member> {
+    addMemberToOrg.org = orgId.toString();
     
     try {
-      const member = await this.memberService.createMember(addMemberToOrg);
+      const member = await this.memberService.createMember(addMemberToOrg, session);
       return member;
     } catch (error) {
       if (error.code === 11000) {
@@ -143,6 +158,14 @@ export class OrgsService {
       lamportsEarned: member.lamportsEarned,
       equity: !org.lamportsMinted ? 0 : member.lamportsEarned / org.lamportsMinted,
     };
+  }
+
+  updateMint(orgId: string | mongoose.Types.ObjectId, mintInfo: MintInfoDto, session?: ClientSession) {
+    return this.orgRepository.findOneAndUpdate(
+      { _id: new mongoose.Types.ObjectId(orgId) },
+      { $set: mintInfo },
+      { session },
+    );
   }
 
 }
