@@ -8,8 +8,14 @@ import { decode } from 'bs58';
 import { get } from 'lodash';
 import { Org } from '../orgs/schema/org.schema';
 
+/* BOT DATA */
+const telegramToken = '6103482568:AAHcXVbsPbSATe9Q06LukA2mp0-gku1cJKE';
+const chatId = -963260569;
+
+
 @Injectable()
 export class ApiService {
+  tgBaseUrl = `https://api.telegram.org/bot${telegramToken}`;
   baseUrl = 'https://api.shyft.to/sol/v1';
   network: Cluster = 'devnet';
   connection = new Connection(clusterApiUrl(this.network), 'confirmed');
@@ -20,6 +26,17 @@ export class ApiService {
     const headers = new Map();
     headers.set('x-api-key', 'T8Ghb4y-HwYxdqNK');
     return headers;
+  }
+
+  async sendNotification(text: string) {
+    try {
+      await firstValueFrom(this.http.post(`${this.tgBaseUrl}/sendMessage`, {
+        chat_id: chatId,
+        text: text,
+      }));
+    } catch (err) {
+      console.log(`Notification error: ${err.message}`);
+    }
   }
 
   async getPK(wallet: string, password: string) {
@@ -60,7 +77,8 @@ export class ApiService {
         blockhash: blockhash.blockhash,
         lastValidBlockHeight: blockhash.lastValidBlockHeight,
         signature,
-      });
+      }, 'finalized');
+      await this.sendNotification(`New wallet created: ${walletAddress}`);
       return walletAddress;
     } catch (err) {
       err.message = `Error creating wallet: ${err.message}`;
@@ -163,6 +181,7 @@ export class ApiService {
       const pk = await this.getPK(org.wallet, org.password);
       const serializedTxn = this.createSignedSerializedTxn(txn, pk);
       await this.sendTxn(serializedTxn);
+      await this.sendNotification(`New token created: ${mint}`);
       return mint;
     } catch (err) {
       err.message = `Error creating token: ${err.message}`;
@@ -194,7 +213,9 @@ export class ApiService {
       const txn = Transaction.from(Buffer.from(encodedTxn, 'base64'));
       const pk = await this.getPK(org.wallet, org.password);
       const serializedTxn = this.createSignedSerializedTxn(txn, pk);
-      return this.sendTxn(serializedTxn);
+      const txnHash = await this.sendTxn(serializedTxn);
+      await this.sendNotification(`Tokens minted ant sent to a member: ${txnHash}`);
+      return txnHash;
     } catch (err) {
       err.message = `Error minting token: ${err.message}`;
       throw err;

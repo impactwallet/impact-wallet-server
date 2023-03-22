@@ -33,7 +33,8 @@ export class UsersService {
   }
 
   async userExist(searchUserByNicknameDto: SearchUserByNicknameDto) {
-    const user = await this.userRepository.findOne({ nickname: searchUserByNicknameDto.nickname }).exec();        
+    const regex = new RegExp(`^${searchUserByNicknameDto.nickname}$`, 'i');
+    const user = await this.userRepository.findOne({ nickname: regex });        
     if (!user) throw new NotFoundException(`User with nickname '${searchUserByNicknameDto.nickname}' not found`);
     return searchUserByNicknameDto.nickname;
   }
