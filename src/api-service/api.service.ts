@@ -3,7 +3,7 @@ import { HttpService } from '@nestjs/axios';
 import * as FormData from 'form-data';
 import { delay, firstValueFrom, of } from 'rxjs';
 import { AxiosRequestConfig } from 'axios';
-import { Keypair, Transaction, Connection, clusterApiUrl, Cluster, PublicKey, SystemProgram, TransactionSignature, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { Keypair, Transaction, Connection, clusterApiUrl, Cluster, PublicKey, TransactionSignature, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { decode } from 'bs58';
 import { get } from 'lodash';
 import { Org } from '../orgs/schema/org.schema';
@@ -32,14 +32,14 @@ export class ApiService {
   }
 
   async sendNotification(text: string) {
-    // try {
-    //   await firstValueFrom(this.http.post(`${this.tgBaseUrl}/sendMessage`, {
-    //     chat_id: chatId,
-    //     text: text,
-    //   }));
-    // } catch (err) {
-    //   console.log(`Notification error: ${err.message}`);
-    // }
+    try {
+      await firstValueFrom(this.http.post(`${this.tgBaseUrl}/sendMessage`, {
+        chat_id: chatId,
+        text: text,
+      }));
+    } catch (err) {
+      console.log(`Notification error: ${err.message}`);
+    }
   }
 
   async getPK(wallet: string, password: string) {

@@ -14,6 +14,7 @@ async function start() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('/docs', app, document);
 
-  await app.listen(PORT, () => console.log(`Server started on port:  ${PORT}`));
+  const server = await app.listen(PORT, () => console.log(`Server started on port:  ${PORT}`));
+  server.setTimeout(1000 * 60 * 10);
 }
 start();
