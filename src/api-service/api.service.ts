@@ -1,12 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import * as FormData from 'form-data';
-import { firstValueFrom } from 'rxjs';
+import { delay, firstValueFrom, of } from 'rxjs';
 import { AxiosRequestConfig } from 'axios';
 import { Keypair, Transaction, Connection, clusterApiUrl, Cluster, PublicKey, SystemProgram, TransactionSignature, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { decode } from 'bs58';
 import { get } from 'lodash';
 import { Org } from '../orgs/schema/org.schema';
+
+const REQUEST_TIMEOUT = 1000 * 60 * 60;
+const RETRIES = 5;
 
 /* BOT DATA */
 const telegramToken = '6103482568:AAHcXVbsPbSATe9Q06LukA2mp0-gku1cJKE';
@@ -29,14 +32,14 @@ export class ApiService {
   }
 
   async sendNotification(text: string) {
-    try {
-      await firstValueFrom(this.http.post(`${this.tgBaseUrl}/sendMessage`, {
-        chat_id: chatId,
-        text: text,
-      }));
-    } catch (err) {
-      console.log(`Notification error: ${err.message}`);
-    }
+    // try {
+    //   await firstValueFrom(this.http.post(`${this.tgBaseUrl}/sendMessage`, {
+    //     chat_id: chatId,
+    //     text: text,
+    //   }));
+    // } catch (err) {
+    //   console.log(`Notification error: ${err.message}`);
+    // }
   }
 
   async getPK(wallet: string, password: string) {
@@ -46,6 +49,7 @@ export class ApiService {
         wallet,
         password,
       },
+      timeout: REQUEST_TIMEOUT,
     };
 
     try {
@@ -59,12 +63,13 @@ export class ApiService {
     }
   }
 
-  async createWallet(password: string) {
+  async createWallet(password: string, retries = RETRIES) {
     const headers = this.commonHeaders;
     headers.set('Content-Type', 'application/json');
 
     const config: AxiosRequestConfig = {
       headers: Object.fromEntries(headers),
+      timeout: REQUEST_TIMEOUT,
     };
 
     const body = JSON.stringify({ password });
@@ -81,17 +86,23 @@ export class ApiService {
       await this.sendNotification(`New wallet created: ${walletAddress}`);
       return walletAddress;
     } catch (err) {
+      if (retries > 0) {
+        await firstValueFrom(of(true).pipe(delay(2000)));
+        console.log('Retrying create wallet');
+        return this.createWallet(password, --retries);
+      }
       err.message = `Error creating wallet: ${err.message}`;
       throw err;
     }
   }
 
-  async sendTxn(txn: string) {
+  async sendTxn(txn: string, retries = RETRIES) {
     const headers = this.commonHeaders;
     headers.set('Content-Type', 'application/json');
 
     const config: AxiosRequestConfig = {
       headers: Object.fromEntries(headers.entries()),
+      timeout: REQUEST_TIMEOUT,
     };
 
     const body = JSON.stringify({
@@ -102,64 +113,17 @@ export class ApiService {
       const response = await firstValueFrom(this.http.post(`${this.baseUrl}/transaction/send_txn`, body, config));
       return get(response, 'data.result.signature');
     } catch (err) {
+      if (retries > 0) {
+        await firstValueFrom(of(true).pipe(delay(2000)));
+        console.log('Retrying sending transaction');
+        return this.sendTxn(txn, --retries);
+      }
       err.message = `Error sending transaction: ${err.message}`;
       throw err;
     }
   }
 
-  async getParsedTransaction(txn: Transaction) {
-    const config: AxiosRequestConfig = {
-      headers: Object.fromEntries(this.commonHeaders.entries()),
-      params: {
-        network: this.network,
-        txn_signature: txn.signature,
-      },
-    };
-
-    try {
-      const response = await firstValueFrom(
-        this.http.get(`${this.baseUrl}/transaction/parsed`, config)
-      );
-      return get(response, 'data.result');
-    } catch (err) {
-      err.message = `Error getting parsed transaction: ${err.message}`;
-      throw err;
-    }
-  }
-
-  async getFee(txn: Transaction) {
-    const response = await this.connection.getFeeForMessage(
-      txn.compileMessage(),
-    );
-    return get(response, 'value');
-  }
-
-  async transfer(from: string, to: string, pk: string, amount: number) {
-    try {
-      const fromPublicKey = new PublicKey(from);
-      const toPublicKey = new PublicKey(to);
-      const txn = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey: fromPublicKey,
-          toPubkey: toPublicKey,
-          lamports: amount,
-        })
-      );
-      const blockHash = (await this.connection.getLatestBlockhash('finalized'))
-        .blockhash;
-  
-      txn.feePayer = fromPublicKey;
-      txn.recentBlockhash = blockHash;
-
-      const serializedTxn = this.createSignedSerializedTxn(txn, pk);
-      await this.sendTxn(serializedTxn);
-    } catch (err) {
-      err.message = `Transfer error: ${err.message}`;
-      throw err;
-    }
-  }
-
-  async createFungibleTokensForOrganization(org: Org) {
+  async createFungibleTokensForOrganization(org: Org, retries = RETRIES): Promise<string> {
     const body = new FormData();
     body.append('network', this.network);
     body.append('wallet', org.wallet);
@@ -169,6 +133,7 @@ export class ApiService {
 
     const config: AxiosRequestConfig = {
       headers: Object.fromEntries(this.commonHeaders.entries()),
+      timeout: REQUEST_TIMEOUT,
     };
 
     try {
@@ -184,17 +149,23 @@ export class ApiService {
       await this.sendNotification(`New token created: ${mint}`);
       return mint;
     } catch (err) {
+      if (retries > 0) {
+        await firstValueFrom(of(true).pipe(delay(2000)));
+        console.log('Retrying create token');
+        return this.createFungibleTokensForOrganization(org, --retries);
+      }
       err.message = `Error creating token: ${err.message}`;
       throw err;
     }
   }
 
-  async mintToken(org: Org, receiver: string, amount: number) {
+  async mintToken(org: Org, receiver: string, amount: number, retries = RETRIES) {
     const headers = this.commonHeaders;
     headers.set('Content-Type', 'application/json');
 
     const config: AxiosRequestConfig = {
       headers: Object.fromEntries(headers),
+      timeout: REQUEST_TIMEOUT,
     };
 
     const body = JSON.stringify({
@@ -217,6 +188,11 @@ export class ApiService {
       await this.sendNotification(`Tokens minted ant sent to a member: ${txnHash}`);
       return txnHash;
     } catch (err) {
+      if (retries > 0) {
+        await firstValueFrom(of(true).pipe(delay(2000)));
+        console.log('Retrying mint token');
+        return this.mintToken(org, receiver, amount, --retries);
+      }
       err.message = `Error minting token: ${err.message}`;
       throw err;
     }

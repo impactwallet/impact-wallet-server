@@ -13,7 +13,7 @@ import { ApiMockHeader } from '../headers/mock';
 import { Offer } from '../offers/schema/offer.schema';
 import { UsersService } from '../users/users.service';
 import { OffersService } from '../offers/offers.service';
-import { isEmpty, isNil } from 'lodash';
+import { get, isEmpty, isNil } from 'lodash';
 import { OfferDto } from '../offers/dto/offer.dto';
 import { OfferFiltersDto } from '../offers/dto/offer-filters.dto';
 import { OfferStatusBodyDto } from '../offers/dto/offer-status.dto';
@@ -24,7 +24,7 @@ import mongoose from 'mongoose';
 import { Contribution, ContributionDocument } from '../contributions/schema/contribution.schema';
 import { MemberEquityDto } from '../members/dto/member-equity.dto';
 import { ApiService } from '../api-service/api.service';
-import { delay, firstValueFrom, of } from 'rxjs';
+import { MintStatus } from './enum/mint-status';
 
 @ApiTags('Orgs')
 @Controller('orgs')
@@ -84,12 +84,13 @@ export class OrgsController {
   @ApiResponse({ status: 200, type: Member })
   @Post(':orgId/members')
   @HttpCode(HttpStatus.CREATED)
-  addMemberToOrg(
+  async addMemberToOrg(
     @Param('orgId') orgId: string,
       @Body() member: MemberDto,
       @Req() req: Request
   ): Promise<Member> {
-    return this.orgsService.addMemberToOrg(orgId, member, req);
+    await this.usersService.getUserFromToken(req);
+    return this.orgsService.addMemberToOrg(orgId, member);
   }
 
   @ApiOperation({ summary: 'Get org members' })
@@ -213,10 +214,17 @@ export class OrgsController {
       }
 
       if (isNil(org.mint) || isEmpty(org.mint)) {
-        const mint = await this.apiService.createFungibleTokensForOrganization(org);
-        org.mint = mint;
-        await this.orgsService.updateMint(org._id, mint, session);
-        await firstValueFrom(of(true).pipe(delay(5000)));
+        try {
+          let mintInfo = { mint: null, mintError: null, mintStatus: MintStatus.inProgress };
+          const mint = await this.apiService.createFungibleTokensForOrganization(org);
+          org.mint = mint;
+          mintInfo = { mint, mintError: null, mintStatus: MintStatus.success };
+          await this.orgsService.updateMint(org._id, mintInfo, session);
+        } catch (err) {
+          const mintInfo = { mint: null, mintError: get(err, 'message', err), mintStatus: MintStatus.error };
+          this.orgsService.updateMint(org._id, mintInfo, session);
+          throw err;
+        }
       }
       contribution = await this.contributionsService.stopContribution(orgId, contributionId, user, session);
 
