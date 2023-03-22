@@ -14,6 +14,7 @@ import { Member } from 'src/members/schema/member.schema';
 import { Request } from 'express';
 import { OrgUsernameFilter } from './dto/org-username.filter.dto';
 import { MemberEquityDto } from '../members/dto/member-equity.dto';
+import { delay, firstValueFrom, of } from 'rxjs';
 
 @Injectable()
 export class OrgsService {
@@ -56,18 +57,16 @@ export class OrgsService {
         const message = get(error, 'message', '');
         throw new HttpException({ message }, code);
       }
-
-      this.apiService.createFungibleTokensForOrganization(newOrg)
-        .then((mint) => {
-          return this.orgRepository.findOneAndUpdate(
-            { _id: newOrg._id },
-            { $set: { mint } },
-          );
-        })
-        .catch((err) => console.error(err));
     });
 
     await session.endSession();
+
+    firstValueFrom(of(true).pipe(delay(5000)))
+      .then(() => this.apiService.createFungibleTokensForOrganization(newOrg))
+      .then((mint) => {
+        return this.updateMint(newOrg._id, mint);
+      })
+      .catch((err) => console.error(get(err, 'message', err)));
 
     return newOrg;
   }
@@ -78,8 +77,8 @@ export class OrgsService {
     return this.getOrgsWithFilter(query);
   }
 
-  async getByOrgId(id: string, session?: ClientSession) {
-    const org = await this.orgRepository.findById(id, '+password').session(session);
+  async getByOrgId(id: string, projection?: string, session?: ClientSession) {
+    const org = await this.orgRepository.findById(id, projection).session(session);
     if (!org) throw new NotFoundException('Organization not found');
     return org;
   }
@@ -143,6 +142,14 @@ export class OrgsService {
       lamportsEarned: member.lamportsEarned,
       equity: !org.lamportsMinted ? 0 : member.lamportsEarned / org.lamportsMinted,
     };
+  }
+
+  updateMint(orgId: string | mongoose.Types.ObjectId, mint: string, session?: ClientSession) {
+    return this.orgRepository.findOneAndUpdate(
+      { _id: new mongoose.Types.ObjectId(orgId) },
+      { $set: { mint } },
+      { session },
+    );
   }
 
 }

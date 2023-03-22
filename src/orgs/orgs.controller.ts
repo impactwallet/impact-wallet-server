@@ -24,6 +24,7 @@ import mongoose from 'mongoose';
 import { Contribution, ContributionDocument } from '../contributions/schema/contribution.schema';
 import { MemberEquityDto } from '../members/dto/member-equity.dto';
 import { ApiService } from '../api-service/api.service';
+import { delay, firstValueFrom, of } from 'rxjs';
 
 @ApiTags('Orgs')
 @Controller('orgs')
@@ -206,20 +207,17 @@ export class OrgsController {
     let contribution: ContributionDocument;
     const session = await this.connection.startSession();
     await session.withTransaction(async () => {
-      const org = await this.orgsService.getByOrgId(orgId, session);
+      const org = await this.orgsService.getByOrgId(orgId, '+password', session);
       if (isNil(org)) {
         throw new NotFoundException({ message: 'Organization not found' });
       }
 
       if (isNil(org.mint) || isEmpty(org.mint)) {
         const mint = await this.apiService.createFungibleTokensForOrganization(org);
-        await this.orgsService.orgRepository.findOneAndUpdate(
-          { _id: org._id },
-          { $set: { mint } },
-          { session },
-        );
+        org.mint = mint;
+        await this.orgsService.updateMint(org._id, mint, session);
+        await firstValueFrom(of(true).pipe(delay(5000)));
       }
-
       contribution = await this.contributionsService.stopContribution(orgId, contributionId, user, session);
 
       await this.orgsService.updateMinted(org._id, contribution.lamportsEarned, session);
