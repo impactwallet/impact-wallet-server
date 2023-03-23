@@ -127,11 +127,6 @@ export class OrgsController {
       throw new NotFoundException({ message: 'Organization not found' });
     }
 
-    const user = await this.usersService.getByUserId(offer.memberProspect.user);
-    if (isNil(user)) {
-      throw new NotFoundException({ message: 'User not found' });
-    }
-
     return this.offersService.createOffer(orgId, offer);
   }
 

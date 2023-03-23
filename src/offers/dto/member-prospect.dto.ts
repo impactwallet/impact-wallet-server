@@ -21,7 +21,4 @@ export class MemberProspectDto {
     autoContribution: boolean;
 
   agreement: string;
-
-  @ApiProperty({ example: 'User ID' })
-    user: string;
 }

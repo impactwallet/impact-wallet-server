@@ -3,7 +3,6 @@ import { ApiProperty } from '@nestjs/swagger';
 import mongoose, { HydratedDocument } from 'mongoose';
 import { Role } from '../../members/enum/roles.enum';
 import { Org } from '../../orgs/schema/org.schema';
-import { User } from '../../users/schema/user.schema';
 import { OfferStatus } from '../enum/statuses.enum';
 
 export type OfferDocument = HydratedDocument<Offer>;
@@ -38,10 +37,6 @@ export class MemberProspect {
 
   @Prop()
     agreement: string;
-
-  @ApiProperty({ example: 'ID or object' })
-  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true })
-    user: string | User;
 
 }
 

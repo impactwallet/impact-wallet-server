@@ -42,7 +42,7 @@ export class OffersService {
       _id: new mongoose.Types.ObjectId(offerId),
       org: new mongoose.Types.ObjectId(orgId),
     };
-    const offer = await this.offerRepository.findOne(query).session(session);
+    const offer = await this.offerRepository.findOne(query).populate('org').session(session);
     if (isNil(offer)) {
       throw new NotFoundException('Offer not found');
     }
@@ -65,6 +65,7 @@ export class OffersService {
 
         const newMember = new this.memberRepository(offer.memberProspect.toObject());
         newMember.org = orgId;
+        newMember.user = body.userId;
         await newMember.save({ session });
         break;
       case OfferStatusDto.declined:
