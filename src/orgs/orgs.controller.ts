@@ -211,7 +211,7 @@ export class OrgsController {
 
       contribution = await this.contributionsService.stopContribution(orgId, contributionId, user, session);
 
-      await this.orgsService.updateMinted(org._id, contribution.lamportsEarned, session);
+      await this.orgsService.updateMintedAmount(org._id, contribution.lamportsEarned, session);
     });
     await session.endSession();
 

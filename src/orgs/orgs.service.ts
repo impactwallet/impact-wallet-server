@@ -145,8 +145,8 @@ export class OrgsService {
     return this.memberService.getMembers(query, 'user');
   }
 
-  updateMinted(orgId: string | mongoose.Types.ObjectId, amount: number, session?: ClientSession) {
-    return this.orgRepository.updateOne(
+  updateMintedAmount(orgId: string | mongoose.Types.ObjectId, amount: number, session?: ClientSession) {
+    return this.orgRepository.findOneAndUpdate(
       { _id: new mongoose.Types.ObjectId(orgId) },
       { $inc: { lamportsMinted: amount } }
     ).session(session);
@@ -171,9 +171,9 @@ export class OrgsService {
   }
 
   async ensureMint(orgId: string, session?: ClientSession) {
-    const org = await this.getByOrgId(orgId, '+password', session);
+    await this.ensureMintNotInProgress(orgId, undefined, session);
 
-    await this.ensureMintNotInProgress(orgId, session);
+    const org = await this.getByOrgId(orgId, '+password', session);
 
     if (!isNil(org.mint) && !isEmpty(org.mint)) {
       return;
@@ -192,11 +192,11 @@ export class OrgsService {
     }
   }
 
-  async ensureMintNotInProgress(orgId: string, session?: ClientSession, retries = MINT_STATUS_RETRIES) {
+  async ensureMintNotInProgress(orgId: string, retries = MINT_STATUS_RETRIES, session?: ClientSession) {
     const org = await this.getByOrgId(orgId, null, session);
     if (org.mintStatus === MintStatus.inProgress && retries > 0) {
       await firstValueFrom(of(true).pipe(delay(2000)));
-      return this.ensureMintNotInProgress(orgId, session, --retries);
+      return this.ensureMintNotInProgress(orgId, --retries, session);
     }
   }
 
