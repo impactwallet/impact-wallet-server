@@ -3,7 +3,7 @@ import { HttpService } from '@nestjs/axios';
 import * as FormData from 'form-data';
 import { delay, firstValueFrom, of } from 'rxjs';
 import { AxiosRequestConfig } from 'axios';
-import { Keypair, Transaction, Connection, clusterApiUrl, Cluster, PublicKey, TransactionSignature, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { Keypair, Transaction, Connection, clusterApiUrl, Cluster, PublicKey, TransactionSignature, LAMPORTS_PER_SOL, SystemProgram, sendAndConfirmTransaction } from '@solana/web3.js';
 import { decode } from 'bs58';
 import { get } from 'lodash';
 import { Org } from '../orgs/schema/org.schema';
@@ -20,15 +20,19 @@ const chatId = -963260569;
 export class ApiService {
   tgBaseUrl = `https://api.telegram.org/bot${telegramToken}`;
   baseUrl = 'https://api.shyft.to/sol/v1';
-  network: Cluster = 'devnet';
+  network: Cluster = process.env.NETWORK as Cluster;
   connection = new Connection(clusterApiUrl(this.network), 'confirmed');
 
   constructor(private http: HttpService) { }
 
   get commonHeaders() {
     const headers = new Map();
-    headers.set('x-api-key', 'T8Ghb4y-HwYxdqNK');
+    headers.set('x-api-key', process.env.SHYFT_KEY);
     return headers;
+  }
+
+  get isMainnet() {
+    return this.network === 'mainnet-beta';
   }
 
   async sendNotification(text: string) {
@@ -39,6 +43,27 @@ export class ApiService {
       }));
     } catch (err) {
       console.log(`Notification error: ${err.message}`);
+    }
+  }
+
+  async transfer(fromPk: string, to: string, amount: number) {
+    try {
+      const transaction = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: Keypair.fromSecretKey(decode(fromPk)).publicKey,
+          toPubkey: new PublicKey(to),
+          lamports: amount * LAMPORTS_PER_SOL,
+        })
+      );
+      const blockHash = (await this.connection.getLatestBlockhash('finalized'))
+        .blockhash;
+    
+      transaction.feePayer = Keypair.fromSecretKey(decode(fromPk)).publicKey;
+      transaction.recentBlockhash = blockHash;
+      await sendAndConfirmTransaction(this.connection, transaction, [Keypair.fromSecretKey(decode(fromPk))]);
+    } catch (err) {
+      err.message = `Error getting wallet PK: ${err.message}`;
+      throw err;
     }
   }
 
@@ -63,7 +88,56 @@ export class ApiService {
     }
   }
 
-  async createWallet(password: string, retries = RETRIES) {
+  async createAccount(walletPk: string, retries = RETRIES) {
+    try {
+      const space = 0;
+      const toKeypair = Keypair.fromSecretKey(decode(walletPk));
+      const rentExemptionAmount =
+          await this.connection.getMinimumBalanceForRentExemption(space);
+    
+      const createAccountParams = {
+        fromPubkey: new PublicKey(process.env.FEE_PAYER),
+        newAccountPubkey: toKeypair.publicKey,
+        lamports: rentExemptionAmount,
+        space,
+        programId: SystemProgram.programId,
+      };
+    
+    
+      const createAccountTxn = new Transaction().add(
+        SystemProgram.createAccount(createAccountParams)
+      );
+      const blockhash = (await this.connection.getLatestBlockhash('finalized'));
+      createAccountTxn.recentBlockhash = blockhash.blockhash;
+      createAccountTxn.feePayer = new PublicKey(process.env.FEE_PAYER);
+      const serializedTxn = this.createSignedSerializedTxn(createAccountTxn, walletPk, false);
+      await this.sendTxn(serializedTxn);
+    } catch (err) {
+      if (retries > 0) {
+        await firstValueFrom(of(true).pipe(delay(2000)));
+        console.log('Retrying creating account');
+        return this.createAccount(walletPk, --retries);
+      }
+      err.message = `Error creating account: ${err.message}`;
+      throw err;
+    }
+  }
+
+  async airdrop(walletAddress: string, password: string) {
+    if (this.isMainnet) {
+      const pk = await this.getPK(walletAddress, password);
+      return this.createAccount(pk);
+    }
+    const signature: TransactionSignature = await this.connection.requestAirdrop(new PublicKey(walletAddress), LAMPORTS_PER_SOL);
+    const blockhash = await this.connection.getLatestBlockhash('finalized');
+    await this.connection.confirmTransaction({
+      blockhash: blockhash.blockhash,
+      lastValidBlockHeight: blockhash.lastValidBlockHeight,
+      signature,
+    }, 'finalized');
+  }
+
+  async createWallet(password: string, isAirdropNeeded = false) {
     const headers = this.commonHeaders;
     headers.set('Content-Type', 'application/json');
 
@@ -76,27 +150,18 @@ export class ApiService {
     try {
       const response = await firstValueFrom(this.http.post(`${this.baseUrl}/semi_wallet/create`, body, config));
       const walletAddress = get(response, 'data.result.wallet_address');
-      const signature: TransactionSignature = await this.connection.requestAirdrop(new PublicKey(walletAddress), LAMPORTS_PER_SOL);
-      const blockhash = await this.connection.getLatestBlockhash('finalized');
-      await this.connection.confirmTransaction({
-        blockhash: blockhash.blockhash,
-        lastValidBlockHeight: blockhash.lastValidBlockHeight,
-        signature,
-      }, 'finalized');
+      if (isAirdropNeeded) {
+        await this.airdrop(walletAddress, password);
+      }
       await this.sendNotification(`New wallet created: ${walletAddress}`);
       return walletAddress;
     } catch (err) {
-      if (retries > 0) {
-        await firstValueFrom(of(true).pipe(delay(2000)));
-        console.log('Retrying create wallet');
-        return this.createWallet(password, --retries);
-      }
       err.message = `Error creating wallet: ${err.message}`;
       throw err;
     }
   }
 
-  async sendTxn(txn: string, retries = RETRIES) {
+  async sendTxn(txn: string, isRelay = true) {
     const headers = this.commonHeaders;
     headers.set('Content-Type', 'application/json');
 
@@ -110,14 +175,10 @@ export class ApiService {
       encoded_transaction: txn,
     });
     try {
-      const response = await firstValueFrom(this.http.post(`${this.baseUrl}/transaction/send_txn`, body, config));
+      const endpoint = this.isMainnet && isRelay ? '/txn_relayer/sign' : '/transaction/send_txn';
+      const response = await firstValueFrom(this.http.post(`${this.baseUrl}${endpoint}`, body, config));
       return get(response, 'data.result.signature');
     } catch (err) {
-      if (retries > 0) {
-        await firstValueFrom(of(true).pipe(delay(2000)));
-        console.log('Retrying sending transaction');
-        return this.sendTxn(txn, --retries);
-      }
       err.message = `Error sending transaction: ${err.message}`;
       throw err;
     }
@@ -129,6 +190,9 @@ export class ApiService {
     body.append('wallet', org.wallet);
     body.append('name', org.name);
     body.append('symbol', org.username.toUpperCase());
+    if (this.isMainnet) {
+      body.append('fee_payer', process.env.FEE_PAYER);
+    }
     body.append('file', Buffer.from(org.logo, 'base64'), 'logo');
 
     const config: AxiosRequestConfig = {
@@ -144,7 +208,7 @@ export class ApiService {
       const mint = get(response, 'data.result.mint');
       const txn = Transaction.from(Buffer.from(encodedTxn, 'base64'));
       const pk = await this.getPK(org.wallet, org.password);
-      const serializedTxn = this.createSignedSerializedTxn(txn, pk);
+      const serializedTxn = this.createSignedSerializedTxn(txn, pk, true, false);
       await this.sendTxn(serializedTxn);
       await this.sendNotification(`New token created: ${mint}`);
       return mint;
@@ -170,10 +234,11 @@ export class ApiService {
 
     const body = JSON.stringify({
       network: this.network,
-      wallet: org.wallet,
+      mint_authority: org.wallet,
       receiver,
       token_address: org.mint,
       amount,
+      fee_payer: this.isMainnet ? process.env.FEE_PAYER : undefined,
     });
 
     try {
@@ -183,7 +248,7 @@ export class ApiService {
       const encodedTxn = get(response, 'data.result.encoded_transaction');
       const txn = Transaction.from(Buffer.from(encodedTxn, 'base64'));
       const pk = await this.getPK(org.wallet, org.password);
-      const serializedTxn = this.createSignedSerializedTxn(txn, pk);
+      const serializedTxn = this.createSignedSerializedTxn(txn, pk, true, false);
       const txnHash = await this.sendTxn(serializedTxn);
       await this.sendNotification(`Tokens minted ant sent to a member: ${txnHash}`);
       return txnHash;
@@ -198,10 +263,15 @@ export class ApiService {
     }
   }
 
-  createSignedSerializedTxn(transaction: Transaction, fromPrivateKey: string) {
-    const feePayer = Keypair.fromSecretKey(decode(fromPrivateKey));
-    transaction.partialSign(feePayer);
-    const serializedTxn = transaction.serialize().toString('base64');
+  createSignedSerializedTxn(
+    transaction: Transaction,
+    fromPrivateKey: string,
+    requireAllSignatures = true,
+    verifySignatures = true,
+  ) {
+    const fromSigner = Keypair.fromSecretKey(decode(fromPrivateKey));
+    transaction.partialSign(fromSigner);
+    const serializedTxn = transaction.serialize({ requireAllSignatures, verifySignatures }).toString('base64');
     return serializedTxn;
   }
 }

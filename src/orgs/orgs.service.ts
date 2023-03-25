@@ -52,7 +52,7 @@ export class OrgsService {
       try {
         if (!mock) {
           newOrg.password = uuid();
-          newOrg.wallet = await this.apiService.createWallet(newOrg.password);
+          newOrg.wallet = await this.apiService.createWallet(newOrg.password, true);
         }
 
         await newOrg.save({ session });
@@ -80,7 +80,7 @@ export class OrgsService {
         })
         .catch((err) => {
           const mintInfo = { mint: null, mintError: get(err, 'message', err), mintStatus: MintStatus.error };
-          this.updateMint(newOrg._id, mintInfo);
+          this.updateMint(newOrg._id, mintInfo).exec();
         });
     }
 
