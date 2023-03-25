@@ -36,6 +36,9 @@ export class ApiService {
   }
 
   async sendNotification(text: string) {
+    if (process.env.NOTIFICATIONS_ENABLED !== 'true') {
+      return;
+    }
     try {
       await firstValueFrom(this.http.post(`${this.tgBaseUrl}/sendMessage`, {
         chat_id: chatId,

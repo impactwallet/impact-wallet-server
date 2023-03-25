@@ -13,6 +13,7 @@ import { get, isNil, omit } from 'lodash';
 import { SearchUserByNicknameDto } from './dto/search-user-by-nickname.dto';
 import { Request } from 'express';
 import { MembersService } from '../members/members.service';
+import { resizeBuffer } from '../utils/images';
 
 @Injectable()
 export class UsersService {
@@ -53,7 +54,8 @@ export class UsersService {
 
   async createUser(userDto: CreateUserDto, avatar: any, mock = false): Promise<CreateUserResponseDto> {
     if (avatar) {
-      const imageB64 = avatar.buffer.toString('base64');
+      const resized = await resizeBuffer(avatar.buffer);
+      const imageB64 = resized.toString('base64');
       userDto.avatar = imageB64;
     }
     const session = await this.connection.startSession();

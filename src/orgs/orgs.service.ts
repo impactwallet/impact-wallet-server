@@ -17,6 +17,7 @@ import { MemberEquityDto } from '../members/dto/member-equity.dto';
 import { delay, firstValueFrom, of } from 'rxjs';
 import { MintInfoDto } from './dto/mint-info.dto';
 import { MintStatus } from './enum/mint-status';
+import { resizeBuffer } from '../utils/images';
 
 const MINT_STATUS_RETRIES = 5;
 
@@ -33,7 +34,8 @@ export class OrgsService {
   async createOrg(orgsDto: CreateOrgDto, logo: any, mock: boolean, req: Request) {
     await this.usersService.getUserFromToken(req);
     if (logo) {
-      const imageB64 = logo.buffer.toString('base64');
+      const resized = await resizeBuffer(logo.buffer);
+      const imageB64 = resized.toString('base64');
       orgsDto.logo = imageB64;
     }
 
