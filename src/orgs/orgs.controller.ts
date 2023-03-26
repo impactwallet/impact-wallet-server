@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query, Req, UploadedFile, UseInterceptors, Headers, NotFoundException, Patch, ValidationPipe, Delete } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query, Req, UploadedFile, UseInterceptors, Headers, NotFoundException, Patch, ValidationPipe, Delete, Res } from '@nestjs/common';
 import { ApiConsumes, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Org } from './schema/org.schema';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -7,7 +7,7 @@ import { CreateOrgDto } from './dto/create-org.dto';
 import { OrgsFilter } from './dto/orgs.filter.dto';
 import { MemberDto } from 'src/members/dto/members.dto';
 import { Member } from 'src/members/schema/member.schema';
-import { Request } from 'express';
+import { Request, Response } from 'express';
 import { OrgUsernameFilter } from './dto/org-username.filter.dto';
 import { ApiMockHeader } from '../headers/mock';
 import { Offer } from '../offers/schema/offer.schema';
@@ -216,5 +216,21 @@ export class OrgsController {
     await session.endSession();
 
     return contribution;
+  }
+
+  @ApiOperation({ summary: 'Get orgs logo' })
+  @ApiResponse({ status: 200 })
+  @Get('/logo/:fileName')
+  async getUserAvatar(
+  @Param('fileName') fileName: string,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    await this.usersService.getUserFromToken(req);
+
+    const data = await this.orgsService.getLogo(fileName);
+    res.writeHead(200, { 'content-type': 'image/*' });
+    res.write(data.file, 'binary');
+    res.end(null, 'binary');
   }
 }
