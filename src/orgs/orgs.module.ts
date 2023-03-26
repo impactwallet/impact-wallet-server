@@ -9,6 +9,7 @@ import { MembersModule } from 'src/members/members.module';
 import { OffersModule } from '../offers/offers.module';
 import { ContributionsModule } from '../contributions/contributions.module';
 import { S3Module } from 'src/s3/s3.module';
+import { PaymentModule } from '../payment/payment.module';
 
 @Module({
   imports: [
@@ -18,7 +19,8 @@ import { S3Module } from 'src/s3/s3.module';
     ApiServiceModule,
     OffersModule,
     ContributionsModule,
-    S3Module
+    S3Module,
+    PaymentModule,
   ],
   providers: [OrgsService],
   controllers: [OrgsController],

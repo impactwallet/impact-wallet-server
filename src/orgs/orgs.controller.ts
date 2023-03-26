@@ -23,7 +23,9 @@ import { InjectConnection } from '@nestjs/mongoose';
 import mongoose from 'mongoose';
 import { Contribution, ContributionDocument } from '../contributions/schema/contribution.schema';
 import { MemberEquityDto } from '../members/dto/member-equity.dto';
-import { ApiService } from '../api-service/api.service';
+import { Payment } from '../payment/schema/payment.schema';
+import { ReceivePaymentDto } from '../payment/dto/receive-payment.dto';
+import { PaymentService } from '../payment/payment.service';
 
 @ApiTags('Orgs')
 @Controller('orgs')
@@ -34,7 +36,7 @@ export class OrgsController {
     private readonly usersService: UsersService,
     private readonly offersService: OffersService,
     private readonly contributionsService: ContributionsService,
-    private readonly apiService: ApiService,
+    private readonly paymentService: PaymentService,
   ) {
   }
 
@@ -221,16 +223,33 @@ export class OrgsController {
   @ApiOperation({ summary: 'Get orgs logo' })
   @ApiResponse({ status: 200 })
   @Get('/logo/:fileName')
-  async getUserAvatar(
+  async getOrgLogo(
   @Param('fileName') fileName: string,
-    @Req() req: Request,
     @Res() res: Response,
   ) {
-    await this.usersService.getUserFromToken(req);
-
     const data = await this.orgsService.getLogo(fileName);
     res.writeHead(200, { 'content-type': 'image/*' });
     res.write(data.file, 'binary');
     res.end(null, 'binary');
+  }
+
+  @ApiTags('Payment')
+  @ApiOperation({ summary: 'Create a payment receiving URL' })
+  @ApiResponse({ status: 201, description: 'New payment', type: Payment })
+  @Post(':orgId/payments/receive')
+  @HttpCode(HttpStatus.CREATED)
+  async receivePayment(
+  @Param('orgId') orgId: string,
+    @Body(new ValidationPipe()) body: ReceivePaymentDto,
+    @Req() req: Request,
+  ) {
+    await this.usersService.getUserFromToken(req);
+
+    const org = await this.orgsService.getByOrgId(orgId);
+    if (isNil(org)) {
+      throw new NotFoundException({ message: 'Organization not found' });
+    }
+
+    return this.paymentService.receivePayment(org, body);
   }
 }
