@@ -30,6 +30,7 @@
     "@nestjs/mongoose": "^9.2.1",
     "@nestjs/platform-express": "^9.0.0",
     "@nestjs/swagger": "^6.2.1",
+    "@solana/spl-token": "^0.3.7",
     "@solana/web3.js": "^1.74.0",
     "aws-sdk": "^2.1343.0",
     "bcryptjs": "^2.4.3",

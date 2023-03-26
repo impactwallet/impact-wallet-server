@@ -2,6 +2,7 @@ import { CheckoutItemEntity, verifyWebhookSignature } from '@candypay/checkout-s
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import mongoose, { Model } from 'mongoose';
+import { ApiService } from '../api-service/api.service';
 import { CandyPayService } from '../api-service/candypay.service';
 import { OrgDocument } from '../orgs/schema/org.schema';
 import { ReceivePaymentDto } from './dto/receive-payment.dto';
@@ -14,6 +15,7 @@ export class PaymentService {
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
     @InjectConnection() private readonly connection: mongoose.Connection,
     private candypayService: CandyPayService,
+    private apiService: ApiService,
   ) { }
 
   async receivePayment(org: OrgDocument, body: ReceivePaymentDto) {
@@ -53,10 +55,15 @@ export class PaymentService {
     } catch (err) {
       throw new BadRequestException('Invalid webhook signature');
     }
-    return this.paymentModel.findOneAndUpdate(
+    const payment = await this.paymentModel.findOneAndUpdate(
       { cpOrderId: body.order_id },
       { $set: { cpResult: body } },
-    );
+      { new: true },
+    ).populate('org');
+
+    const org = payment.org as OrgDocument;
+
+    await this.apiService.transferUSDC(process.env.FEE_PAYER, org.wallet, body.payment_amount);
   }
 
 }
