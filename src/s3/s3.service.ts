@@ -21,11 +21,18 @@ export class S3Service {
   }
 
 
-async putFile(fileName: string, file: Buffer) {
-    const params = { Bucket: this.awsPublicBucketName, Key: fileName, Body: file,  ACL: 'public-read'};
+  async putFile(fileName: string, file: Buffer) {
+    const params = { Bucket: this.awsPublicBucketName, Key: fileName, Body: file };
     const command = new PutObjectCommand(params);
-    const uploadedFile = await this.s3.send(command);
+    await this.s3.send(command);
     const url = `https://${this.awsPublicBucketName}.s3.amazonaws.com/${fileName}`;
     return { url, key: fileName };
+  }
+
+  async getFile(fileName: string) {
+    const params = { Bucket: this.awsPublicBucketName, Key: fileName};
+    const command = new GetObjectCommand(params);
+    const response = await this.s3.send(command);
+    return { contentType: response.ContentType, file: await response.Body.transformToByteArray() };
   }
 }

@@ -57,8 +57,9 @@ export class UsersService {
   async createUser(userDto: CreateUserDto, avatar: any, mock = false): Promise<CreateUserResponseDto> {
     if (avatar) {
       const resized = await resizeBuffer(avatar.buffer);
-      const uploadedFile = await this.s3Service.putFile(`${uuid()}.jpg`, resized);
-      userDto.avatar = uploadedFile.url;
+      const fileName = `${uuid()}.jpg`;
+      await this.s3Service.putFile(fileName, resized);
+      userDto.avatar = `/users/avatar/${fileName}`;
     }
     const session = await this.connection.startSession();
     const secretLink = uuid();
@@ -103,8 +104,12 @@ export class UsersService {
   }
 
 
-  getByUserId(id: string) {
-    return this.userRepository.findById(id);
+  async getByUserId(id: string) {
+    const user = await this.userRepository.findById(id);
+    if (isNil(user)) {
+      throw new NotFoundException('User not found');
+    }
+    return user;
   }
 
   async getUserFromToken(req: Request): Promise<UserDocument> {
@@ -129,6 +134,10 @@ export class UsersService {
     await this.getUserFromToken(req);
     const filters = { user };
     return this.membersService.getMembers(filters, 'org');
+  }
+
+  async getAvatar(fileName: string) {
+    return this.s3Service.getFile(fileName);
   }
 
   private async getUsersByQueryWithExactMatch(query: UsersFilter): Promise<User[]> {

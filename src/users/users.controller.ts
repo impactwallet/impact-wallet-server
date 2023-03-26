@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Post, Query, HttpStatus, UploadedFile, UseInterceptors, ValidationPipe } from '@nestjs/common';
-import { HttpCode, Req, Headers } from '@nestjs/common/decorators';
+import { HttpCode, Req, Headers, Res } from '@nestjs/common/decorators';
 import { ApiConsumes, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -8,13 +8,12 @@ import { UsersService } from './users.service';
 import { CreateUserResponseDto } from './dto/create-user.response.dto';
 import { UsersFilter } from './dto/users.filter.dto';
 import { SearchUserByNicknameDto } from './dto/search-user-by-nickname.dto';
-import { Request } from 'express';
+import { Request, Response } from 'express';
 import { ApiMockHeader } from '../headers/mock';
 import { Member } from '../members/schema/member.schema';
 import { Contribution } from '../contributions/schema/contribution.schema';
 import { ContributionsService } from '../contributions/contributions.service';
 import { ContributionsFilterDto } from '../contributions/dto/contributions-filter.dto';
-import { PromiseResult } from 'aws-sdk/lib/request';
 
 @ApiTags('Users')
 @Controller('users')
@@ -83,5 +82,21 @@ export class UsersController {
     filter.userId = userId;
 
     return this.contributionsService.getContributions(filter);
+  }
+
+  @ApiOperation({ summary: 'Get users avatar' })
+  @ApiResponse({ status: 200 })
+  @Get('/avatar/:fileName')
+  async getUserAvatar(
+  @Param('fileName') fileName: string,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    await this.userService.getUserFromToken(req);
+
+    const data = await this.userService.getAvatar(fileName);
+    res.writeHead(200, { 'content-type': 'image/*' });
+    res.write(data.file, 'binary');
+    res.end(null, 'binary');
   }
 }

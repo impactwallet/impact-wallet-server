@@ -37,8 +37,9 @@ export class OrgsService {
     await this.usersService.getUserFromToken(req);
     if (logo) {
       const resized = await resizeBuffer(logo.buffer);
-      const uploadedFile = await this.s3Service.putFile(`${uuid()}.jpg`, resized);
-      orgsDto.logo = uploadedFile.url;
+      const fileName = `${uuid()}.jpg`;
+      await this.s3Service.putFile(fileName, resized);
+      orgsDto.logo = `/orgs/logo/${fileName}`;
     }
 
     const session = await this.connection.startSession();
@@ -202,6 +203,10 @@ export class OrgsService {
       await firstValueFrom(of(true).pipe(delay(2000)));
       return this.ensureMintNotInProgress(orgId, --retries, session);
     }
+  }
+
+  async getLogo(fileName: string) {
+    return this.s3Service.getFile(fileName);
   }
 
 }
