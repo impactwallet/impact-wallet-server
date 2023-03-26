@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ApiServiceModule } from 'src/api-service/api.module';
+import { S3Module } from 'src/s3/s3.module';
+import { S3Service } from 'src/s3/s3.service';
 import { ContributionsModule } from '../contributions/contributions.module';
 import { MembersModule } from '../members/members.module';
 import { User, UserSchema } from './schema/user.schema';
@@ -17,6 +19,7 @@ import { UsersService } from './users.service';
     ApiServiceModule,
     MembersModule,
     ContributionsModule,
+    S3Module
   ],
   providers: [UsersService],
   controllers: [UsersController],

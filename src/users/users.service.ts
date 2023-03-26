@@ -14,6 +14,7 @@ import { SearchUserByNicknameDto } from './dto/search-user-by-nickname.dto';
 import { Request } from 'express';
 import { MembersService } from '../members/members.service';
 import { resizeBuffer } from '../utils/images';
+import { S3Service } from 'src/s3/s3.service';
 
 @Injectable()
 export class UsersService {
@@ -24,6 +25,7 @@ export class UsersService {
     private jwtService: JwtService,
     private apiService: ApiService,
     private membersService: MembersService,
+    private s3Service: S3Service
   ) { }
 
   async getUsersByNicknamePrivate(name: string): Promise<User[]> {
@@ -35,7 +37,7 @@ export class UsersService {
 
   async userExist(searchUserByNicknameDto: SearchUserByNicknameDto) {
     const regex = new RegExp(`^${searchUserByNicknameDto.nickname}$`, 'i');
-    const user = await this.userRepository.findOne({ nickname: regex });        
+    const user = await this.userRepository.findOne({ nickname: regex });
     if (!user) throw new NotFoundException(`User with nickname '${searchUserByNicknameDto.nickname}' not found`);
     return searchUserByNicknameDto.nickname;
   }
@@ -55,8 +57,8 @@ export class UsersService {
   async createUser(userDto: CreateUserDto, avatar: any, mock = false): Promise<CreateUserResponseDto> {
     if (avatar) {
       const resized = await resizeBuffer(avatar.buffer);
-      const imageB64 = resized.toString('base64');
-      userDto.avatar = imageB64;
+      const uploadedFile = await this.s3Service.putFile(`${uuid()}.jpg`, resized);
+      userDto.avatar = uploadedFile.url;
     }
     const session = await this.connection.startSession();
     const secretLink = uuid();

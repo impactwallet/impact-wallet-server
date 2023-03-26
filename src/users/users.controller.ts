@@ -14,6 +14,7 @@ import { Member } from '../members/schema/member.schema';
 import { Contribution } from '../contributions/schema/contribution.schema';
 import { ContributionsService } from '../contributions/contributions.service';
 import { ContributionsFilterDto } from '../contributions/dto/contributions-filter.dto';
+import { PromiseResult } from 'aws-sdk/lib/request';
 
 @ApiTags('Users')
 @Controller('users')
@@ -39,7 +40,6 @@ export class UsersController {
   ): Promise<CreateUserResponseDto> {
     return this.userService.createUser(createUserDto, avatar, mock === 'true');
   }
-
 
   @ApiOperation({ summary: 'Get users by query' })
   @ApiResponse({ status: 200, type: [User] })

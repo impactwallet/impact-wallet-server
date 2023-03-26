@@ -18,6 +18,7 @@ import { delay, firstValueFrom, of } from 'rxjs';
 import { MintInfoDto } from './dto/mint-info.dto';
 import { MintStatus } from './enum/mint-status';
 import { resizeBuffer } from '../utils/images';
+import { S3Service } from 'src/s3/s3.service';
 
 const MINT_STATUS_RETRIES = 5;
 
@@ -28,15 +29,16 @@ export class OrgsService {
     @InjectConnection() private readonly connection: mongoose.Connection,
     private memberService: MembersService,
     private usersService: UsersService,
-    private apiService: ApiService
+    private apiService: ApiService,
+    private s3Service: S3Service
   ) { }
 
   async createOrg(orgsDto: CreateOrgDto, logo: any, mock: boolean, req: Request) {
     await this.usersService.getUserFromToken(req);
     if (logo) {
       const resized = await resizeBuffer(logo.buffer);
-      const imageB64 = resized.toString('base64');
-      orgsDto.logo = imageB64;
+      const uploadedFile = await this.s3Service.putFile(`${uuid()}.jpg`, resized);
+      orgsDto.logo = uploadedFile.url;
     }
 
     const session = await this.connection.startSession();
@@ -117,7 +119,7 @@ export class OrgsService {
     session?: ClientSession,
   ): Promise<Member> {
     addMemberToOrg.org = orgId.toString();
-    
+
     try {
       const member = await this.memberService.createMember(addMemberToOrg, session);
       return member;

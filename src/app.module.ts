@@ -8,10 +8,12 @@ import { MembersModule } from './members/members.module';
 import { OffersModule } from './offers/offers.module';
 import { AuthModule } from './auth/auth.module';
 import { ContributionsModule } from './contributions/contributions.module';
+import { ConfigModule } from '@nestjs/config';
 
 
 @Module({
   imports: [
+    ConfigModule.forRoot(),
     AuthModule,
     UsersModule,
     OrgsModule,
@@ -24,7 +26,7 @@ import { ContributionsModule } from './contributions/contributions.module';
     }),
     MembersModule,
     OffersModule,
-    ContributionsModule,
+    ContributionsModule
   ],
 })
 
