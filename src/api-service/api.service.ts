@@ -4,6 +4,7 @@ import * as FormData from 'form-data';
 import { delay, firstValueFrom, of } from 'rxjs';
 import { AxiosRequestConfig } from 'axios';
 import { Keypair, Transaction, Connection, clusterApiUrl, Cluster, PublicKey, TransactionSignature, LAMPORTS_PER_SOL, SystemProgram, sendAndConfirmTransaction } from '@solana/web3.js';
+import { getAssociatedTokenAddress, ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID, createTransferInstruction } from '@solana/spl-token';
 import { decode } from 'bs58';
 import { get } from 'lodash';
 import { Org } from '../orgs/schema/org.schema';
@@ -66,6 +67,53 @@ export class ApiService {
       await sendAndConfirmTransaction(this.connection, transaction, [Keypair.fromSecretKey(decode(fromPk))]);
     } catch (err) {
       err.message = `Error getting wallet PK: ${err.message}`;
+      throw err;
+    }
+  }
+
+  async transferUSDC(sender: string, recipient: string, amount: number) {
+    if (this.network !== 'mainnet-beta') {
+      return;
+    }
+    console.log('amount:', amount);
+    console.log('recipient:', recipient);
+    console.log('sender:', sender);
+    try {
+      const senderPublicKey = new PublicKey(sender);
+      const recipientPublicKey = new PublicKey(recipient);
+      const USDCMintPublicKey = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
+  
+      const senderAssociatedTokenAddress = await getAssociatedTokenAddress(
+        USDCMintPublicKey,
+        senderPublicKey,
+        false,
+        TOKEN_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID,
+      );
+  
+      const recipientAssociatedTokenAddress = await getAssociatedTokenAddress(
+        USDCMintPublicKey,
+        recipientPublicKey,
+        true,
+      );
+
+      const txn = new Transaction();
+      txn.add(
+        createTransferInstruction(
+          senderAssociatedTokenAddress,
+          recipientAssociatedTokenAddress,
+          senderPublicKey,
+          amount * 1000000,
+        )
+      );
+      const blockhash = (await this.connection.getLatestBlockhash('finalized'));
+      txn.recentBlockhash = blockhash.blockhash;
+
+      const serializedTxn = txn.serialize().toString('base64');
+      await this.sendTxn(serializedTxn);
+    } catch (err) {
+      err.message = `Error transfering USDC: ${err.message}`;
+      console.log(err.message);
       throw err;
     }
   }
