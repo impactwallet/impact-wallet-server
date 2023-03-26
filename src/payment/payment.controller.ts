@@ -10,6 +10,6 @@ export class PaymentController {
   @ApiResponse({ status: 200 })
   @Post('candypay-webhook')
   createOrg(@Body() body: any, @Headers() headers: any) {
-    return this.paymentService.updatePayment(headers, body);
+    return this.paymentService.handlePayment(headers, body);
   }
 }

@@ -1,6 +1,7 @@
 import { CheckoutItemEntity, verifyWebhookSignature } from '@candypay/checkout-sdk';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { isNil } from 'lodash';
 import mongoose, { Model } from 'mongoose';
 import { ApiService } from '../api-service/api.service';
 import { CandyPayService } from '../api-service/candypay.service';
@@ -45,7 +46,7 @@ export class PaymentService {
     return newPayment;
   }
 
-  async updatePayment(headers: any, body: any) {
+  async handlePayment(headers: any, body: any) {
     try {
       await verifyWebhookSignature({
         payload: JSON.stringify(body),
@@ -58,12 +59,14 @@ export class PaymentService {
     const payment = await this.paymentModel.findOneAndUpdate(
       { cpOrderId: body.order_id },
       { $set: { cpResult: body } },
-      { new: true },
     ).populate('org');
+    console.log('paymentResult:', payment.cpResult);
 
     const org = payment.org as OrgDocument;
 
-    await this.apiService.transferUSDC(process.env.FEE_PAYER, org.wallet, body.payment_amount);
+    if (isNil(payment.cpResult) && body.event === 'transaction.successful') {
+      await this.apiService.transferUSDC(process.env.FEE_PAYER, org.wallet, body.payment_amount * 0.99);
+    }
   }
 
 }
