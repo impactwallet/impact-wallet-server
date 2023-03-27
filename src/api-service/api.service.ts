@@ -203,7 +203,7 @@ export class ApiService {
     }, 'finalized');
   }
 
-  async createWallet(password: string) {
+  async createWallet(password: string, entityName: string) {
     const headers = this.commonHeaders;
     headers.set('Content-Type', 'application/json');
 
@@ -217,7 +217,7 @@ export class ApiService {
       const response = await firstValueFrom(this.http.post(`${this.baseUrl}/semi_wallet/create`, body, config));
       const walletAddress = get(response, 'data.result.wallet_address');
       await this.airdrop(walletAddress, password);
-      this.sendNotification(`New wallet created: ${walletAddress}`);
+      this.sendNotification(`New ${entityName} wallet created: ${walletAddress}`);
       return walletAddress;
     } catch (err) {
       err.message = `Error creating wallet: ${err.message}`;
@@ -248,7 +248,7 @@ export class ApiService {
     }
   }
 
-  async createFungibleTokensForOrganization(org: Org, retries = RETRIES): Promise<string> {
+  async createFungibleTokensForOrganization(org: Org, logo: Buffer, retries = RETRIES): Promise<string> {
     const body = new FormData();
     body.append('network', this.network);
     body.append('wallet', org.wallet);
@@ -257,7 +257,7 @@ export class ApiService {
     if (this.isMainnet) {
       body.append('fee_payer', process.env.FEE_PAYER);
     }
-    body.append('file', Buffer.from(org.logo, 'base64'), 'logo');
+    body.append('file', logo, 'logo');
 
     const config: AxiosRequestConfig = {
       headers: Object.fromEntries(this.commonHeaders.entries()),
@@ -280,7 +280,7 @@ export class ApiService {
       if (retries > 0) {
         await firstValueFrom(of(true).pipe(delay(2000)));
         console.log('Retrying create token');
-        return this.createFungibleTokensForOrganization(org, --retries);
+        return this.createFungibleTokensForOrganization(org, logo, --retries);
       }
       err.message = `Error creating token: ${err.message}`;
       throw err;
