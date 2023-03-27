@@ -99,7 +99,9 @@ export class OrgsService {
   }
 
   async getByOrgId(id: string, projection?: string, session?: ClientSession) {
-    const org = await this.orgRepository.findById(id, projection).session(session);
+    const org = await this.orgRepository
+      .findById(new mongoose.Types.ObjectId(id), projection)
+      .session(session);
     if (!org) throw new NotFoundException('Organization not found');
     return org;
   }
@@ -207,6 +209,11 @@ export class OrgsService {
 
   async getLogo(fileName: string) {
     return this.s3Service.getFile(fileName);
+  }
+
+  async getOrgBalance(orgId: string) {
+    const org = await this.getByOrgId(orgId);
+    return this.apiService.getUSDCBalance(org.wallet);
   }
 
 }

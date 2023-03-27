@@ -252,4 +252,18 @@ export class OrgsController {
 
     return this.paymentService.receivePayment(org, body);
   }
+
+  @ApiOperation({ summary: 'Get orgs USDC balance' })
+  @ApiResponse({ status: 200, type: Number })
+  @Get(':orgId/balance')
+  async getOrgBalance(
+  @Param('orgId') orgId: string,
+    @Req() req: Request,
+  ) {
+    await this.usersService.getUserFromToken(req);
+
+    return {
+      balance: await this.orgsService.getOrgBalance(orgId),
+    };
+  }
 }

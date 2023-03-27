@@ -105,7 +105,7 @@ export class UsersService {
 
 
   async getByUserId(id: string) {
-    const user = await this.userRepository.findById(id);
+    const user = await this.userRepository.findById(new mongoose.Types.ObjectId(id));
     if (isNil(user)) {
       throw new NotFoundException('User not found');
     }
@@ -138,6 +138,11 @@ export class UsersService {
 
   async getAvatar(fileName: string) {
     return this.s3Service.getFile(fileName);
+  }
+
+  async getUserBalance(userId: string) {
+    const user = await this.getByUserId(userId);
+    return this.apiService.getUSDCBalance(user.wallet);
   }
 
   private async getUsersByQueryWithExactMatch(query: UsersFilter): Promise<User[]> {

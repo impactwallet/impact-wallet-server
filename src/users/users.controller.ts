@@ -99,4 +99,18 @@ export class UsersController {
     res.write(data.file, 'binary');
     res.end(null, 'binary');
   }
+
+  @ApiOperation({ summary: 'Get users USDC balance' })
+  @ApiResponse({ status: 200, type: Number })
+  @Get(':userId/balance')
+  async getUserBalance(
+  @Param('userId') userId: string,
+    @Req() req: Request,
+  ) {
+    await this.userService.getUserFromToken(req);
+
+    return {
+      balance: await this.userService.getUserBalance(userId),
+    };
+  }
 }
