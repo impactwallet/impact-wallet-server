@@ -6,7 +6,7 @@ import { AxiosRequestConfig } from 'axios';
 import { Keypair, Transaction, Connection, clusterApiUrl, Cluster, PublicKey, TransactionSignature, LAMPORTS_PER_SOL, SystemProgram, sendAndConfirmTransaction } from '@solana/web3.js';
 import { getAssociatedTokenAddress, createTransferInstruction, createAssociatedTokenAccountInstruction } from '@solana/spl-token';
 import { decode } from 'bs58';
-import { get } from 'lodash';
+import { get, isEmpty } from 'lodash';
 import { Org } from '../orgs/schema/org.schema';
 
 const REQUEST_TIMEOUT = 1000 * 60 * 60;
@@ -23,6 +23,7 @@ export class ApiService {
   baseUrl = 'https://api.shyft.to/sol/v1';
   network: Cluster = process.env.NETWORK as Cluster;
   connection = new Connection(clusterApiUrl(this.network), 'confirmed');
+  usdcMint = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 
   constructor(private http: HttpService) { }
 
@@ -71,48 +72,52 @@ export class ApiService {
     }
   }
 
-  async transferUSDC(sender: string, recipient: string, amount: number) {
-    if (this.network !== 'mainnet-beta') {
+  async transferUSDC(sender: string, recepients: { wallet: string, amount: number }[]) {
+    if (this.network !== 'mainnet-beta' || isEmpty(recepients)) {
       return;
     }
-    console.log('amount:', amount);
-    console.log('recipient:', recipient);
-    console.log('sender:', sender);
     try {
+      const USDCMintPublicKey = new PublicKey(this.usdcMint);
       const senderPublicKey = new PublicKey(sender);
-      const recipientPublicKey = new PublicKey(recipient);
-      const USDCMintPublicKey = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
-  
       const senderAssociatedTokenAddress = await getAssociatedTokenAddress(
         USDCMintPublicKey,
         senderPublicKey,
-        false,
       );
-  
-      const recipientAssociatedTokenAddress = await getAssociatedTokenAddress(
-        USDCMintPublicKey,
-        recipientPublicKey,
-        true,
-      );
-
       const txn = new Transaction();
-      txn.add(
-        createTransferInstruction(
-          senderAssociatedTokenAddress,
-          recipientAssociatedTokenAddress,
-          senderPublicKey,
-          amount * 1000000,
-        )
-      );
+
+      const promises = recepients.map(async ({ wallet, amount }) => {
+        console.log('amount:', amount);
+        console.log('wallet:', wallet);
+        const recipientPublicKey = new PublicKey(wallet);
+  
+        const recipientAssociatedTokenAddress = await getAssociatedTokenAddress(
+          USDCMintPublicKey,
+          recipientPublicKey,
+        );
+
+        txn.add(
+          createTransferInstruction(
+            senderAssociatedTokenAddress,
+            recipientAssociatedTokenAddress,
+            senderPublicKey,
+            Math.floor(amount * 1000000),
+          )
+        );
+      });
+
+      await Promise.all(promises);
+      
       const blockhash = (await this.connection.getLatestBlockhash('finalized'));
       txn.recentBlockhash = blockhash.blockhash;
       txn.feePayer = senderPublicKey;
 
       const serializedTxn = txn.serialize({ requireAllSignatures: false, verifySignatures: false }).toString('base64');
-      await this.sendTxn(serializedTxn);
+      const signature = await this.sendTxn(serializedTxn);
+      this.sendNotification(`USDC transfered: ${signature}`);
+      return signature;
     } catch (err) {
       err.message = `Error transfering USDC: ${err.message}`;
-      console.log(JSON.stringify(err.response.data));
+      console.log(JSON.stringify(get(err, 'response.data', err)));
       throw err;
     }
   }
@@ -198,7 +203,7 @@ export class ApiService {
     }, 'finalized');
   }
 
-  async createWallet(password: string, isAirdropNeeded = false) {
+  async createWallet(password: string) {
     const headers = this.commonHeaders;
     headers.set('Content-Type', 'application/json');
 
@@ -211,10 +216,8 @@ export class ApiService {
     try {
       const response = await firstValueFrom(this.http.post(`${this.baseUrl}/semi_wallet/create`, body, config));
       const walletAddress = get(response, 'data.result.wallet_address');
-      if (isAirdropNeeded) {
-        await this.airdrop(walletAddress, password);
-      }
-      await this.sendNotification(`New wallet created: ${walletAddress}`);
+      await this.airdrop(walletAddress, password);
+      this.sendNotification(`New wallet created: ${walletAddress}`);
       return walletAddress;
     } catch (err) {
       err.message = `Error creating wallet: ${err.message}`;
@@ -238,7 +241,7 @@ export class ApiService {
     try {
       const endpoint = this.isMainnet && isRelay ? '/txn_relayer/sign' : '/transaction/send_txn';
       const response = await firstValueFrom(this.http.post(`${this.baseUrl}${endpoint}`, body, config));
-      return get(response, 'data.result.signature');
+      return get(response, 'data.result.signature', get(response, 'data.result.tx'));
     } catch (err) {
       err.message = `Error sending transaction: ${err.message}`;
       throw err;
@@ -271,7 +274,7 @@ export class ApiService {
       const pk = await this.getPK(org.wallet, org.password);
       const serializedTxn = this.createSignedSerializedTxn(txn, pk, true, false);
       await this.sendTxn(serializedTxn);
-      await this.sendNotification(`New token created: ${mint}`);
+      this.sendNotification(`New token created: ${mint}`);
       return mint;
     } catch (err) {
       if (retries > 0) {
@@ -311,7 +314,7 @@ export class ApiService {
       const pk = await this.getPK(org.wallet, org.password);
       const serializedTxn = this.createSignedSerializedTxn(txn, pk, true, false);
       const txnHash = await this.sendTxn(serializedTxn);
-      await this.sendNotification(`Tokens minted ant sent to a member: ${txnHash}`);
+      this.sendNotification(`Tokens minted ant sent to a member: ${txnHash}`);
       return txnHash;
     } catch (err) {
       if (retries > 0) {
@@ -320,6 +323,28 @@ export class ApiService {
         return this.mintToken(org, receiver, amount, --retries);
       }
       err.message = `Error minting token: ${err.message}`;
+      throw err;
+    }
+  }
+
+  async getUSDCBalance(wallet: string) {
+    const config: AxiosRequestConfig = {
+      headers: Object.fromEntries(this.commonHeaders),
+      timeout: REQUEST_TIMEOUT,
+      params: {
+        network: this.network,
+        wallet,
+        token: this.usdcMint,
+      },
+    };
+
+    try {
+      const response = await firstValueFrom(
+        this.http.get(`${this.baseUrl}/wallet/token_balance`, config),
+      );
+      return get(response, 'data.result.balance');
+    } catch (err) {
+      err.message = `Error getting USDC balance: ${err.message}`;
       throw err;
     }
   }

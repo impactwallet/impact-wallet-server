@@ -57,7 +57,7 @@ export class OrgsService {
       try {
         if (!mock) {
           newOrg.password = uuid();
-          newOrg.wallet = await this.apiService.createWallet(newOrg.password, true);
+          newOrg.wallet = await this.apiService.createWallet(newOrg.password);
         }
 
         await newOrg.save({ session });

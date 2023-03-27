@@ -5,7 +5,9 @@ import { isNil } from 'lodash';
 import mongoose, { Model } from 'mongoose';
 import { ApiService } from '../api-service/api.service';
 import { CandyPayService } from '../api-service/candypay.service';
+import { Member, MemberDocument } from '../members/schema/member.schema';
 import { OrgDocument } from '../orgs/schema/org.schema';
+import { UserDocument } from '../users/schema/user.schema';
 import { ReceivePaymentDto } from './dto/receive-payment.dto';
 import { Payment, PaymentDocument } from './schema/payment.schema';
 
@@ -14,6 +16,7 @@ export class PaymentService {
 
   constructor(
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
+    @InjectModel(Member.name) private memberModel: Model<MemberDocument>,
     @InjectConnection() private readonly connection: mongoose.Connection,
     private candypayService: CandyPayService,
     private apiService: ApiService,
@@ -64,9 +67,30 @@ export class PaymentService {
 
     const org = payment.org as OrgDocument;
 
-    if (isNil(payment.cpResult) && body.event === 'transaction.successful') {
-      await this.apiService.transferUSDC(process.env.FEE_PAYER, org.wallet, body.payment_amount * 0.99);
+    if (!isNil(payment.cpResult) || body.event !== 'transaction.successful' || !org.lamportsMinted) {
+      return;
     }
+
+    const paymentAmount = body.payment_amount;
+    const treasury = paymentAmount * (org.settings.treasury / 100);
+    const amountToSplit = paymentAmount - treasury;
+    const members = await this.memberModel.find({
+      org: org._id,
+      contributed: { $gt: 0 },
+    }).populate('user');
+    const membersWithAmount = members.map(member => {
+      return {
+        wallet: (member.user as UserDocument).wallet,
+        amount: amountToSplit * (member.lamportsEarned / org.lamportsMinted),
+      };
+    });
+    membersWithAmount.push({
+      wallet: org.wallet,
+      amount: treasury,
+    });
+
+    const signature = await this.apiService.transferUSDC(process.env.FEE_PAYER, membersWithAmount);
+    console.log('signature:', signature);
   }
 
 }
