@@ -100,7 +100,7 @@ export class ApiService {
             senderAssociatedTokenAddress,
             recipientAssociatedTokenAddress,
             senderPublicKey,
-            Math.floor(amount * 1000000),
+            Math.round(amount * 1000000),
           )
         );
       });
