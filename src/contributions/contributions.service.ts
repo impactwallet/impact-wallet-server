@@ -148,7 +148,7 @@ export class ContributionsService {
     contribution.lamportsEarned = lamportsEarned;
 
     const txnHash = await this.apiService.mintToken(org, memberUser.wallet, lamportsEarned / LAMPORTS_PER_SOL);
-    this.apiService.sendNotification(`Tokens ${org.username.toUpperCase()} minted ant sent to a member: ${txnHash}`);
+    this.apiService.sendNotification(`Tokens ${org.username.toUpperCase()} minted ant sent to a member ${memberUser.nickname}: ${txnHash}`);
     contribution.txnHash = txnHash;
 
     await this.membersService.updateContributed(member._id, duration, lamportsEarned, session);

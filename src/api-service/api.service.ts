@@ -116,7 +116,6 @@ export class ApiService {
       return signature;
     } catch (err) {
       err.message = `Error transfering USDC: ${err.message}`;
-      console.log(JSON.stringify(get(err, 'response.data', err)));
       throw err;
     }
   }
@@ -138,6 +137,7 @@ export class ApiService {
       return get(response, 'data.result.secretKey');
     } catch (err) {
       err.message = `Error getting wallet PK: ${err.message}`;
+      console.log(JSON.stringify(get(err, 'response.data', err)));
       throw err;
     }
   }
@@ -219,6 +219,7 @@ export class ApiService {
       return walletAddress;
     } catch (err) {
       err.message = `Error creating wallet: ${err.message}`;
+      console.log(JSON.stringify(get(err, 'response.data', err)));
       throw err;
     }
   }
@@ -242,6 +243,7 @@ export class ApiService {
       return get(response, 'data.result.signature', get(response, 'data.result.tx'));
     } catch (err) {
       err.message = `Error sending transaction: ${err.message}`;
+      console.log(JSON.stringify(get(err, 'response.data', err)));
       throw err;
     }
   }
@@ -341,6 +343,7 @@ export class ApiService {
       return get(response, 'data.result.balance');
     } catch (err) {
       err.message = `Error getting USDC balance: ${err.message}`;
+      console.log(JSON.stringify(get(err, 'response.data', err)));
       throw err;
     }
   }
