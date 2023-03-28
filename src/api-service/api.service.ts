@@ -113,7 +113,6 @@ export class ApiService {
 
       const serializedTxn = txn.serialize({ requireAllSignatures: false, verifySignatures: false }).toString('base64');
       const signature = await this.sendTxn(serializedTxn);
-      this.sendNotification(`USDC transfered: ${signature}`);
       return signature;
     } catch (err) {
       err.message = `Error transfering USDC: ${err.message}`;
@@ -203,7 +202,7 @@ export class ApiService {
     }, 'finalized');
   }
 
-  async createWallet(password: string, entityName: string) {
+  async createWallet(password: string) {
     const headers = this.commonHeaders;
     headers.set('Content-Type', 'application/json');
 
@@ -217,7 +216,6 @@ export class ApiService {
       const response = await firstValueFrom(this.http.post(`${this.baseUrl}/semi_wallet/create`, body, config));
       const walletAddress = get(response, 'data.result.wallet_address');
       await this.airdrop(walletAddress, password);
-      this.sendNotification(`New ${entityName} wallet created: ${walletAddress}`);
       return walletAddress;
     } catch (err) {
       err.message = `Error creating wallet: ${err.message}`;
@@ -274,7 +272,6 @@ export class ApiService {
       const pk = await this.getPK(org.wallet, org.password);
       const serializedTxn = this.createSignedSerializedTxn(txn, pk, true, false);
       await this.sendTxn(serializedTxn);
-      this.sendNotification(`New token created: ${mint}`);
       return mint;
     } catch (err) {
       if (retries > 0) {
@@ -314,7 +311,6 @@ export class ApiService {
       const pk = await this.getPK(org.wallet, org.password);
       const serializedTxn = this.createSignedSerializedTxn(txn, pk, true, false);
       const txnHash = await this.sendTxn(serializedTxn);
-      this.sendNotification(`Tokens minted ant sent to a member: ${txnHash}`);
       return txnHash;
     } catch (err) {
       if (retries > 0) {

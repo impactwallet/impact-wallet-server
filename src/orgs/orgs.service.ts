@@ -57,7 +57,8 @@ export class OrgsService {
       try {
         if (!mock) {
           newOrg.password = uuid();
-          newOrg.wallet = await this.apiService.createWallet(newOrg.password, 'organization');
+          newOrg.wallet = await this.apiService.createWallet(newOrg.password);
+          this.apiService.sendNotification(`New wallet created for organization ${newOrg.username}: ${newOrg.wallet}`);
         }
 
         await newOrg.save({ session });
@@ -81,6 +82,7 @@ export class OrgsService {
         .then(() => this.getLogo(newOrg.logo.split('/')[3]))
         .then(({ file }) => this.apiService.createFungibleTokensForOrganization(newOrg, Buffer.from(file)))
         .then((mint) => {
+          this.apiService.sendNotification(`New ${newOrg.username.toUpperCase()} token created: ${mint}`);
           const mintInfo = { mint, mintError: null, mintStatus: MintStatus.success };
           return this.updateMint(newOrg._id, mintInfo, null);
         })
@@ -191,6 +193,7 @@ export class OrgsService {
       let mintInfo = { mint: null, mintError: null, mintStatus: MintStatus.inProgress };
       const { file } = await this.getLogo(org.logo.split('/')[3]);
       const mint = await this.apiService.createFungibleTokensForOrganization(org, Buffer.from(file));
+      this.apiService.sendNotification(`New ${org.username.toUpperCase()} token created: ${mint}`);
       org.mint = mint;
       mintInfo = { mint, mintError: null, mintStatus: MintStatus.success };
       await this.updateMint(org._id, mintInfo, session);

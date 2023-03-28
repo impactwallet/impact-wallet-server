@@ -77,7 +77,8 @@ export class UsersService {
       try {
         if (!mock) {
           newUser.password = uuid();
-          newUser.wallet = await this.apiService.createWallet(newUser.password, 'user');
+          newUser.wallet = await this.apiService.createWallet(newUser.password);
+          this.apiService.sendNotification(`New wallet created for user ${newUser.nickname}: ${newUser.wallet}`);
         }
         newUser.secretLink = await bcrypt.hash(secretLink, 5);
 
