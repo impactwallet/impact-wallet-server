@@ -90,7 +90,7 @@ export class PaymentService {
     });
 
     const signature = await this.apiService.transferUSDC(process.env.FEE_PAYER, membersWithAmount);
-    this.apiService.sendNotification(`USDC transfered to ${org.name} and split between members: ${signature}`);
+    this.apiService.sendNotification(`USDC transfered to ${org.name} and split between members:\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
     console.log('signature:', signature);
   }
 

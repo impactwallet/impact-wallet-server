@@ -24,6 +24,7 @@ export class ApiService {
   network: Cluster = process.env.NETWORK as Cluster;
   connection = new Connection(clusterApiUrl(this.network), 'confirmed');
   usdcMint = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+  explorerUrl = 'https://explorer.solana.com';
 
   constructor(private http: HttpService) { }
 
@@ -358,5 +359,9 @@ export class ApiService {
     transaction.partialSign(fromSigner);
     const serializedTxn = transaction.serialize({ requireAllSignatures, verifySignatures }).toString('base64');
     return serializedTxn;
+  }
+
+  buildExplorerLink(endpoint: string) {
+    return `${this.explorerUrl}${endpoint}`;
   }
 }
