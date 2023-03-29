@@ -73,16 +73,16 @@ export class ApiService {
     }
   }
 
-  async transferUSDC(sender: string, recepients: { wallet: string, amount: number }[]) {
+  async transferUSDC(senderPk: string, recepients: { wallet: string, amount: number }[]) {
     if (this.network !== 'mainnet-beta' || isEmpty(recepients)) {
       return;
     }
     try {
       const USDCMintPublicKey = new PublicKey(this.usdcMint);
-      const senderPublicKey = new PublicKey(sender);
+      const senderKeypair = Keypair.fromSecretKey(decode(senderPk));
       const senderAssociatedTokenAddress = await getAssociatedTokenAddress(
         USDCMintPublicKey,
-        senderPublicKey,
+        senderKeypair.publicKey,
       );
       const txn = new Transaction();
 
@@ -100,7 +100,7 @@ export class ApiService {
           createTransferInstruction(
             senderAssociatedTokenAddress,
             recipientAssociatedTokenAddress,
-            senderPublicKey,
+            senderKeypair.publicKey,
             Math.round(amount * 1000000),
           )
         );
@@ -110,9 +110,9 @@ export class ApiService {
       
       const blockhash = (await this.connection.getLatestBlockhash('finalized'));
       txn.recentBlockhash = blockhash.blockhash;
-      txn.feePayer = senderPublicKey;
+      txn.feePayer = new PublicKey(process.env.FEE_PAYER);
 
-      const serializedTxn = txn.serialize({ requireAllSignatures: false, verifySignatures: false }).toString('base64');
+      const serializedTxn = this.createSignedSerializedTxn(txn, senderPk, false, false);
       const signature = await this.sendTxn(serializedTxn);
       return signature;
     } catch (err) {
