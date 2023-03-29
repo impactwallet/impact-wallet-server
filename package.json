@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.299.0",
-    "@candypay/checkout-sdk": "^0.1.52-alpha.0",
+    "@candypay/checkout-sdk": "^0.1.53",
     "@nestjs/axios": "^2.0.0",
     "@nestjs/common": "^9.0.0",
     "@nestjs/config": "^2.3.1",

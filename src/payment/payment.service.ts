@@ -37,7 +37,7 @@ export class PaymentService {
           quantity: 1,
         },
       ];
-      const sessionData = await this.candypayService.createSession({ items });
+      const sessionData = await this.candypayService.createSession({ org: org, items });
       newPayment.cpSessionId = sessionData.session_id;
       newPayment.cpOrderId = sessionData.order_id;
       newPayment.cpPaymentUrl = sessionData.payment_url;
@@ -62,7 +62,7 @@ export class PaymentService {
     const payment = await this.paymentModel.findOneAndUpdate(
       { cpOrderId: body.order_id },
       { $set: { cpResult: body } },
-    ).populate('org');
+    ).populate({ path: 'org', select: '+password' });
     console.log('paymentResult:', payment.cpResult);
 
     const org = payment.org as OrgDocument;
@@ -84,12 +84,9 @@ export class PaymentService {
         amount: amountToSplit * (member.lamportsEarned / org.lamportsMinted),
       };
     });
-    membersWithAmount.push({
-      wallet: org.wallet,
-      amount: treasury,
-    });
 
-    const signature = await this.apiService.transferUSDC(process.env.FEE_PAYER, membersWithAmount);
+    const orgPk = await this.apiService.getPK(org.wallet, org.password);
+    const signature = await this.apiService.transferUSDC(orgPk, membersWithAmount);
     this.apiService.sendNotification(`USDC transfered to ${org.name} and split between members:\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
     console.log('signature:', signature);
   }
