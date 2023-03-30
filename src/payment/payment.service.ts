@@ -6,6 +6,7 @@ import mongoose, { ClientSession, Model } from 'mongoose';
 import { ApiService } from '../api-service/api.service';
 import { CandyPayService } from '../api-service/candypay.service';
 import { Member, MemberDocument } from '../members/schema/member.schema';
+import { MemberProspect } from '../offers/schema/offer.schema';
 import { OrgDocument } from '../orgs/schema/org.schema';
 import { UserDocument } from '../users/schema/user.schema';
 import { ReceiveInvestmentDto } from './dto/receive-investment.dto';
@@ -51,12 +52,12 @@ export class PaymentService {
     return newPayment;
   }
 
-  async receiveInvestment(org: OrgDocument, memberId: string, body: ReceiveInvestmentDto, session?: ClientSession) {
+  async receiveInvestment(org: OrgDocument, member: MemberProspect, body: ReceiveInvestmentDto, session?: ClientSession) {
     const newPayment = new this.paymentModel({
       type: PaymentType.Investment,
       org: org._id,
       amount: body.amount,
-      investor: memberId,
+      investor: member,
     });
 
     const items: CheckoutItemEntity[] = [
@@ -107,10 +108,8 @@ export class PaymentService {
   }
 
   async _handleInvestmentPayment(org: OrgDocument, payment: PaymentDocument) {
-    await this.memberModel.findOneAndUpdate(
-      { _id: payment.investor },
-      { $set: { 'investorSettings.isInvestmentSuccessful': true } },
-    );
+    const newMember = new this.memberModel(payment.investor.toObject());
+    await newMember.save();
     this.apiService.sendNotification(`Investment to ${org.name} was successful`);
   }
 

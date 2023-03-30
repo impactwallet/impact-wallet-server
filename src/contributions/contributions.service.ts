@@ -176,7 +176,6 @@ export class ContributionsService {
     const investors = await this.membersService.getMembers({
       org: org._id,
       role: Role.Investor,
-      'investorSettings.isInvestmentSuccessful': true,
     }, 'user');
     const investorsUpdatePromises = investors.map(investor => {
       const investorShare = Math.round(lamportsEarned * (investor.investorSettings.equityAllocation / 100));
