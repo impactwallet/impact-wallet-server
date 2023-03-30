@@ -108,7 +108,7 @@ export class PaymentService {
   }
 
   async _handleInvestmentPayment(org: OrgDocument, payment: PaymentDocument) {
-    const newMember = new this.memberModel(payment.investor);
+    const newMember = new this.memberModel(payment.investor.toObject());
     await newMember.save();
     this.apiService.sendNotification(`Investment to ${org.name} was successful`);
   }
