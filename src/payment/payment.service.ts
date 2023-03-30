@@ -95,7 +95,7 @@ export class PaymentService {
 
     const org = payment.org as OrgDocument;
 
-    if (!isNil(payment.cpResult) || body.event !== 'transaction.successful' || !org.lamportsMinted) {
+    if (!isNil(payment.cpResult) || body.event !== 'transaction.successful') {
       return;
     }
 
@@ -103,23 +103,31 @@ export class PaymentService {
       const signature = await this._handleRegularPayment(org, body);
       console.log('signature:', signature);
     } else if (payment.type === PaymentType.Investment) {
-      await this._handleInvestmentPayment(org, payment);
+      await this._handleInvestmentPayment(org, payment, body);
     }
   }
 
-  async _handleInvestmentPayment(org: OrgDocument, payment: PaymentDocument) {
-    const newMember = new this.memberModel(payment.investor.toObject());
-    await newMember.save();
-    this.apiService.sendNotification(`Investment to ${org.name} was successful`);
+  async _handleInvestmentPayment(org: OrgDocument, payment: PaymentDocument, body: any) {
+    console.log('investment');
+    
+    let newMember = new this.memberModel(payment.investor.toObject());
+    newMember = await (await newMember.save()).populate('user');
+    const memberUser = newMember.user as UserDocument;
+    console.log(`member created ${newMember._id}`);
+    
+    this.apiService.sendNotification(`${memberUser.nickname} just invested ${payment.amount} into ${org.name}:\n\n${body.signature}\n\n${this.apiService.buildExplorerLink('/tx/' + body.signature)}`);
   }
 
   async _handleRegularPayment(org: OrgDocument, body: any) {
+    if (!org.lamportsMinted) {
+      return;
+    }
     const paymentAmount = body.payment_amount;
     const treasury = paymentAmount * (org.settings.treasury / 100);
     const amountToSplit = paymentAmount - treasury;
     const members = await this.memberModel.find({
       org: org._id,
-      contributed: { $gt: 0 },
+      lamportsEarned: { $gt: 0 },
     }).populate('user');
     const membersWithAmount = members.map(member => {
       return {
