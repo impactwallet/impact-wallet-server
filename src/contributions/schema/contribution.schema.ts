@@ -5,6 +5,24 @@ import { MemberDocument } from '../../members/schema/member.schema';
 import { OrgDocument } from '../../orgs/schema/org.schema';
 
 export type ContributionDocument = HydratedDocument<Contribution>;
+export type ContributionSplitDocument = HydratedDocument<ContributionSplit>;
+
+@Schema({ _id: false })
+export class ContributionSplit {
+  @ApiProperty({ description: 'Earned tokens', type: Number })
+  @Prop({ type: Number, required: true })
+    amount: number;
+
+  @ApiProperty({ description: 'Member ID or object' })
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Member', required: true })
+    member: string | MemberDocument;
+
+  @ApiProperty({ description: 'Wallet of the member' })
+  @Prop({ type: String, required: true })
+    wallet: string;
+}
+
+export const ContributionSplitSchema = SchemaFactory.createForClass(ContributionSplit);
 
 @Schema({ timestamps: true })
 export class Contribution {
@@ -31,6 +49,10 @@ export class Contribution {
   @ApiProperty({ example: 0 })
   @Prop({ type: Number, default: 0 })
     lamportsEarned: number;
+
+  @ApiProperty({ description: 'Split between member and investors' })
+  @Prop({ type: [ContributionSplitSchema] })
+    split: ContributionSplit[];
 
   createdAt: Date;
 

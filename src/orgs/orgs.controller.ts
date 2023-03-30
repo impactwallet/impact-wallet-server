@@ -162,14 +162,14 @@ export class OrgsController {
     @Body(new ValidationPipe()) body: OfferStatusBodyDto,
     @Req() req: Request,
   ) {
-    await this.usersService.getUserFromToken(req);
+    const user = await this.usersService.getUserFromToken(req);
 
     const org = await this.orgsService.getByOrgId(orgId);
     if (isNil(org)) {
       throw new NotFoundException({ message: 'Organization not found' });
     }
 
-    return this.offersService.updateOfferStatus(orgId, offerId, body);
+    return this.offersService.updateOfferStatus(org, offerId, body, user);
   }
 
   @ApiOperation({ summary: 'Start contribution' })

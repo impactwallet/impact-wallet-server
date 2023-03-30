@@ -1,17 +1,36 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { ApiProperty } from '@nestjs/swagger';
+import { isNil } from 'lodash';
 import mongoose, { HydratedDocument } from 'mongoose';
-import { Org, OrgDocument } from '../../orgs/schema/org.schema';
-import { User, UserDocument } from '../../users/schema/user.schema';
+import { OrgDocument } from '../../orgs/schema/org.schema';
+import { UserDocument } from '../../users/schema/user.schema';
 import { Role } from '../enum/roles.enum';
 
 export type MemberDocument = HydratedDocument<Member>;
+export type InvestorSettingsDocument = HydratedDocument<InvestorSettings>;
+
+@Schema({ _id: false })
+export class InvestorSettings {
+  @ApiProperty({ description: 'Investment amount', type: Number })
+  @Prop({ type: Number, required: true })
+    investmentAmount: number;
+
+  @ApiProperty({ description: 'Equity allocation', type: Number })
+  @Prop({ type: Number, required: true })
+    equityAllocation: number;
+
+  @ApiProperty({ description: 'Specifies if investment was successful', type: Boolean })
+  @Prop({ type: Boolean, default: false })
+    isInvestmentSuccessful: boolean;
+}
+
+export const InvestorSettingsSchema = SchemaFactory.createForClass(InvestorSettings);
 
 @Schema({ timestamps: true })
 export class Member {
 
   @ApiProperty({ example: 'CEO' })
-  @Prop({ required: true })
+  @Prop({ required: function() { return this.role !== Role.Investor; } })
     occupation: string;
 
   @ApiProperty({ example: 'Member', enum: Object.keys(Role) })
@@ -52,6 +71,10 @@ export class Member {
   @ApiProperty({ example: 0 })
   @Prop({ type: Number, default: 0 })
     lamportsEarned: number;
+
+  @ApiProperty({ description: 'Investor settings' })
+  @Prop({ required: function() { return this.role === Role.Investor; }, type: InvestorSettingsSchema })
+    investorSettings: InvestorSettings;
 
 }
 

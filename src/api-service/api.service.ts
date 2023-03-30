@@ -4,7 +4,7 @@ import * as FormData from 'form-data';
 import { delay, firstValueFrom, of } from 'rxjs';
 import { AxiosRequestConfig } from 'axios';
 import { Keypair, Transaction, Connection, clusterApiUrl, Cluster, PublicKey, TransactionSignature, LAMPORTS_PER_SOL, SystemProgram, sendAndConfirmTransaction } from '@solana/web3.js';
-import { getAssociatedTokenAddress, createTransferInstruction, createAssociatedTokenAccountInstruction } from '@solana/spl-token';
+import { getAssociatedTokenAddress, createTransferInstruction, createAssociatedTokenAccountInstruction, createMintToInstruction, getOrCreateAssociatedTokenAccount, getAssociatedTokenAddressSync, getAccount, TokenAccountNotFoundError, TokenInvalidAccountOwnerError } from '@solana/spl-token';
 import { decode } from 'bs58';
 import { get, isEmpty } from 'lodash';
 import { Org } from '../orgs/schema/org.schema';
@@ -286,40 +286,49 @@ export class ApiService {
       throw err;
     }
   }
-
-  async mintToken(org: Org, receiver: string, amount: number, retries = RETRIES) {
-    const headers = this.commonHeaders;
-    headers.set('Content-Type', 'application/json');
-
-    const config: AxiosRequestConfig = {
-      headers: Object.fromEntries(headers),
-      timeout: REQUEST_TIMEOUT,
-    };
-
-    const body = JSON.stringify({
-      network: this.network,
-      mint_authority: org.wallet,
-      receiver,
-      token_address: org.mint,
-      amount,
-      fee_payer: this.isMainnet ? process.env.FEE_PAYER : undefined,
-    });
-
+  async mintToken(org: Org, receivers:{ wallet: string, amount: number }[], retries = RETRIES) {
     try {
-      const response = await firstValueFrom(
-        this.http.post(`${this.baseUrl}/token/mint_detach`, body, config),
-      );
-      const encodedTxn = get(response, 'data.result.encoded_transaction');
-      const txn = Transaction.from(Buffer.from(encodedTxn, 'base64'));
-      const pk = await this.getPK(org.wallet, org.password);
-      const serializedTxn = this.createSignedSerializedTxn(txn, pk, true, false);
+      const payer = new PublicKey(this.isMainnet ? process.env.FEE_PAYER : org.wallet);
+      const orgPk = await this.getPK(org.wallet, org.password);
+      const txn = new Transaction();
+      const promises = receivers.map(async ({ wallet, amount }) => {
+        const associatedTokenAddress = getAssociatedTokenAddressSync(
+          new PublicKey(org.mint),
+          new PublicKey(wallet),
+        );
+        try {
+          await getAccount(this.connection, associatedTokenAddress);
+        } catch(error) {
+          if (error instanceof TokenAccountNotFoundError || error instanceof TokenInvalidAccountOwnerError) {
+            txn.add(
+              createAssociatedTokenAccountInstruction(
+                payer,
+                associatedTokenAddress,
+                new PublicKey(wallet),
+                new PublicKey(org.mint),
+              )
+            );
+          }
+        }
+        txn.add(createMintToInstruction(
+          new PublicKey(org.mint),
+          associatedTokenAddress,
+          new PublicKey(org.wallet),
+          amount,
+        ));
+      });
+      await Promise.all(promises);
+      const blockhash = (await this.connection.getLatestBlockhash('finalized')).blockhash;
+      txn.recentBlockhash = blockhash;
+      txn.feePayer = payer;
+      const serializedTxn = this.createSignedSerializedTxn(txn, orgPk, true, false);
       const txnHash = await this.sendTxn(serializedTxn);
       return txnHash;
     } catch (err) {
       if (retries > 0) {
         await firstValueFrom(of(true).pipe(delay(2000)));
         console.log('Retrying mint token');
-        return this.mintToken(org, receiver, amount, --retries);
+        return this.mintToken(org, receivers, --retries);
       }
       err.message = `Error minting token: ${err.message}`;
       throw err;

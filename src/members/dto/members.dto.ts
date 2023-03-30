@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Role } from '../enum/roles.enum';
+import { InvestorSettingsDto } from './investor-settings.dto';
 
 export class MemberDto {
 
@@ -28,4 +29,7 @@ export class MemberDto {
     user: string;
 
   org: string;
+
+  @ApiProperty({ description: 'Investor settings' })
+    investorSettings: InvestorSettingsDto;
 }

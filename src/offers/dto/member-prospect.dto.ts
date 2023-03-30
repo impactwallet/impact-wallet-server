@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { InvestorSettingsDto } from '../../members/dto/investor-settings.dto';
 import { Role } from '../../members/enum/roles.enum';
 
 export class MemberProspectDto {
@@ -21,4 +22,7 @@ export class MemberProspectDto {
     autoContribution: boolean;
 
   agreement: string;
+
+  @ApiProperty({ description: 'Future investor settings' })
+    investorSettings: InvestorSettingsDto;
 }

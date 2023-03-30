@@ -2,7 +2,7 @@ import mongoose, { ClientSession, Model } from 'mongoose';
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 
-import { Contribution, ContributionDocument } from './schema/contribution.schema';
+import { Contribution, ContributionDocument, ContributionSplit } from './schema/contribution.schema';
 import { StartContributionDto } from './dto/start-contribution.dto';
 import { MembersService } from '../members/members.service';
 import { areObjectIdsEqual } from '../utils/mongo';
@@ -14,6 +14,7 @@ import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { ApiService } from '../api-service/api.service';
 import { OrgDocument } from '../orgs/schema/org.schema';
 import { ContributionsFilterDto } from './dto/contributions-filter.dto';
+import { Role } from '../members/enum/roles.enum';
 
 @Injectable()
 export class ContributionsService {
@@ -144,10 +145,19 @@ export class ContributionsService {
     const stoppedAtMoment = moment(contribution.stoppedAt);
     const diff = moment(stoppedAtMoment).diff(contribution.createdAt, 'milliseconds');
     const duration = moment.duration(diff).asHours();
-    const lamportsEarned = Math.round(duration * contribution.impactRatio * LAMPORTS_PER_SOL);
+    let lamportsEarned = Math.round(duration * contribution.impactRatio * LAMPORTS_PER_SOL);
     contribution.lamportsEarned = lamportsEarned;
 
-    const txnHash = await this.apiService.mintToken(org, memberUser.wallet, lamportsEarned / LAMPORTS_PER_SOL);
+    const investorsShares = await this._calculateAndUpdateInvestorsShares(org, lamportsEarned, session);
+    contribution.split = investorsShares.receivers;
+    lamportsEarned -= investorsShares.total;
+    contribution.split.push({
+      member: member._id.toString(),
+      wallet: memberUser.wallet,
+      amount: lamportsEarned,
+    });
+
+    const txnHash = await this.apiService.mintToken(org, contribution.split);
     this.apiService.sendNotification(`Tokens ${org.username.toUpperCase()} minted ant sent to a member ${memberUser.nickname}:\n\n${txnHash}\n\n${this.apiService.buildExplorerLink('/tx/' + txnHash)}`);
     contribution.txnHash = txnHash;
 
@@ -158,5 +168,27 @@ export class ContributionsService {
       .findById(contribution._id)
       .populate('org')
       .session(session);
+  }
+
+  async _calculateAndUpdateInvestorsShares(org: OrgDocument, lamportsEarned: number, session: ClientSession) {
+    const receivers: ContributionSplit[] = [];
+    let total = 0;
+    const investors = await this.membersService.getMembers({
+      org: org._id,
+      role: Role.Investor,
+      'investorSettings.isInvestmentSuccessful': true,
+    }, 'user');
+    const investorsUpdatePromises = investors.map(investor => {
+      const investorShare = Math.round(lamportsEarned * (investor.investorSettings.equityAllocation / 100));
+      total += investorShare;
+      receivers.push({
+        member: investor._id.toString(),
+        wallet: (investor.user as UserDocument).wallet,
+        amount: investorShare,
+      });
+      return this.membersService.updateContributed(investor._id, 0, investorShare, session).exec();
+    });
+    await Promise.all(investorsUpdatePromises);
+    return { receivers, total };
   }
 }
