@@ -2,17 +2,18 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { ApiProperty } from '@nestjs/swagger';
 import mongoose, { HydratedDocument } from 'mongoose';
 import { Role } from '../../members/enum/roles.enum';
+import { InvestorSettings } from '../../members/schema/member.schema';
 import { Org } from '../../orgs/schema/org.schema';
 import { OfferStatus } from '../enum/statuses.enum';
 
 export type OfferDocument = HydratedDocument<Offer>;
 export type MemberProspectDocument = HydratedDocument<MemberProspect>;
 
-@Schema()
+@Schema({ _id: false })
 export class MemberProspect {
 
   @ApiProperty({ example: 'CEO' })
-  @Prop({ required: true })
+  @Prop({ required: function() { return this.role !== Role.Investor; } })
     occupation: string;
 
   @ApiProperty({ example: 'Member', enum: Object.keys(Role) })
@@ -38,6 +39,10 @@ export class MemberProspect {
   @Prop()
     agreement: string;
 
+  @ApiProperty({ description: 'Future nvestor settings' })
+  @Prop({ required: function() { return this.role === Role.Investor; } })
+    investorSettings: InvestorSettings;
+
 }
 
 export const MemberProspectSchema = SchemaFactory.createForClass(MemberProspect);
@@ -53,8 +58,8 @@ export class Offer {
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Org', required: true })
     org: string | Org;
 
-  @ApiProperty({ description: 'Member to create' })
-  @Prop({ type: MemberProspectSchema, _id: false, required: true })
+  @ApiProperty({ description: 'Member to create', type: MemberProspect })
+  @Prop({ type: MemberProspectSchema, required: true })
     memberProspect: MemberProspectDocument;
 
 }

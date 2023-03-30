@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Member, MemberSchema } from '../members/schema/member.schema';
+import { PaymentModule } from '../payment/payment.module';
 import { OffersService } from './offers.service';
 import { Offer, OfferSchema } from './schema/offer.schema';
 
@@ -10,6 +11,7 @@ import { Offer, OfferSchema } from './schema/offer.schema';
       { name: Offer.name, schema: OfferSchema },
       { name: Member.name, schema: MemberSchema },
     ]),
+    PaymentModule,
   ],
   providers: [OffersService],
   exports: [OffersService],

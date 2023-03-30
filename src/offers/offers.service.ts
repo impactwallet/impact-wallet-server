@@ -2,7 +2,12 @@ import { ForbiddenException, HttpException, Injectable, NotFoundException } from
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { isNil } from 'lodash';
 import mongoose, { ClientSession, Model } from 'mongoose';
+import { Role } from '../members/enum/roles.enum';
 import { Member, MemberDocument } from '../members/schema/member.schema';
+import { OrgDocument } from '../orgs/schema/org.schema';
+import { PaymentService } from '../payment/payment.service';
+import { Payment } from '../payment/schema/payment.schema';
+import { User, UserDocument } from '../users/schema/user.schema';
 import { OfferFiltersDto } from './dto/offer-filters.dto';
 import { OfferStatusBodyDto, OfferStatusDto } from './dto/offer-status.dto';
 import { OfferDto } from './dto/offer.dto';
@@ -15,6 +20,7 @@ export class OffersService {
     @InjectModel(Offer.name) private offerRepository: Model<OfferDocument>,
     @InjectModel(Member.name) private memberRepository: Model<MemberDocument>,
     @InjectConnection() private readonly connection: mongoose.Connection,
+    private readonly paymentService: PaymentService,
   ) {}
 
   async createOffer(orgId: string, offer: OfferDto) {
@@ -49,11 +55,12 @@ export class OffersService {
     return offer;
   }
 
-  async updateOfferStatus(orgId: string, offerId: string, body: OfferStatusBodyDto) {
+  async updateOfferStatus(org: OrgDocument, offerId: string, body: OfferStatusBodyDto, user: UserDocument) {
 
+    let payment: Payment;
     const session = await this.connection.startSession();
     await session.withTransaction(async () => {
-      const offer = await this.getOrgOfferById(orgId, offerId, session);
+      const offer = await this.getOrgOfferById(org._id.toString(), offerId, session);
 
       if (offer.status !== OfferStatus.Pending) {
         throw new ForbiddenException('Offer already accepted/declined');
@@ -64,8 +71,17 @@ export class OffersService {
         offer.status = OfferStatus.Approved;
 
         const newMember = new this.memberRepository(offer.memberProspect.toObject());
-        newMember.org = orgId;
-        newMember.user = body.userId;
+        newMember.org = org._id.toString();
+        newMember.user = user._id.toString();
+
+        if (newMember.role === Role.Investor) {
+          const paymentInfo = {
+            info: `Investing $${newMember.investorSettings.investmentAmount} for ${newMember.investorSettings.equityAllocation}% of equity allocation`,
+            amount: newMember.investorSettings.investmentAmount,
+          };
+          payment = await this.paymentService.receiveInvestment(org, newMember._id.toString(), paymentInfo, session);
+        }
+
         await newMember.save({ session });
         break;
       case OfferStatusDto.declined:
@@ -76,5 +92,7 @@ export class OffersService {
       await offer.save({ session });
     });
     await session.endSession();
+
+    return payment;
   }
 }
