@@ -1,6 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { ApiProperty } from '@nestjs/swagger';
-import { isNil } from 'lodash';
 import mongoose, { HydratedDocument } from 'mongoose';
 import { OrgDocument } from '../../orgs/schema/org.schema';
 import { UserDocument } from '../../users/schema/user.schema';
@@ -18,10 +17,6 @@ export class InvestorSettings {
   @ApiProperty({ description: 'Equity allocation', type: Number })
   @Prop({ type: Number, required: true })
     equityAllocation: number;
-
-  @ApiProperty({ description: 'Specifies if investment was successful', type: Boolean })
-  @Prop({ type: Boolean, default: false })
-    isInvestmentSuccessful: boolean;
 }
 
 export const InvestorSettingsSchema = SchemaFactory.createForClass(InvestorSettings);

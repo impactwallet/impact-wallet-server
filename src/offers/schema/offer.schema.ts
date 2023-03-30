@@ -43,6 +43,11 @@ export class MemberProspect {
   @Prop({ required: function() { return this.role === Role.Investor; } })
     investorSettings: InvestorSettings;
 
+  @Prop({ type: mongoose.Schema.Types.ObjectId })
+    org: string;
+
+  @Prop({ type: mongoose.Schema.Types.ObjectId })
+    user: string;
 }
 
 export const MemberProspectSchema = SchemaFactory.createForClass(MemberProspect);

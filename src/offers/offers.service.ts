@@ -69,20 +69,20 @@ export class OffersService {
       switch (body.status) {
       case OfferStatusDto.accepted:
         offer.status = OfferStatus.Approved;
+        offer.memberProspect.user = user._id.toString();
+        offer.memberProspect.org = org._id.toString();
 
-        const newMember = new this.memberRepository(offer.memberProspect.toObject());
-        newMember.org = org._id.toString();
-        newMember.user = user._id.toString();
-
-        if (newMember.role === Role.Investor) {
+        if (offer.memberProspect.role === Role.Investor) {
           const paymentInfo = {
-            info: `Investing $${newMember.investorSettings.investmentAmount} for ${newMember.investorSettings.equityAllocation}% of equity allocation`,
-            amount: newMember.investorSettings.investmentAmount,
+            info: `Investing $${offer.memberProspect.investorSettings.investmentAmount} for ${offer.memberProspect.investorSettings.equityAllocation}% of equity allocation`,
+            amount: offer.memberProspect.investorSettings.investmentAmount,
           };
-          payment = await this.paymentService.receiveInvestment(org, newMember._id.toString(), paymentInfo, session);
-        }
+          payment = await this.paymentService.receiveInvestment(org, offer.memberProspect, paymentInfo, session);
+        } else { 
+          const newMember = new this.memberRepository(offer.memberProspect.toObject());
 
-        await newMember.save({ session });
+          await newMember.save({ session });
+        }
         break;
       case OfferStatusDto.declined:
         offer.status = OfferStatus.Declined;

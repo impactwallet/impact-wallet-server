@@ -2,7 +2,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { ApiProperty } from '@nestjs/swagger';
 import mongoose, { HydratedDocument } from 'mongoose';
-import { MemberDocument } from '../../members/schema/member.schema';
+import { MemberProspectDocument, MemberProspectSchema } from '../../offers/schema/offer.schema';
 import { OrgDocument } from '../../orgs/schema/org.schema';
 import { PaymentType } from '../enum/payment-type.enum';
 
@@ -16,8 +16,8 @@ export class Payment {
     type: PaymentType;
 
   @ApiProperty({ description: 'Investor member ID or object' })
-  @Prop({ type: mongoose.Schema.Types.ObjectId, required: function() { return this.type === PaymentType.Investment; } })
-    investor: string | MemberDocument;
+  @Prop({ type: MemberProspectSchema, required: function() { return this.type === PaymentType.Investment; } })
+    investor: MemberProspectDocument;
 
   @ApiProperty({ example: 'ID or object', description: 'Org id or object' })
   @Prop({ required: true, type: mongoose.Schema.Types.ObjectId, ref: 'Org' })
