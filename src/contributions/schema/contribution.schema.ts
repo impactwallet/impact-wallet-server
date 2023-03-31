@@ -20,6 +20,9 @@ export class ContributionSplit {
   @ApiProperty({ description: 'Wallet of the member' })
   @Prop({ type: String, required: true })
     wallet: string;
+  
+  @Prop({ type: Number })
+    duration: number;
 }
 
 export const ContributionSplitSchema = SchemaFactory.createForClass(ContributionSplit);

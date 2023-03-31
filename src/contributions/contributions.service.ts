@@ -148,20 +148,24 @@ export class ContributionsService {
     let lamportsEarned = Math.round(duration * contribution.impactRatio * LAMPORTS_PER_SOL);
     contribution.lamportsEarned = lamportsEarned;
 
-    const investorsShares = await this._calculateAndUpdateInvestorsShares(org, lamportsEarned, session);
+    const investorsShares = await this._calculateAndUpdateInvestorsShares(org, lamportsEarned);
     contribution.split = investorsShares.receivers;
     lamportsEarned -= investorsShares.total;
     contribution.split.push({
       member: member._id.toString(),
       wallet: memberUser.wallet,
       amount: lamportsEarned,
+      duration,
     });
 
     const txnHash = await this.apiService.mintToken(org, contribution.split);
     this.apiService.sendNotification(`Tokens ${org.username.toUpperCase()} minted ant sent to a member ${memberUser.nickname}:\n\n${txnHash}\n\n${this.apiService.buildExplorerLink('/tx/' + txnHash)}`);
     contribution.txnHash = txnHash;
 
-    await this.membersService.updateContributed(member._id, duration, lamportsEarned, session);
+    const promises = contribution.split.map(data => {
+      return this.membersService.updateContributed((data.member as string), data.duration, data.amount, session).exec();
+    });
+    await Promise.all(promises);
     await contribution.save({ session });
 
     return this.contributionModel
@@ -170,24 +174,23 @@ export class ContributionsService {
       .session(session);
   }
 
-  async _calculateAndUpdateInvestorsShares(org: OrgDocument, lamportsEarned: number, session: ClientSession) {
+  async _calculateAndUpdateInvestorsShares(org: OrgDocument, lamportsEarned: number) {
     const receivers: ContributionSplit[] = [];
     let total = 0;
     const investors = await this.membersService.getMembers({
       org: org._id,
       role: Role.Investor,
     }, 'user');
-    const investorsUpdatePromises = investors.map(investor => {
+    investors.forEach(investor => {
       const investorShare = Math.round(lamportsEarned * (investor.investorSettings.equityAllocation / 100));
       total += investorShare;
       receivers.push({
         member: investor._id.toString(),
         wallet: (investor.user as UserDocument).wallet,
         amount: investorShare,
+        duration: 0,
       });
-      return this.membersService.updateContributed(investor._id, 0, investorShare, session).exec();
     });
-    await Promise.all(investorsUpdatePromises);
     return { receivers, total };
   }
 }
