@@ -80,7 +80,9 @@ export class UsersService {
           newUser.wallet = await this.apiService.createWallet(newUser.password);
           this.apiService.sendNotification(`New wallet created for user ${newUser.nickname}:\n\n${newUser.wallet}\n\n${this.apiService.buildExplorerLink('/address/' + newUser.wallet)}`);
         }
-        newUser.secretLink = await bcrypt.hash(secretLink, 5);
+
+       const hashLink= await bcrypt.hash(secretLink, 5);
+        newUser.secretLink = hashLink;
 
         await newUser.save({ session });
       } catch (error) {
@@ -100,7 +102,7 @@ export class UsersService {
     };
     return {
       //TODO return endpoint
-      secretLink: `https://app.impactwallet.xyz/restore/${secretLink}`,
+      secretLink: `https://app.impactwallet.xyz/restore/${hashLink}`,
       token: this.jwtService.sign(payload),
     };
   }
