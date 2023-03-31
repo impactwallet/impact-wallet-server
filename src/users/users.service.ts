@@ -115,7 +115,7 @@ export class UsersService {
     };
     return {
       //TODO return endpoint
-      secretLink: `https://app.impactwallet.xyz/restore/${newUser.secretLink}`,
+      secretLink: `https://app.impactwallet.xyz/restore/${user.secretLink}`,
       token: this.jwtService.sign(payload),
     };
   }
