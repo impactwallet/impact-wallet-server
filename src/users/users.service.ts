@@ -131,9 +131,7 @@ export class UsersService {
   }
 
   private async getBySecretLink(secretLink: string) {
-    const regex = {};
-    regex['secretLink'] = uuid;
-    const user = await this.userRepository.findOne(regex).exec();
+    const user = await this.userRepository.findOne({ secretLink }).exec();
     if (isNil(user)) {
       throw new NotFoundException('User not found');
     }
