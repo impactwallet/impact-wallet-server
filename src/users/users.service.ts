@@ -81,8 +81,7 @@ export class UsersService {
           this.apiService.sendNotification(`New wallet created for user ${newUser.nickname}:\n\n${newUser.wallet}\n\n${this.apiService.buildExplorerLink('/address/' + newUser.wallet)}`);
         }
 
-       const hashLink= await bcrypt.hash(secretLink, 5);
-        newUser.secretLink = hashLink;
+        newUser.secretLink = secretLink;
 
         await newUser.save({ session });
       } catch (error) {
@@ -102,7 +101,7 @@ export class UsersService {
     };
     return {
       //TODO return endpoint
-      secretLink: `https://app.impactwallet.xyz/restore/${hashLink}`,
+      secretLink: `https://app.impactwallet.xyz/restore/${secretLink}`,
       token: this.jwtService.sign(payload),
     };
   }
