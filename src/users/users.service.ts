@@ -99,6 +99,22 @@ export class UsersService {
       wallet: newUser.wallet,
     };
     return {
+      //TODO return endpoint
+      secretLink: `https://app.impactwallet.xyz/restore/${secretLink}`,
+      token: this.jwtService.sign(payload),
+    };
+  }
+  
+  async restoreUser(secretLink: string): Promise<CreateUserResponseDto> {
+    const user = await this.getBySecretLink(secretLink);
+    const payload = {
+      _id: user._id,
+      name: user.name,
+      nickname: user.nickname,
+      wallet: user.wallet,
+    };
+    return {
+      //TODO return endpoint
       secretLink: `https://app.impactwallet.xyz/restore/${secretLink}`,
       token: this.jwtService.sign(payload),
     };
@@ -107,6 +123,16 @@ export class UsersService {
 
   async getByUserId(id: string) {
     const user = await this.userRepository.findById(new mongoose.Types.ObjectId(id));
+    if (isNil(user)) {
+      throw new NotFoundException('User not found');
+    }
+    return user;
+  }
+
+  private async getBySecretLink(secretLink: string) {
+    const regex = {};
+    regex['secretLink'] = secretLink;
+    const user = await this.userRepository.findOne(regex).exec();
     if (isNil(user)) {
       throw new NotFoundException('User not found');
     }

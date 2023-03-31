@@ -113,4 +113,14 @@ export class UsersController {
       balance: await this.userService.getUserBalance(userId),
     };
   }
+
+  @ApiOperation({ summary: 'Restore user'})
+  @ApiResponse({ status: 200, type: CreateUserResponseDto  })
+  @Post(':secretLink/restore')
+  @HttpCode(HttpStatus.OK)
+  async restoreUser(
+    @Param('secretLink') secretLink: string,
+  ): Promise<CreateUserResponseDto> {
+    return this.userService.restoreUser(secretLink);
+  }
 }
