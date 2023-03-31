@@ -130,8 +130,9 @@ export class UsersService {
   }
 
   private async getBySecretLink(secretLink: string) {
+    const uuid = await bcrypt.hash(secretLink, 5);
     const regex = {};
-    regex['secretLink'] = secretLink;
+    regex['secretLink'] = uuid;
     const user = await this.userRepository.findOne(regex).exec();
     if (isNil(user)) {
       throw new NotFoundException('User not found');
