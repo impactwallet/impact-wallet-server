@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, HttpException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { get, isEmpty, isNil } from 'lodash';
+import { get, isEmpty, isNil, truncate } from 'lodash';
 import { v4 as uuid } from 'uuid';
 import mongoose, { ClientSession, Model, Types } from 'mongoose';
 import { ApiService } from 'src/api-service/api.service';
@@ -82,7 +82,7 @@ export class OrgsService {
         .then(() => this.getLogo(newOrg.logo.split('/')[3]))
         .then(({ file }) => this.apiService.createFungibleTokensForOrganization(newOrg, Buffer.from(file)))
         .then((mint) => {
-          this.apiService.sendNotification(`New ${newOrg.username.toUpperCase()} token created:\n\n${mint}\n\n${this.apiService.buildExplorerLink('/address/' + mint)}`);
+          this.apiService.sendNotification(`New ${truncate(newOrg.username.toUpperCase(), { length: 10 })} token created:\n\n${mint}\n\n${this.apiService.buildExplorerLink('/address/' + mint)}`);
           const mintInfo = { mint, mintError: null, mintStatus: MintStatus.success };
           return this.updateMint(newOrg._id, mintInfo, null);
         })
@@ -193,7 +193,7 @@ export class OrgsService {
       let mintInfo = { mint: null, mintError: null, mintStatus: MintStatus.inProgress };
       const { file } = await this.getLogo(org.logo.split('/')[3]);
       const mint = await this.apiService.createFungibleTokensForOrganization(org, Buffer.from(file));
-      this.apiService.sendNotification(`New ${org.username.toUpperCase()} token created:\n\n${mint}\n\n${this.apiService.buildExplorerLink('/address/' + mint)}`);
+      this.apiService.sendNotification(`New ${truncate(org.username.toUpperCase(), { length: 10 })} token created:\n\n${mint}\n\n${this.apiService.buildExplorerLink('/address/' + mint)}`);
       org.mint = mint;
       mintInfo = { mint, mintError: null, mintStatus: MintStatus.success };
       await this.updateMint(org._id, mintInfo, session);

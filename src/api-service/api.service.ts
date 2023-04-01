@@ -4,9 +4,9 @@ import * as FormData from 'form-data';
 import { delay, firstValueFrom, of } from 'rxjs';
 import { AxiosRequestConfig } from 'axios';
 import { Keypair, Transaction, Connection, clusterApiUrl, Cluster, PublicKey, TransactionSignature, LAMPORTS_PER_SOL, SystemProgram, sendAndConfirmTransaction } from '@solana/web3.js';
-import { getAssociatedTokenAddress, createTransferInstruction, createAssociatedTokenAccountInstruction, createMintToInstruction, getOrCreateAssociatedTokenAccount, getAssociatedTokenAddressSync, getAccount, TokenAccountNotFoundError, TokenInvalidAccountOwnerError } from '@solana/spl-token';
+import { getAssociatedTokenAddress, createTransferInstruction, createAssociatedTokenAccountInstruction, createMintToInstruction, getAssociatedTokenAddressSync, getAccount, TokenAccountNotFoundError, TokenInvalidAccountOwnerError } from '@solana/spl-token';
 import { decode } from 'bs58';
-import { get, isEmpty } from 'lodash';
+import { get, isEmpty, truncate } from 'lodash';
 import { Org } from '../orgs/schema/org.schema';
 
 const REQUEST_TIMEOUT = 1000 * 60 * 60;
@@ -253,8 +253,8 @@ export class ApiService {
     const body = new FormData();
     body.append('network', this.network);
     body.append('wallet', org.wallet);
-    body.append('name', org.name);
-    body.append('symbol', org.username.toUpperCase());
+    body.append('name', truncate(org.name, { length: 32 }));
+    body.append('symbol', truncate(org.username.toUpperCase(), { length: 10 }));
     if (this.isMainnet) {
       body.append('fee_payer', process.env.FEE_PAYER);
     }
