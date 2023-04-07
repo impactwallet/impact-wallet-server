@@ -5,6 +5,7 @@ import mongoose, { HydratedDocument } from 'mongoose';
 import { MemberProspectDocument, MemberProspectSchema } from '../../offers/schema/offer.schema';
 import { OrgDocument } from '../../orgs/schema/org.schema';
 import { PaymentType } from '../enum/payment-type.enum';
+import { SaleOfferDocument, SaleOfferSchema } from '../../offers/schema/sale-offer.schema';
 
 export type PaymentDocument = HydratedDocument<Payment>;
 
@@ -15,12 +16,16 @@ export class Payment {
   @Prop({ type: String, enum: Object.values(PaymentType), default: PaymentType.Regular })
     type: PaymentType;
 
-  @ApiProperty({ description: 'Investor member ID or object' })
+  @ApiProperty({ description: 'Investor member object' })
   @Prop({ type: MemberProspectSchema, required: function() { return this.type === PaymentType.Investment; } })
     investor: MemberProspectDocument;
 
+  @ApiProperty({ description: 'Sale parameters' })
+  @Prop({ type: SaleOfferSchema, required: function() { return this.type === PaymentType.AssetsSell; } })
+    sale: SaleOfferDocument;
+
   @ApiProperty({ example: 'ID or object', description: 'Org id or object' })
-  @Prop({ required: true, type: mongoose.Schema.Types.ObjectId, ref: 'Org' })
+  @Prop({ required: function() { return this.type !== PaymentType.AssetsSell; }, type: mongoose.Schema.Types.ObjectId, ref: 'Org' })
     org: string | OrgDocument;
 
   @ApiProperty({ example: '10', description: 'Amount of payment in USD' })

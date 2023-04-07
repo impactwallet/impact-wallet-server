@@ -26,7 +26,7 @@ import { ConfigModule } from '@nestjs/config';
     }),
     MembersModule,
     OffersModule,
-    ContributionsModule
+    ContributionsModule,
   ],
 })
 

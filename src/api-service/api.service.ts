@@ -1,16 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import * as FormData from 'form-data';
-import { delay, firstValueFrom, of } from 'rxjs';
+import { firstValueFrom } from 'rxjs';
 import { AxiosRequestConfig } from 'axios';
-import { Keypair, Transaction, Connection, clusterApiUrl, Cluster, PublicKey, TransactionSignature, LAMPORTS_PER_SOL, SystemProgram, sendAndConfirmTransaction } from '@solana/web3.js';
+import { Keypair, Transaction, Connection, clusterApiUrl, Cluster, PublicKey, TransactionSignature, LAMPORTS_PER_SOL, SystemProgram } from '@solana/web3.js';
 import { getAssociatedTokenAddress, createTransferInstruction, createAssociatedTokenAccountInstruction, createMintToInstruction, getAssociatedTokenAddressSync, getAccount, TokenAccountNotFoundError, TokenInvalidAccountOwnerError } from '@solana/spl-token';
 import { decode } from 'bs58';
 import { get, isEmpty, truncate } from 'lodash';
 import { Org } from '../orgs/schema/org.schema';
 
 const REQUEST_TIMEOUT = 1000 * 60 * 60;
-const RETRIES = 5;
 
 /* BOT DATA */
 const telegramToken = '6103482568:AAHcXVbsPbSATe9Q06LukA2mp0-gku1cJKE';
@@ -52,56 +51,49 @@ export class ApiService {
     }
   }
 
-  async transfer(fromPk: string, to: string, amount: number) {
+  async transfer(senderPk: string, mint: string, recepients: { wallet: string, amount: number }[]) {
     try {
-      const transaction = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey: Keypair.fromSecretKey(decode(fromPk)).publicKey,
-          toPubkey: new PublicKey(to),
-          lamports: amount * LAMPORTS_PER_SOL,
-        })
-      );
-      const blockHash = (await this.connection.getLatestBlockhash('finalized'))
-        .blockhash;
-    
-      transaction.feePayer = Keypair.fromSecretKey(decode(fromPk)).publicKey;
-      transaction.recentBlockhash = blockHash;
-      await sendAndConfirmTransaction(this.connection, transaction, [Keypair.fromSecretKey(decode(fromPk))]);
-    } catch (err) {
-      err.message = `Error getting wallet PK: ${err.message}`;
-      throw err;
-    }
-  }
-
-  async transferUSDC(senderPk: string, recepients: { wallet: string, amount: number }[]) {
-    if (this.network !== 'mainnet-beta' || isEmpty(recepients)) {
-      return;
-    }
-    try {
-      const USDCMintPublicKey = new PublicKey(this.usdcMint);
+      const multiplier = mint === this.usdcMint ? 1000000 : LAMPORTS_PER_SOL;
+      const mintPublicKey = new PublicKey(mint);
       const senderKeypair = Keypair.fromSecretKey(decode(senderPk));
       const senderAssociatedTokenAddress = await getAssociatedTokenAddress(
-        USDCMintPublicKey,
+        mintPublicKey,
         senderKeypair.publicKey,
       );
+      const payer = this.isMainnet ? new PublicKey(process.env.FEE_PAYER) : senderKeypair.publicKey;
       const txn = new Transaction();
 
       const promises = recepients.map(async ({ wallet, amount }) => {
         console.log('amount:', amount);
         console.log('wallet:', wallet);
         const recipientPublicKey = new PublicKey(wallet);
-  
+
         const recipientAssociatedTokenAddress = await getAssociatedTokenAddress(
-          USDCMintPublicKey,
+          mintPublicKey,
           recipientPublicKey,
         );
+
+        try {
+          await getAccount(this.connection, recipientAssociatedTokenAddress);
+        } catch(error) {
+          if (error instanceof TokenAccountNotFoundError || error instanceof TokenInvalidAccountOwnerError) {
+            txn.add(
+              createAssociatedTokenAccountInstruction(
+                payer,
+                recipientAssociatedTokenAddress,
+                new PublicKey(wallet),
+                mintPublicKey,
+              )
+            );
+          }
+        }
 
         txn.add(
           createTransferInstruction(
             senderAssociatedTokenAddress,
             recipientAssociatedTokenAddress,
             senderKeypair.publicKey,
-            Math.round(amount * 1000000),
+            Math.round(amount * multiplier),
           )
         );
       });
@@ -110,10 +102,23 @@ export class ApiService {
       
       const blockhash = (await this.connection.getLatestBlockhash('finalized'));
       txn.recentBlockhash = blockhash.blockhash;
-      txn.feePayer = new PublicKey(process.env.FEE_PAYER);
+      txn.feePayer = this.isMainnet ? new PublicKey(process.env.FEE_PAYER) : senderKeypair.publicKey;
 
       const serializedTxn = this.createSignedSerializedTxn(txn, senderPk, false, false);
       const signature = await this.sendTxn(serializedTxn);
+      return signature;
+    } catch (err) {
+      err.message = `Error transfering tokens: ${err.message}`;
+      throw err;
+    }
+  }
+
+  async transferUSDC(senderPk: string, recepients: { wallet: string, amount: number }[]) {
+    if (!this.isMainnet || isEmpty(recepients)) {
+      return;
+    }
+    try {
+      const signature = await this.transfer(senderPk, this.usdcMint, recepients);
       return signature;
     } catch (err) {
       err.message = `Error transfering USDC: ${err.message}`;
@@ -143,7 +148,7 @@ export class ApiService {
     }
   }
 
-  async createAccount(walletPk: string, retries = RETRIES) {
+  async createAccount(walletPk: string) {
     try {
       const space = 0;
       const toKeypair = Keypair.fromSecretKey(decode(walletPk));
@@ -179,11 +184,6 @@ export class ApiService {
       const serializedTxn = this.createSignedSerializedTxn(createAccountTxn, walletPk, false);
       await this.sendTxn(serializedTxn);
     } catch (err) {
-      if (retries > 0) {
-        await firstValueFrom(of(true).pipe(delay(2000)));
-        console.log('Retrying creating account');
-        return this.createAccount(walletPk, --retries);
-      }
       err.message = `Error creating account: ${err.message}`;
       throw err;
     }
@@ -249,7 +249,7 @@ export class ApiService {
     }
   }
 
-  async createFungibleTokensForOrganization(org: Org, logo: Buffer, retries = RETRIES): Promise<string> {
+  async createFungibleTokensForOrganization(org: Org, logo: Buffer): Promise<string> {
     const body = new FormData();
     body.append('network', this.network);
     body.append('wallet', org.wallet);
@@ -277,16 +277,11 @@ export class ApiService {
       await this.sendTxn(serializedTxn);
       return mint;
     } catch (err) {
-      if (retries > 0) {
-        await firstValueFrom(of(true).pipe(delay(2000)));
-        console.log('Retrying create token');
-        return this.createFungibleTokensForOrganization(org, logo, --retries);
-      }
       err.message = `Error creating token: ${err.message}`;
       throw err;
     }
   }
-  async mintToken(org: Org, receivers:{ wallet: string, amount: number }[], retries = RETRIES) {
+  async mintToken(org: Org, receivers:{ wallet: string, amount: number }[]) {
     try {
       const payer = new PublicKey(this.isMainnet ? process.env.FEE_PAYER : org.wallet);
       const orgPk = await this.getPK(org.wallet, org.password);
@@ -325,11 +320,6 @@ export class ApiService {
       const txnHash = await this.sendTxn(serializedTxn);
       return txnHash;
     } catch (err) {
-      if (retries > 0) {
-        await firstValueFrom(of(true).pipe(delay(2000)));
-        console.log('Retrying mint token');
-        return this.mintToken(org, receivers, --retries);
-      }
       err.message = `Error minting token: ${err.message}`;
       throw err;
     }

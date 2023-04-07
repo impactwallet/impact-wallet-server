@@ -1,7 +1,7 @@
 import { CheckoutItemEntity, verifyWebhookSignature } from '@candypay/checkout-sdk';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { isNil } from 'lodash';
+import { get, isNil } from 'lodash';
 import mongoose, { ClientSession, Model } from 'mongoose';
 import { ApiService } from '../api-service/api.service';
 import { CandyPayService } from '../api-service/candypay.service';
@@ -13,6 +13,10 @@ import { ReceiveInvestmentDto } from './dto/receive-investment.dto';
 import { ReceivePaymentDto } from './dto/receive-payment.dto';
 import { PaymentType } from './enum/payment-type.enum';
 import { Payment, PaymentDocument } from './schema/payment.schema';
+import { SaleOffer } from '../offers/schema/sale-offer.schema';
+import { SellAssetsDto } from './dto/sale-assets.dto';
+import { LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { Role } from '../members/enum/roles.enum';
 
 @Injectable()
 export class PaymentService {
@@ -78,6 +82,30 @@ export class PaymentService {
     return newPayment;
   }
 
+  async sellAssets(saleOffer: SaleOffer, body: SellAssetsDto) {
+    const org = saleOffer.org as OrgDocument;
+    saleOffer.org = org._id;
+    const newPayment = new this.paymentModel({
+      type: PaymentType.AssetsSell,
+      amount: body.price,
+      sale: saleOffer,
+    });
+    const items: CheckoutItemEntity[] = [
+      {
+        name: body.info,
+        price: body.price,
+        image: `${process.env.SERVER_URL}${org.logo}`,
+        quantity: 1,
+      },
+    ];
+    const sessionData = await this.candypayService.createSession({ org: org, items });
+    newPayment.cpSessionId = sessionData.session_id;
+    newPayment.cpOrderId = sessionData.order_id;
+    newPayment.cpPaymentUrl = sessionData.payment_url;
+
+    return newPayment.save();
+  }
+
   async handlePayment(headers: any, body: any) {
     try {
       await verifyWebhookSignature({
@@ -104,16 +132,34 @@ export class PaymentService {
       console.log('signature:', signature);
     } else if (payment.type === PaymentType.Investment) {
       await this._handleInvestmentPayment(org, payment, body);
+    } else if (payment.type === PaymentType.AssetsSell) {
+      await this._handleAssetsSale(payment);
     }
   }
 
   async _handleInvestmentPayment(org: OrgDocument, payment: PaymentDocument, body: any) {
-    console.log('investment');
-    
-    let newMember = new this.memberModel(payment.investor.toObject());
-    newMember = await (await newMember.save()).populate('user');
-    const memberUser = newMember.user as UserDocument;
-    console.log(`member created ${newMember._id}`);
+    const member = await this.memberModel.findOne({
+      org: org._id,
+      user: payment.investor.user,
+    }).populate('user');
+    let memberUser = get(member, 'user') as UserDocument;
+
+    if (isNil(member)) {
+      const newMember = new this.memberModel(payment.investor.toObject());
+      await newMember.save();
+      await newMember.populate('user');
+      memberUser = newMember.user as UserDocument;
+    } else {
+      await this.memberModel.findOneAndUpdate(
+        { _id: member._id },
+        {
+          $inc: {
+            'investorSettings.investmentAmount': payment.investor.investorSettings.investmentAmount,
+            'investorSettings.equityAllocation': payment.investor.investorSettings.equityAllocation,
+          },
+        },
+      );
+    }
     
     this.apiService.sendNotification(`${memberUser.nickname} just invested ${payment.amount} into ${org.name}:\n\n${body.signature}\n\n${this.apiService.buildExplorerLink('/tx/' + body.signature)}`);
   }
@@ -140,6 +186,56 @@ export class PaymentService {
     const signature = await this.apiService.transferUSDC(orgPk, membersWithAmount);
     this.apiService.sendNotification(`USDC transfered to ${org.name} and split between members:\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
     return signature;
+  }
+
+  async _handleAssetsSale(payment: PaymentDocument) {
+    const session = await this.connection.startSession();
+    await session.withTransaction(async () => {
+      const member = await this.memberModel.findOne({
+        _id: payment.sale.seller,
+        org: payment.sale.org,
+      }).populate({ path: 'user', select: '+password' }).session(session);
+      const memberUser = member.user as UserDocument;
+      await payment.sale.populate(['org', 'buyer']);
+      const org = payment.sale.org as OrgDocument;
+      const buyer = payment.sale.buyer as UserDocument;
+      const lamportsAmount = payment.sale.tokensAmount * LAMPORTS_PER_SOL;
+
+      if (member.lamportsEarned < lamportsAmount) {
+        throw new BadRequestException('Not enough tokens to sell');
+      }
+
+      const fromPk = await this.apiService.getPK(memberUser.wallet, memberUser.password);
+      const signature = await this.apiService.transfer(fromPk, org.mint, [{wallet: buyer.wallet, amount: payment.sale.tokensAmount }]);
+
+      const buyerMember = await this.memberModel.findOne({
+        user: buyer._id,
+        org: org._id,
+      }).session(session);
+
+      if (isNil(buyerMember)) {
+        const newMember = new this.memberModel({
+          role: Role.Member,
+          occupation: 'Buyer',
+          user: buyer._id,
+          org: org._id,
+          lamportsEarned: lamportsAmount,
+        });
+        await newMember.save({ session });
+      } else {
+        buyerMember.lamportsEarned += lamportsAmount;
+        await buyerMember.save({ session });
+      }
+
+      await this.memberModel.findOneAndUpdate(
+        { _id: member._id },
+        { $inc: { lamportsEarned: -lamportsAmount } },
+      ).session(session);
+
+      this.apiService.sendNotification(`${buyer.nickname} just bought ${payment.sale.tokensAmount} tokens from ${memberUser.nickname} for ${payment.amount} USDC:\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
+    });
+
+    await session.endSession();
   }
 
 }

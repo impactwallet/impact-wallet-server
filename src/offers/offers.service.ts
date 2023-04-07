@@ -1,4 +1,4 @@
-import { ForbiddenException, HttpException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, HttpException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { isNil } from 'lodash';
 import mongoose, { ClientSession, Model } from 'mongoose';
@@ -7,18 +7,22 @@ import { Member, MemberDocument } from '../members/schema/member.schema';
 import { OrgDocument } from '../orgs/schema/org.schema';
 import { PaymentService } from '../payment/payment.service';
 import { Payment } from '../payment/schema/payment.schema';
-import { User, UserDocument } from '../users/schema/user.schema';
+import { UserDocument } from '../users/schema/user.schema';
 import { OfferFiltersDto } from './dto/offer-filters.dto';
 import { OfferStatusBodyDto, OfferStatusDto } from './dto/offer-status.dto';
 import { OfferDto } from './dto/offer.dto';
+import { SaleOfferDto } from './dto/sale-offer.dto';
 import { OfferStatus } from './enum/statuses.enum';
 import { Offer, OfferDocument } from './schema/offer.schema';
+import { SaleOffer, SaleOfferDocument } from './schema/sale-offer.schema';
+import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 
 @Injectable()
 export class OffersService {
   constructor(
     @InjectModel(Offer.name) private offerRepository: Model<OfferDocument>,
     @InjectModel(Member.name) private memberRepository: Model<MemberDocument>,
+    @InjectModel(SaleOffer.name) private saleOfferRepository: Model<SaleOfferDocument>,
     @InjectConnection() private readonly connection: mongoose.Connection,
     private readonly paymentService: PaymentService,
   ) {}
@@ -94,5 +98,60 @@ export class OffersService {
     await session.endSession();
 
     return payment;
+  }
+
+  async updateSaleOfferStatus(offerId: string, body: OfferStatusBodyDto, buyer: UserDocument) {
+    const offer = await this.getSaleOfferById(offerId, 'org');
+    if (offer.status !== OfferStatus.Pending) {
+      throw new ForbiddenException('Offer already accepted/declined');
+    }
+
+    let payment: Payment;
+
+    switch (body.status) {
+    case OfferStatusDto.accepted:
+      offer.status = OfferStatus.Approved;
+      offer.buyer = buyer._id;
+      const paymentInfo = {
+        info: `Selling ${offer.tokensAmount} impact shares for $${offer.price}`,
+        price: offer.price,
+      };
+      payment = await this.paymentService.sellAssets(offer, paymentInfo);
+      break;
+    case OfferStatusDto.declined:
+      offer.status = OfferStatus.Declined;
+      break;
+    }
+
+    await offer.save();
+
+    return payment;
+  }
+
+  async createSaleOffer(saleOfferDto: SaleOfferDto) {
+    const orgObjectId = new mongoose.Types.ObjectId(saleOfferDto.orgId);
+    const userObjectId = new mongoose.Types.ObjectId(saleOfferDto.userId);
+    const member = await this.memberRepository.findOne({
+      user: userObjectId,
+      org: orgObjectId,
+    });
+    if (isNil(member)) {
+      throw new NotFoundException('Member not found');
+    }
+    if (member.lamportsEarned < saleOfferDto.tokensAmount * LAMPORTS_PER_SOL) {
+      throw new BadRequestException('Not enough tokens to sell');
+    }
+    const saleOffer = new this.saleOfferRepository(saleOfferDto);
+    saleOffer.seller = userObjectId;
+    saleOffer.org = orgObjectId;
+    return saleOffer.save();
+  }
+
+  async getSaleOfferById(offerId: string, populate?: any) {
+    const offer = await this.saleOfferRepository.findById(offerId).populate(populate);
+    if (isNil(offer)) {
+      throw new NotFoundException('Sale offer not found');
+    }
+    return offer;
   }
 }
