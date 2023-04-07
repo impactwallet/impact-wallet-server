@@ -1,7 +1,7 @@
 import { CheckoutItemEntity } from '@candypay/checkout-sdk';
-import { Org } from '../../orgs/schema/org.schema';
 
 export class CreateCpSessionDto {
-  org: Org;
+  logo: string;
+  receiver: { wallet: string, name: string };
   items: CheckoutItemEntity[];
 }

@@ -13,7 +13,7 @@ import { ReceiveInvestmentDto } from './dto/receive-investment.dto';
 import { ReceivePaymentDto } from './dto/receive-payment.dto';
 import { PaymentType } from './enum/payment-type.enum';
 import { Payment, PaymentDocument } from './schema/payment.schema';
-import { SaleOffer } from '../offers/schema/sale-offer.schema';
+import { SaleOfferDocument } from '../offers/schema/sale-offer.schema';
 import { SellAssetsDto } from './dto/sale-assets.dto';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { Role } from '../members/enum/roles.enum';
@@ -44,7 +44,7 @@ export class PaymentService {
           quantity: 1,
         },
       ];
-      const sessionData = await this.candypayService.createSession({ org: org, items });
+      const sessionData = await this.candypayService.createSession({ logo: org.logo, receiver: org, items });
       newPayment.cpSessionId = sessionData.session_id;
       newPayment.cpOrderId = sessionData.order_id;
       newPayment.cpPaymentUrl = sessionData.payment_url;
@@ -72,7 +72,7 @@ export class PaymentService {
         quantity: 1,
       },
     ];
-    const sessionData = await this.candypayService.createSession({ org: org, items });
+    const sessionData = await this.candypayService.createSession({ logo: org.logo, receiver: org, items });
     newPayment.cpSessionId = sessionData.session_id;
     newPayment.cpOrderId = sessionData.order_id;
     newPayment.cpPaymentUrl = sessionData.payment_url;
@@ -82,9 +82,11 @@ export class PaymentService {
     return newPayment;
   }
 
-  async sellAssets(saleOffer: SaleOffer, body: SellAssetsDto) {
+  async sellAssets(saleOffer: SaleOfferDocument, body: SellAssetsDto) {
     const org = saleOffer.org as OrgDocument;
     saleOffer.org = org._id;
+    await saleOffer.populate('seller');
+    const seller = saleOffer.seller as UserDocument;
     const newPayment = new this.paymentModel({
       type: PaymentType.AssetsSell,
       amount: body.price,
@@ -98,7 +100,7 @@ export class PaymentService {
         quantity: 1,
       },
     ];
-    const sessionData = await this.candypayService.createSession({ org: org, items });
+    const sessionData = await this.candypayService.createSession({ logo: org.logo, receiver: seller, items });
     newPayment.cpSessionId = sessionData.session_id;
     newPayment.cpOrderId = sessionData.order_id;
     newPayment.cpPaymentUrl = sessionData.payment_url;
@@ -192,11 +194,11 @@ export class PaymentService {
     const session = await this.connection.startSession();
     await session.withTransaction(async () => {
       const member = await this.memberModel.findOne({
-        _id: payment.sale.seller,
+        user: payment.sale.seller,
         org: payment.sale.org,
       }).populate({ path: 'user', select: '+password' }).session(session);
       const memberUser = member.user as UserDocument;
-      await payment.sale.populate(['org', 'buyer']);
+      await payment.populate(['sale.org', 'sale.buyer']);
       const org = payment.sale.org as OrgDocument;
       const buyer = payment.sale.buyer as UserDocument;
       const lamportsAmount = payment.sale.tokensAmount * LAMPORTS_PER_SOL;
@@ -232,7 +234,7 @@ export class PaymentService {
         { $inc: { lamportsEarned: -lamportsAmount } },
       ).session(session);
 
-      this.apiService.sendNotification(`${buyer.nickname} just bought ${payment.sale.tokensAmount} tokens from ${memberUser.nickname} for ${payment.amount} USDC:\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
+      this.apiService.sendNotification(`${buyer.nickname} just bought ${payment.sale.tokensAmount} ${org.name} impact shares from ${memberUser.nickname} for ${payment.amount} USDC:\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
     });
 
     await session.endSession();

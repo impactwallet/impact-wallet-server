@@ -1,7 +1,6 @@
 import { Injectable, NotFoundException, UnauthorizedException, ConflictException, HttpException, BadRequestException } from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
-import * as bcrypt from 'bcryptjs';
 import { v4 as uuid } from 'uuid';
 import mongoose, { ClientSession, Model } from 'mongoose';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -231,7 +230,7 @@ export class UsersService {
         { $inc: { 'lamportsEarned': -sendAssetsDto.amount * LAMPORTS_PER_SOL } },
       ).session(session);
 
-      this.apiService.sendNotification(`User ${sender.nickname} sent ${sendAssetsDto.amount} impact shares to user ${recipient.nickname}\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
+      this.apiService.sendNotification(`User ${sender.nickname} sent ${sendAssetsDto.amount} impact shares of ${org.name} to user ${recipient.nickname}\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
     });
 
     await session.endSession();

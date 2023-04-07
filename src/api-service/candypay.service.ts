@@ -20,9 +20,9 @@ export class CandyPayService {
       cancel_url: 'https://app.impactwallet.xyz',
       items: data.items,
       custom_data: {
-        name: data.org.name,
-        image: `${process.env.SERVER_URL}${data.org.logo}`,
-        wallet_address: data.org.wallet,
+        name: data.receiver.name,
+        image: `${process.env.SERVER_URL}${data.logo}`,
+        wallet_address: data.receiver.wallet,
       },
     });
   }
