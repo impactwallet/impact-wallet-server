@@ -14,6 +14,7 @@ import { Member } from '../members/schema/member.schema';
 import { Contribution } from '../contributions/schema/contribution.schema';
 import { ContributionsService } from '../contributions/contributions.service';
 import { ContributionsFilterDto } from '../contributions/dto/contributions-filter.dto';
+import { SendAssetsDto} from 'src/users/dto/send-assets.dto';
 
 @ApiTags('Users')
 @Controller('users')
@@ -122,5 +123,20 @@ export class UsersController {
     @Param('secretLink') secretLink: string,
   ): Promise<CreateUserResponseDto> {
     return this.userService.restoreUser(secretLink);
+  }
+
+  
+  @ApiOperation({ summary: 'Send Assets'})
+  @ApiResponse({ status: 200 })
+  @Post('assets/:orgId/send')
+  @HttpCode(HttpStatus.OK)
+  async sendAsset(
+  @Param('orgId') orgId: string,
+  @Body() sendAssetsDto: SendAssetsDto,
+    @Req() req: Request,
+  ) {
+    const sender = await this.userService.getUserFromToken(req);
+    
+    return this.userService.sendAssets(sendAssetsDto, sender, sender._id, orgId);
   }
 }

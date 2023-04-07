@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, UnauthorizedException, ConflictException, HttpException } from '@nestjs/common';
+import { Injectable, NotFoundException, UnauthorizedException, ConflictException, HttpException, BadRequestException } from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
@@ -15,12 +15,17 @@ import { Request } from 'express';
 import { MembersService } from '../members/members.service';
 import { resizeBuffer } from '../utils/images';
 import { S3Service } from 'src/s3/s3.service';
+import { SendAssetsDto } from './dto/send-assets.dto';
+import { LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { Member, MemberDocument } from 'src/members/schema/member.schema';
+import { OrgDocument } from 'src/orgs/schema/org.schema';
 
 @Injectable()
 export class UsersService {
 
   constructor(
     @InjectModel(User.name) private userRepository: Model<UserDocument>,
+    @InjectModel(Member.name) private memberRepository: Model<MemberDocument>,
     @InjectConnection() private readonly connection: mongoose.Connection,
     private jwtService: JwtService,
     private apiService: ApiService,
@@ -169,6 +174,28 @@ export class UsersService {
   async getUserBalance(userId: string) {
     const user = await this.getByUserId(userId);
     return this.apiService.getUSDCBalance(user.wallet);
+  }
+
+  async sendAssets(sendAssetsDto: SendAssetsDto, sender: User, senderId: mongoose.Types.ObjectId, orgId: string) {
+    const orgObjectId = new mongoose.Types.ObjectId(orgId);
+    const recipient: User = await this.getByUserId(sendAssetsDto.recipientId);
+    const member = await this.memberRepository.findOne({
+      user: senderId,
+      org: orgObjectId,
+    });
+    if (isNil(member)) {
+      throw new NotFoundException('Member not found');
+    }
+    if (member.lamportsEarned < sendAssetsDto.amount * LAMPORTS_PER_SOL) {
+      throw new BadRequestException('Not enough tokens to sell');
+    }
+    const org = member.org as OrgDocument;
+    
+    const fromPk = await this.apiService.getPK(sender.wallet, sender.password);
+    const signature = await this.apiService.transfer(fromPk, org.mint, [{wallet: recipient.wallet, amount: sendAssetsDto.amount }]);
+
+    return;
+    
   }
 
   private async getUsersByQueryWithExactMatch(query: UsersFilter): Promise<User[]> {

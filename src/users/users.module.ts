@@ -8,10 +8,12 @@ import { MembersModule } from '../members/members.module';
 import { User, UserSchema } from './schema/user.schema';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
+import { Member, MemberSchema } from 'src/members/schema/member.schema';
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
+    MongooseModule.forFeature([{ name: Member.name, schema: MemberSchema }]),
     JwtModule.register({
       secret: process.env.PRIVATE_KEY || 'SECRET',
     }),
