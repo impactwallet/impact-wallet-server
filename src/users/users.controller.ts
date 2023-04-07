@@ -132,7 +132,7 @@ export class UsersController {
   @HttpCode(HttpStatus.OK)
   async sendAsset(
   @Param('orgId') orgId: string,
-  @Body() sendAssetsDto: SendAssetsDto,
+    @Body() sendAssetsDto: SendAssetsDto,
     @Req() req: Request,
   ) {
     const sender = await this.userService.getUserFromToken(req);

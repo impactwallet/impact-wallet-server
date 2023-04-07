@@ -3,7 +3,7 @@ import { InjectModel, InjectConnection } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { v4 as uuid } from 'uuid';
-import mongoose, { Model } from 'mongoose';
+import mongoose, { ClientSession, Model } from 'mongoose';
 import { CreateUserDto } from './dto/create-user.dto';
 import { User, UserDocument } from './schema/user.schema';
 import { ApiService } from 'src/api-service/api.service';
@@ -19,6 +19,7 @@ import { SendAssetsDto } from './dto/send-assets.dto';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { Member, MemberDocument } from 'src/members/schema/member.schema';
 import { OrgDocument } from 'src/orgs/schema/org.schema';
+import { Role } from '../members/enum/roles.enum';
 
 @Injectable()
 export class UsersService {
@@ -127,8 +128,12 @@ export class UsersService {
   }
 
 
-  async getByUserId(id: string) {
-    const user = await this.userRepository.findById(new mongoose.Types.ObjectId(id));
+  async getByUserId(id: string, select?: string, session?: ClientSession): Promise<UserDocument> {
+    const user = await this.userRepository.findById(
+      new mongoose.Types.ObjectId(id),
+      select,
+      { session },
+    );
     if (isNil(user)) {
       throw new NotFoundException('User not found');
     }
@@ -177,22 +182,59 @@ export class UsersService {
   }
 
   async sendAssets(sendAssetsDto: SendAssetsDto, sender: UserDocument, orgId: string) {
-    const orgObjectId = new mongoose.Types.ObjectId(orgId);
-    const recipient: User = await this.getByUserId(sendAssetsDto.recipientId);
-    const member = await this.memberRepository.findOne({
-      user: sender._id,
-      org: orgObjectId,
-    }).populate('org');
-    if (isNil(member)) {
-      throw new NotFoundException('Member not found');
-    }
-    if (member.lamportsEarned < sendAssetsDto.amount * LAMPORTS_PER_SOL) {
-      throw new BadRequestException('Not enough tokens to sell');
-    }
-    const org = member.org as OrgDocument;
+    const session = await this.connection.startSession();
 
-    const fromPk = await this.apiService.getPK(sender.wallet, sender.password);
-    const signature = await this.apiService.transfer(fromPk, org.mint, [{ wallet: recipient.wallet, amount: sendAssetsDto.amount }]);
+    await session.withTransaction(async () => {
+      const orgObjectId = new mongoose.Types.ObjectId(orgId);
+      const recipient = await this.getByUserId(sendAssetsDto.recipientId, undefined, session);
+      const senderPassword = (await this.getByUserId(sender._id.toString(), '+password', session)).password;
+      const senderMember = await this.memberRepository.findOne({
+        user: sender._id,
+        org: orgObjectId,
+      }).populate('org').session(session);
+
+      if (isNil(senderMember)) {
+        throw new NotFoundException('Sender member not found');
+      }
+      if (senderMember.lamportsEarned < sendAssetsDto.amount * LAMPORTS_PER_SOL) {
+        throw new BadRequestException('Not enough tokens to sell');
+      }
+
+      const org = senderMember.org as OrgDocument;
+
+      const fromPk = await this.apiService.getPK(sender.wallet, senderPassword);
+      const signature = await this.apiService.transfer(fromPk, org.mint, [{ wallet: recipient.wallet, amount: sendAssetsDto.amount }]);
+
+      const recepientMember = await this.memberRepository.findOne({
+        user: recipient._id,
+        org: orgObjectId,
+      }).session(session);
+
+      if (isNil(recepientMember)) {
+        const newMember = new this.memberRepository({
+          role: Role.Member,
+          occupation: 'Receiver',
+          user: recipient._id,
+          org: orgObjectId,
+          lamportsEarned: sendAssetsDto.amount * LAMPORTS_PER_SOL,
+        });
+        await newMember.save({ session });
+      } else {
+        await this.memberRepository.findOneAndUpdate(
+          { _id: recepientMember._id },
+          { $inc: { 'lamportsEarned': sendAssetsDto.amount * LAMPORTS_PER_SOL } },
+        ).session(session);
+      }
+
+      await this.memberRepository.findOneAndUpdate(
+        { _id: senderMember._id },
+        { $inc: { 'lamportsEarned': -sendAssetsDto.amount * LAMPORTS_PER_SOL } },
+      ).session(session);
+
+      this.apiService.sendNotification(`User ${sender.nickname} sent ${sendAssetsDto.amount} impact shares to user ${recipient.nickname}\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
+    });
+
+    await session.endSession();
   }
 
   private async getUsersByQueryWithExactMatch(query: UsersFilter): Promise<User[]> {
