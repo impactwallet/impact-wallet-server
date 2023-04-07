@@ -144,7 +144,9 @@ export class OffersService {
     const saleOffer = new this.saleOfferRepository(saleOfferDto);
     saleOffer.seller = userObjectId;
     saleOffer.org = orgObjectId;
-    return saleOffer.save();
+    await saleOffer.save();
+    await saleOffer.populate('org');
+    return saleOffer;
   }
 
   async getSaleOfferById(offerId: string, populate?: any) {
