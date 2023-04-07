@@ -15,16 +15,17 @@ const REQUEST_TIMEOUT = 1000 * 60 * 60;
 
 @Injectable()
 export class ApiService {
-  private readonly telegramToken: string = '';
+  private readonly telegramToken: string;
   private readonly telegramChatId: string;
 
 
   constructor(private http: HttpService, private readonly configService: ConfigService) {
     this.telegramToken = configService.get<string>('TELEGRAM_TOKEN') as string;
     this.telegramChatId = configService.get<string>('TELEGRAM_CHAT_ID') as string;
+    this.tgBaseUrl = `https://api.telegram.org/bot${this.telegramToken}`;
   }
 
-  tgBaseUrl = `https://api.telegram.org/bot${this.telegramToken}`;
+  tgBaseUrl: string;
   baseUrl = 'https://api.shyft.to/sol/v1';
   network: Cluster = process.env.NETWORK as Cluster;
   connection = new Connection(clusterApiUrl(this.network), 'confirmed');
