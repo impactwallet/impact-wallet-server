@@ -137,6 +137,6 @@ export class UsersController {
   ) {
     const sender = await this.userService.getUserFromToken(req);
     
-    return this.userService.sendAssets(sendAssetsDto, sender, sender._id, orgId);
+    return this.userService.sendAssets(sendAssetsDto, sender, orgId);
   }
 }

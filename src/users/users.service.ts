@@ -110,7 +110,7 @@ export class UsersService {
       token: this.jwtService.sign(payload),
     };
   }
-  
+
   async restoreUser(secretLink: string): Promise<CreateUserResponseDto> {
     const user = await this.getBySecretLink(secretLink);
     const payload = {
@@ -176,13 +176,13 @@ export class UsersService {
     return this.apiService.getUSDCBalance(user.wallet);
   }
 
-  async sendAssets(sendAssetsDto: SendAssetsDto, sender: User, senderId: mongoose.Types.ObjectId, orgId: string) {
+  async sendAssets(sendAssetsDto: SendAssetsDto, sender: UserDocument, orgId: string) {
     const orgObjectId = new mongoose.Types.ObjectId(orgId);
     const recipient: User = await this.getByUserId(sendAssetsDto.recipientId);
     const member = await this.memberRepository.findOne({
-      user: senderId,
+      user: sender._id,
       org: orgObjectId,
-    });
+    }).populate('org');
     if (isNil(member)) {
       throw new NotFoundException('Member not found');
     }
@@ -190,12 +190,9 @@ export class UsersService {
       throw new BadRequestException('Not enough tokens to sell');
     }
     const org = member.org as OrgDocument;
-    
-    const fromPk = await this.apiService.getPK(sender.wallet, sender.password);
-    const signature = await this.apiService.transfer(fromPk, org.mint, [{wallet: recipient.wallet, amount: sendAssetsDto.amount }]);
 
-    return;
-    
+    const fromPk = await this.apiService.getPK(sender.wallet, sender.password);
+    const signature = await this.apiService.transfer(fromPk, org.mint, [{ wallet: recipient.wallet, amount: sendAssetsDto.amount }]);
   }
 
   private async getUsersByQueryWithExactMatch(query: UsersFilter): Promise<User[]> {

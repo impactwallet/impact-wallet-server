@@ -8,24 +8,28 @@ import { getAssociatedTokenAddress, createTransferInstruction, createAssociatedT
 import { decode } from 'bs58';
 import { get, isEmpty, truncate } from 'lodash';
 import { Org } from '../orgs/schema/org.schema';
+import { ConfigService } from '@nestjs/config';
 
 const REQUEST_TIMEOUT = 1000 * 60 * 60;
-
-/* BOT DATA */
-const telegramToken = '6103482568:AAHcXVbsPbSATe9Q06LukA2mp0-gku1cJKE';
-const chatId = -963260569;
 
 
 @Injectable()
 export class ApiService {
-  tgBaseUrl = `https://api.telegram.org/bot${telegramToken}`;
+  private readonly telegramToken: string = '';
+  private readonly telegramChatId: string;
+
+
+  constructor(private http: HttpService, private readonly configService: ConfigService) {
+    this.telegramToken = configService.get<string>('TELEGRAM_TOKEN') as string;
+    this.telegramChatId = configService.get<string>('TELEGRAM_CHAT_ID') as string;
+  }
+
+  tgBaseUrl = `https://api.telegram.org/bot${this.telegramToken}`;
   baseUrl = 'https://api.shyft.to/sol/v1';
   network: Cluster = process.env.NETWORK as Cluster;
   connection = new Connection(clusterApiUrl(this.network), 'confirmed');
   usdcMint = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
   explorerUrl = 'https://explorer.solana.com';
-
-  constructor(private http: HttpService) { }
 
   get commonHeaders() {
     const headers = new Map();
@@ -43,7 +47,7 @@ export class ApiService {
     }
     try {
       await firstValueFrom(this.http.post(`${this.tgBaseUrl}/sendMessage`, {
-        chat_id: chatId,
+        chat_id: this.telegramChatId,
         text: text,
       }));
     } catch (err) {
@@ -75,7 +79,7 @@ export class ApiService {
 
         try {
           await getAccount(this.connection, recipientAssociatedTokenAddress);
-        } catch(error) {
+        } catch (error) {
           if (error instanceof TokenAccountNotFoundError || error instanceof TokenInvalidAccountOwnerError) {
             txn.add(
               createAssociatedTokenAccountInstruction(
@@ -99,7 +103,7 @@ export class ApiService {
       });
 
       await Promise.all(promises);
-      
+
       const blockhash = (await this.connection.getLatestBlockhash('finalized'));
       txn.recentBlockhash = blockhash.blockhash;
       txn.feePayer = this.isMainnet ? new PublicKey(process.env.FEE_PAYER) : senderKeypair.publicKey;
@@ -153,9 +157,9 @@ export class ApiService {
       const space = 0;
       const toKeypair = Keypair.fromSecretKey(decode(walletPk));
       const rentExemptionAmount =
-          await this.connection.getMinimumBalanceForRentExemption(space);
+        await this.connection.getMinimumBalanceForRentExemption(space);
       const USDCMintPublicKey = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
-    
+
       const createAccountParams = {
         fromPubkey: new PublicKey(process.env.FEE_PAYER),
         newAccountPubkey: toKeypair.publicKey,
@@ -163,7 +167,7 @@ export class ApiService {
         space,
         programId: SystemProgram.programId,
       };
-    
+
       const associatedToken = await getAssociatedTokenAddress(
         USDCMintPublicKey,
         toKeypair.publicKey,
@@ -281,7 +285,7 @@ export class ApiService {
       throw err;
     }
   }
-  async mintToken(org: Org, receivers:{ wallet: string, amount: number }[]) {
+  async mintToken(org: Org, receivers: { wallet: string, amount: number }[]) {
     try {
       const payer = new PublicKey(this.isMainnet ? process.env.FEE_PAYER : org.wallet);
       const orgPk = await this.getPK(org.wallet, org.password);
@@ -293,7 +297,7 @@ export class ApiService {
         );
         try {
           await getAccount(this.connection, associatedTokenAddress);
-        } catch(error) {
+        } catch (error) {
           if (error instanceof TokenAccountNotFoundError || error instanceof TokenInvalidAccountOwnerError) {
             txn.add(
               createAssociatedTokenAccountInstruction(
