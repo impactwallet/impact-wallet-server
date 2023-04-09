@@ -175,10 +175,36 @@ export class UsersService {
     return this.s3Service.getFile(fileName);
   }
 
-  async getUserBalance(userId: string) {
-    const user = await this.getByUserId(userId);
+  async getUserBalance(user: User) {
     return this.apiService.getUSDCBalance(user.wallet);
   }
+
+  async sendUsdc(sender: UserDocument, sendAssetsDto: SendAssetsDto) {
+    const session = await this.connection.startSession();
+
+    await session.withTransaction(async () => {
+
+      const balance: number = await this.apiService.getUSDCBalance(sender.wallet);
+      if (balance < sendAssetsDto.amount) {
+        throw new BadRequestException('Not enough USDC to send');
+      }
+
+      const recipient = await this.getByUserId(sendAssetsDto.recipientId, undefined, session);
+      const senderPassword = (await this.getByUserId(sender._id.toString(), '+password', session)).password;
+
+      const fromPk = await this.apiService.getPK(sender.wallet, senderPassword);
+      const recipients: { wallet: string, amount: number }[] = new Array;
+      recipients.push({
+        wallet: recipient.wallet,
+        amount: sendAssetsDto.amount
+      });
+
+      this.apiService.transferUSDC(fromPk, recipients);
+
+    });
+    await session.endSession();
+  }
+
 
   async sendAssets(sendAssetsDto: SendAssetsDto, sender: UserDocument, orgId: string) {
     const session = await this.connection.startSession();
@@ -196,7 +222,7 @@ export class UsersService {
         throw new NotFoundException('Sender member not found');
       }
       if (senderMember.lamportsEarned < sendAssetsDto.amount * LAMPORTS_PER_SOL) {
-        throw new BadRequestException('Not enough tokens to sell');
+        throw new BadRequestException('Not enough tokens to send');
       }
 
       const org = senderMember.org as OrgDocument;
