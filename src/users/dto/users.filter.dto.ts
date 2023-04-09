@@ -1,4 +1,4 @@
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty } from '@nestjs/swagger';
 export class UsersFilter {
   @ApiProperty({ example: 'Dmitry', description: 'Search by nickname of user', required: false })
     nickname?: string;

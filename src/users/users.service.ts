@@ -8,7 +8,7 @@ import { User, UserDocument } from './schema/user.schema';
 import { ApiService } from 'src/api-service/api.service';
 import { CreateUserResponseDto } from './dto/create-user.response.dto';
 import { UsersFilter } from './dto/users.filter.dto';
-import { get, isNil, omit } from 'lodash';
+import { get, isNil, omitBy } from 'lodash';
 import { SearchUserByNicknameDto } from './dto/search-user-by-nickname.dto';
 import { Request } from 'express';
 import { MembersService } from '../members/members.service';
@@ -51,12 +51,10 @@ export class UsersService {
     await this.getUserFromToken(req);
 
     if (query.exactMatch) {
-
-      return await this.getUsersByQueryWithExactMatch(query);
-
+      return this.getUsersByQueryWithExactMatch(query);
     }
 
-    return await this.getUsersWithFilter(query);
+    return this.getUsersWithFilter(query);
   }
 
   async createUser(userDto: CreateUserDto, avatar: any, mock = false): Promise<CreateUserResponseDto> {
@@ -236,45 +234,26 @@ export class UsersService {
     await session.endSession();
   }
 
-  private async getUsersByQueryWithExactMatch(query: UsersFilter): Promise<User[]> {
-
-    const regex = {};
-    if (query.name) {
-      regex['name'] = query.name;
-    }
-
-    if (query.nickname) {
-      regex['nickname'] = query.nickname;
-    }
-
-
-    const users = await this.userRepository.find(regex).exec();
-    const response = [];
-    users.map(user => {
-      response.push(omit(user.toObject(), ['password']));
-    });
-    return response;
-
+  private async getUsersByQueryWithExactMatch(filter: UsersFilter): Promise<User[]> {
+    const query = {
+      name: filter.name,
+      nickname: filter.nickname,
+    };
+    
+    return this.userRepository.find(omitBy(query, isNil));
   }
 
-  private async getUsersWithFilter(query: UsersFilter): Promise<User[]> {
+  private async getUsersWithFilter(filter: UsersFilter): Promise<User[]> {
 
-    const regex = {};
-    if (query.name) {
-      regex['name'] = new RegExp(query.name);
+    const query = {};
+    if (filter.name) {
+      query['name'] = new RegExp(filter.name, 'i');
     }
-    if (query.nickname) {
-      regex['nickname'] = new RegExp(query.nickname);
+    if (filter.nickname) {
+      query['nickname'] = new RegExp(filter.nickname, 'i');
     }
 
-    console.log(regex);
-
-    const users = await this.userRepository.find(regex).exec();
-    const response = [];
-    users.map(user => {
-      response.push(omit(user.toObject(), ['password']));
-    });
-    return response;
+    return this.userRepository.find(query);
   }
 
 }
