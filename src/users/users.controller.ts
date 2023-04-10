@@ -3,7 +3,7 @@ import { HttpCode, Req, Headers, Res } from '@nestjs/common/decorators';
 import { ApiConsumes, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CreateUserDto } from './dto/create-user.dto';
-import { User } from './schema/user.schema';
+import { User, UserDocument } from './schema/user.schema';
 import { UsersService } from './users.service';
 import { CreateUserResponseDto } from './dto/create-user.response.dto';
 import { UsersFilter } from './dto/users.filter.dto';
@@ -14,7 +14,8 @@ import { Member } from '../members/schema/member.schema';
 import { Contribution } from '../contributions/schema/contribution.schema';
 import { ContributionsService } from '../contributions/contributions.service';
 import { ContributionsFilterDto } from '../contributions/dto/contributions-filter.dto';
-import { SendAssetsDto} from 'src/users/dto/send-assets.dto';
+import { SendAssetsDto } from 'src/users/dto/send-assets.dto';
+import { SendUsdcDto } from './dto/send-usdc.dto';
 
 @ApiTags('Users')
 @Controller('users')
@@ -26,9 +27,9 @@ export class UsersController {
   ) {
   }
 
-  @ApiOperation({ summary: 'Create user'})
+  @ApiOperation({ summary: 'Create user' })
   @ApiConsumes('form-data')
-  @ApiResponse({ status: 201, type: CreateUserResponseDto  })
+  @ApiResponse({ status: 201, type: CreateUserResponseDto })
   @Post()
   @UseInterceptors(FileInterceptor('avatar'))
   @HttpCode(HttpStatus.CREATED)
@@ -103,20 +104,32 @@ export class UsersController {
 
   @ApiOperation({ summary: 'Get users USDC balance' })
   @ApiResponse({ status: 200, type: Number })
-  @Get(':userId/balance')
+  @Get('usdc/balance')
   async getUserBalance(
-  @Param('userId') userId: string,
-    @Req() req: Request,
+  @Req() req: Request
   ) {
-    await this.userService.getUserFromToken(req);
+    const user: User = await this.userService.getUserFromToken(req);
 
     return {
-      balance: await this.userService.getUserBalance(userId),
+      balance: await this.userService.getUserBalance(user),
     };
   }
 
-  @ApiOperation({ summary: 'Restore user'})
-  @ApiResponse({ status: 200, type: CreateUserResponseDto  })
+  @ApiOperation({ summary: 'Send USDC' })
+  @ApiResponse({ status: 200 })
+  @Post('usdc/send')
+  @HttpCode(HttpStatus.OK)
+  async sendUsdc(
+  @Body() sendUsdcDto: SendUsdcDto,
+    @Req() req: Request
+  ) {
+    const user: UserDocument = await this.userService.getUserFromToken(req);
+
+    return await this.userService.sendUsdc(user, sendUsdcDto);
+  }
+
+  @ApiOperation({ summary: 'Restore user' })
+  @ApiResponse({ status: 200, type: CreateUserResponseDto })
   @Post(':secretLink/restore')
   @HttpCode(HttpStatus.OK)
   async restoreUser(
@@ -125,8 +138,8 @@ export class UsersController {
     return this.userService.restoreUser(secretLink);
   }
 
-  
-  @ApiOperation({ summary: 'Send Assets'})
+
+  @ApiOperation({ summary: 'Send Assets' })
   @ApiResponse({ status: 200 })
   @Post('assets/:orgId/send')
   @HttpCode(HttpStatus.OK)
@@ -136,7 +149,7 @@ export class UsersController {
     @Req() req: Request,
   ) {
     const sender = await this.userService.getUserFromToken(req);
-    
+
     return this.userService.sendAssets(sendAssetsDto, sender, orgId);
   }
 }
