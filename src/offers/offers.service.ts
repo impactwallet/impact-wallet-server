@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, HttpException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { isNil } from 'lodash';
-import mongoose, { ClientSession, Model } from 'mongoose';
+import { get, isNil } from 'lodash';
+import mongoose, { ClientSession, Model, Types } from 'mongoose';
 import { Role } from '../members/enum/roles.enum';
 import { Member, MemberDocument } from '../members/schema/member.schema';
 import { OrgDocument } from '../orgs/schema/org.schema';
@@ -28,6 +28,18 @@ export class OffersService {
   ) {}
 
   async createOffer(orgId: string, offer: OfferDto) {
+    if (offer.memberProspect.role === Role.Investor) {
+      const existingInvestors = await this.memberRepository.find({
+        org: new Types.ObjectId(orgId),
+        role: Role.Investor,
+      });
+      const soldEquity = existingInvestors.reduce((res, member) => {
+        return res + get(member, 'investorSettings.equityAllocation', 0);
+      }, 0);
+      if (soldEquity + offer.memberProspect.investorSettings.equityAllocation > 100) {
+        throw new BadRequestException({ equityAllocation: `Only ${100 - soldEquity}% is available for sale` });
+      }
+    }
     offer.org = orgId;
     const newOffer = new this.offerRepository(offer);
     try {
