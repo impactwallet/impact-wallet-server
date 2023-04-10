@@ -19,6 +19,7 @@ import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { Member, MemberDocument } from 'src/members/schema/member.schema';
 import { OrgDocument } from 'src/orgs/schema/org.schema';
 import { Role } from '../members/enum/roles.enum';
+import { SendUsdcDto } from './dto/send-usdc.dto';
 
 @Injectable()
 export class UsersService {
@@ -179,30 +180,23 @@ export class UsersService {
     return this.apiService.getUSDCBalance(user.wallet);
   }
 
-  async sendUsdc(sender: UserDocument, sendAssetsDto: SendAssetsDto) {
-    const session = await this.connection.startSession();
+  async sendUsdc(sender: UserDocument, sendUsdcDto: SendUsdcDto) {
+    const balance: number = await this.apiService.getUSDCBalance(sender.wallet);
+    if (balance < sendUsdcDto.amount) {
+      throw new BadRequestException('Not enough USDC to send');
+    }
 
-    await session.withTransaction(async () => {
+    const senderPassword = (await this.getByUserId(sender._id.toString(), '+password')).password;
 
-      const balance: number = await this.apiService.getUSDCBalance(sender.wallet);
-      if (balance < sendAssetsDto.amount) {
-        throw new BadRequestException('Not enough USDC to send');
-      }
+    const fromPk = await this.apiService.getPK(sender.wallet, senderPassword);
+    const recipients = [
+      {
+        wallet: sendUsdcDto.recipient,
+        amount: sendUsdcDto.amount,
+      },
+    ];
 
-      const recipient = await this.getByUserId(sendAssetsDto.recipientId, undefined, session);
-      const senderPassword = (await this.getByUserId(sender._id.toString(), '+password', session)).password;
-
-      const fromPk = await this.apiService.getPK(sender.wallet, senderPassword);
-      const recipients: { wallet: string, amount: number }[] = new Array;
-      recipients.push({
-        wallet: recipient.wallet,
-        amount: sendAssetsDto.amount
-      });
-
-      this.apiService.transferUSDC(fromPk, recipients);
-
-    });
-    await session.endSession();
+    await this.apiService.transferUSDC(fromPk, recipients);
   }
 
 

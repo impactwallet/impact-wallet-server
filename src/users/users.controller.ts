@@ -15,6 +15,7 @@ import { Contribution } from '../contributions/schema/contribution.schema';
 import { ContributionsService } from '../contributions/contributions.service';
 import { ContributionsFilterDto } from '../contributions/dto/contributions-filter.dto';
 import { SendAssetsDto } from 'src/users/dto/send-assets.dto';
+import { SendUsdcDto } from './dto/send-usdc.dto';
 
 @ApiTags('Users')
 @Controller('users')
@@ -35,8 +36,8 @@ export class UsersController {
   @ApiMockHeader('If true wallet creation is skipped')
   createUser(
     @Body() createUserDto: CreateUserDto,
-    @UploadedFile() avatar,
-    @Headers('mock') mock
+      @UploadedFile() avatar,
+      @Headers('mock') mock
   ): Promise<CreateUserResponseDto> {
     return this.userService.createUser(createUserDto, avatar, mock === 'true');
   }
@@ -74,7 +75,7 @@ export class UsersController {
   @ApiResponse({ status: 200, type: [Contribution] })
   @Get(':userId/contributions')
   async getUserContributions(
-    @Param('userId') userId: string,
+  @Param('userId') userId: string,
     @Query(new ValidationPipe()) filter: ContributionsFilterDto,
     @Req() req: Request,
   ) {
@@ -89,7 +90,7 @@ export class UsersController {
   @ApiResponse({ status: 200 })
   @Get('/avatar/:fileName')
   async getUserAvatar(
-    @Param('fileName') fileName: string,
+  @Param('fileName') fileName: string,
     @Req() req: Request,
     @Res() res: Response,
   ) {
@@ -105,7 +106,7 @@ export class UsersController {
   @ApiResponse({ status: 200, type: Number })
   @Get('usdc/balance')
   async getUserBalance(
-    @Req() req: Request
+  @Req() req: Request
   ) {
     const user: User = await this.userService.getUserFromToken(req);
 
@@ -118,12 +119,12 @@ export class UsersController {
   @ApiResponse({ status: 200 })
   @Get('usdc/send')
   async sendUsdc(
-    @Body() sendAssetsDto: SendAssetsDto,
+  @Body() sendUsdcDto: SendUsdcDto,
     @Req() req: Request
   ) {
     const user: UserDocument = await this.userService.getUserFromToken(req);
 
-    return await this.userService.sendUsdc(user, sendAssetsDto);
+    return await this.userService.sendUsdc(user, sendUsdcDto);
   }
 
   @ApiOperation({ summary: 'Restore user' })
@@ -142,7 +143,7 @@ export class UsersController {
   @Post('assets/:orgId/send')
   @HttpCode(HttpStatus.OK)
   async sendAsset(
-    @Param('orgId') orgId: string,
+  @Param('orgId') orgId: string,
     @Body() sendAssetsDto: SendAssetsDto,
     @Req() req: Request,
   ) {
