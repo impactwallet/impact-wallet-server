@@ -26,6 +26,7 @@ import { MemberEquityDto } from '../members/dto/member-equity.dto';
 import { Payment } from '../payment/schema/payment.schema';
 import { ReceivePaymentDto } from '../payment/dto/receive-payment.dto';
 import { PaymentService } from '../payment/payment.service';
+import { SendUsdcDto } from '../users/dto/send-usdc.dto';
 
 @ApiTags('Orgs')
 @Controller('orgs')
@@ -255,7 +256,7 @@ export class OrgsController {
 
   @ApiOperation({ summary: 'Get orgs USDC balance' })
   @ApiResponse({ status: 200, type: Number })
-  @Get(':orgId/balance')
+  @Get(':orgId/usdc/balance')
   async getOrgBalance(
   @Param('orgId') orgId: string,
     @Req() req: Request,
@@ -265,5 +266,19 @@ export class OrgsController {
     return {
       balance: await this.orgsService.getOrgBalance(orgId),
     };
+  }
+
+  @ApiOperation({ summary: 'Send USDC from org' })
+  @ApiResponse({ status: 200 })
+  @Post(':orgId/usdc/send')
+  @HttpCode(HttpStatus.OK)
+  async sendUsdc(
+  @Body() sendUsdcDto: SendUsdcDto,
+    @Param('orgId') orgId: string,
+    @Req() req: Request
+  ) {
+    await this.usersService.getUserFromToken(req);
+
+    return this.orgsService.sendUsdc(orgId, sendUsdcDto);
   }
 }

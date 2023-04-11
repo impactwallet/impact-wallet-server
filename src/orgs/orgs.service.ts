@@ -19,6 +19,7 @@ import { MintInfoDto } from './dto/mint-info.dto';
 import { MintStatus } from './enum/mint-status';
 import { resizeBuffer } from '../utils/images';
 import { S3Service } from 'src/s3/s3.service';
+import { SendUsdcDto } from '../users/dto/send-usdc.dto';
 
 const MINT_STATUS_RETRIES = 5;
 
@@ -219,6 +220,25 @@ export class OrgsService {
   async getOrgBalance(orgId: string) {
     const org = await this.getByOrgId(orgId);
     return this.apiService.getUSDCBalance(org.wallet);
+  }
+
+  async sendUsdc(orgId: string, sendUsdcDto: SendUsdcDto) {
+    const org = await this.getByOrgId(orgId, '+password');
+    const balance: number = await this.apiService.getUSDCBalance(org.wallet);
+    if (balance < sendUsdcDto.amount) {
+      throw new BadRequestException('Not enough USDC to send');
+    }
+
+    const fromPk = await this.apiService.getPK(org.wallet, org.password);
+    const recipients = [
+      {
+        wallet: sendUsdcDto.recipient,
+        amount: sendUsdcDto.amount,
+      },
+    ];
+
+    const signature = await this.apiService.transferUSDC(fromPk, recipients);
+    this.apiService.sendNotification(`Org ${org.username} sent ${sendUsdcDto.amount} USDC to ${sendUsdcDto.recipient}\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
   }
 
 }
