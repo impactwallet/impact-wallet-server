@@ -32,9 +32,13 @@ export class MemberProspect {
   @Prop()
     monthlyCompensation: number;
 
-  @ApiProperty({ example: true })
-  @Prop({ default: true })
-    autoContribution: boolean;
+  @ApiProperty({ example: false, default: false })
+  @Prop({ default: false })
+    isAutoContributing: boolean;
+
+  @ApiProperty({ example: 40, default: 40 })
+  @Prop({ type: Number, default: 40, max: 112 })
+    hoursPerWeek: number;
 
   @Prop()
     agreement: string;

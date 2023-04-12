@@ -18,8 +18,11 @@ export class MemberProspectDto {
   @ApiProperty({ example: 3000 })
     monthlyCompensation: number;
 
-  @ApiProperty({ example: true })
-    autoContribution: boolean;
+  @ApiProperty({ example: false, default: false })
+    isAutoContributing: boolean;
+
+  @ApiProperty({ example: 40, default: 40, maximum: 112 })
+    hoursPerWeek: number;
 
   agreement: string;
 

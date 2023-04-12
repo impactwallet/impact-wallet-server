@@ -20,7 +20,10 @@ export class MemberDto {
     monthlyCompensation: number;
 
   @ApiProperty({ example: false, description: 'Auto contribution' })
-    autoContribution: boolean;
+    isAutoContributing: boolean;
+
+  @ApiProperty({ example: 40, default: 40, description: 'Hours per week', maximum: 112 })
+    hoursPerWeek: number;
 
   @ApiProperty({ example: 'agreement.pdf', description: 'Work agreement' })
     agreement: string;
