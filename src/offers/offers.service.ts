@@ -56,6 +56,9 @@ export class OffersService {
     if (!isNil(filters.status)) {
       query['status'] = filters.status;
     }
+    if (!isNil(filters.role)) {
+      query['memberProspect.role'] = filters.role;
+    }
     return this.offerRepository.find(query);
   }
 
