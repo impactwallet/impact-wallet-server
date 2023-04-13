@@ -130,10 +130,10 @@ export class UsersController {
 
   @ApiOperation({ summary: 'Restore user' })
   @ApiResponse({ status: 200, type: CreateUserResponseDto })
-  @Post(':secretLink/restore')
+  @Post('restore')
   @HttpCode(HttpStatus.OK)
   async restoreUser(
-    @Param('secretLink') secretLink: string,
+    @Body('secretLink') secretLink: string,
   ): Promise<CreateUserResponseDto> {
     return this.userService.restoreUser(secretLink);
   }

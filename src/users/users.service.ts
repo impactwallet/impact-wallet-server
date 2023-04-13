@@ -119,7 +119,6 @@ export class UsersService {
       wallet: user.wallet,
     };
     return {
-      //TODO return endpoint
       secretLink: `https://app.impactwallet.xyz/restore/${user.secretLink}`,
       token: this.jwtService.sign(payload),
     };
@@ -139,7 +138,7 @@ export class UsersService {
   }
 
   private async getBySecretLink(secretLink: string) {
-    const user = await this.userRepository.findOne({ secretLink }).exec();
+    const user = await this.userRepository.findOne({ secretLink }, '+secretLink');
     if (isNil(user)) {
       throw new NotFoundException('User not found');
     }
