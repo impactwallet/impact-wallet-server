@@ -3,7 +3,7 @@ import { HttpService } from '@nestjs/axios';
 import * as FormData from 'form-data';
 import { firstValueFrom } from 'rxjs';
 import { AxiosRequestConfig } from 'axios';
-import { Keypair, Transaction, Connection, clusterApiUrl, Cluster, PublicKey, TransactionSignature, LAMPORTS_PER_SOL, SystemProgram } from '@solana/web3.js';
+import { Keypair, Transaction, Connection, clusterApiUrl, Cluster, PublicKey, TransactionSignature, LAMPORTS_PER_SOL, SystemProgram, ParsedTransactionWithMeta } from '@solana/web3.js';
 import { getAssociatedTokenAddress, createTransferInstruction, createAssociatedTokenAccountInstruction, createMintToInstruction, getAssociatedTokenAddressSync, getAccount, TokenAccountNotFoundError, TokenInvalidAccountOwnerError } from '@solana/spl-token';
 import { decode } from 'bs58';
 import { get, isEmpty, truncate } from 'lodash';
@@ -159,7 +159,7 @@ export class ApiService {
       const toKeypair = Keypair.fromSecretKey(decode(walletPk));
       const rentExemptionAmount =
         await this.connection.getMinimumBalanceForRentExemption(space);
-      const USDCMintPublicKey = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
+      const USDCMintPublicKey = new PublicKey(this.usdcMint);
 
       const createAccountParams = {
         fromPubkey: new PublicKey(process.env.FEE_PAYER),
@@ -351,6 +351,29 @@ export class ApiService {
       console.log(JSON.stringify(get(err, 'response.data', err)));
       throw err;
     }
+  }
+
+  async getUSDCHistory(wallet: string): Promise<{
+    associatedAddress: PublicKey,
+    parsedTxns: ParsedTransactionWithMeta[],
+  }> {
+    if (!this.isMainnet) {
+      return { associatedAddress: new PublicKey(''), parsedTxns: [] };
+    }
+    const USDCMintPublicKey = new PublicKey(this.usdcMint);
+    const associatedAddress = await getAssociatedTokenAddress(
+      USDCMintPublicKey,
+      new PublicKey(wallet),
+    );
+    const txns = await this.connection.getSignaturesForAddress(associatedAddress);
+    const signatures = txns.map((txn) => txn.signature);
+    const parsedTxns = await this.connection.getParsedTransactions(signatures);
+    return { associatedAddress, parsedTxns };
+  }
+
+  async getAccountInfo(address: string) {
+    const accountInfo = await getAccount(this.connection, new PublicKey(address));
+    return accountInfo;
   }
 
   createSignedSerializedTxn(

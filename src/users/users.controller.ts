@@ -16,6 +16,7 @@ import { ContributionsService } from '../contributions/contributions.service';
 import { ContributionsFilterDto } from '../contributions/dto/contributions-filter.dto';
 import { SendAssetsDto } from 'src/users/dto/send-assets.dto';
 import { SendUsdcDto } from './dto/send-usdc.dto';
+import { TxnHistoryItemDto } from '../common/dto/txn-history-item.dto';
 
 @ApiTags('Users')
 @Controller('users')
@@ -113,6 +114,17 @@ export class UsersController {
     return {
       balance: await this.userService.getUserBalance(user),
     };
+  }
+
+  @ApiOperation({ summary: 'Get users USDC transactions history' })
+  @ApiResponse({ status: 200, type: TxnHistoryItemDto })
+  @Get('usdc/history')
+  async getUserUsdcHistory(
+  @Req() req: Request
+  ) {
+    const user: User = await this.userService.getUserFromToken(req);
+
+    return this.userService.getUserUsdcHistory(user);
   }
 
   @ApiOperation({ summary: 'Send USDC' })

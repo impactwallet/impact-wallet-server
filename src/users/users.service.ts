@@ -8,18 +8,24 @@ import { User, UserDocument } from './schema/user.schema';
 import { ApiService } from 'src/api-service/api.service';
 import { CreateUserResponseDto } from './dto/create-user.response.dto';
 import { UsersFilter } from './dto/users.filter.dto';
-import { get, isNil, omitBy } from 'lodash';
+import { flatten, get, isEmpty, isEqual, isNil, omitBy, set, toNumber } from 'lodash';
 import { SearchUserByNicknameDto } from './dto/search-user-by-nickname.dto';
 import { Request } from 'express';
 import { MembersService } from '../members/members.service';
 import { resizeBuffer } from '../utils/images';
 import { S3Service } from 'src/s3/s3.service';
 import { SendAssetsDto } from './dto/send-assets.dto';
-import { LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { LAMPORTS_PER_SOL, ParsedInstruction, ParsedTransactionWithMeta, PublicKey } from '@solana/web3.js';
 import { Member, MemberDocument } from 'src/members/schema/member.schema';
-import { OrgDocument } from 'src/orgs/schema/org.schema';
+import { Org, OrgDocument } from 'src/orgs/schema/org.schema';
 import { Role } from '../members/enum/roles.enum';
 import { SendUsdcDto } from './dto/send-usdc.dto';
+import { TxnHistoryItemDto } from '../common/dto/txn-history-item.dto';
+import { Payment, PaymentDocument } from '../payment/schema/payment.schema';
+import { PaymentType } from '../payment/enum/payment-type.enum';
+import { SaleOfferDocument } from '../offers/schema/sale-offer.schema';
+import { EntityFromTxnDto } from '../common/dto/entity-from-txn.dto';
+import { Account } from '@solana/spl-token';
 
 @Injectable()
 export class UsersService {
@@ -27,6 +33,8 @@ export class UsersService {
   constructor(
     @InjectModel(User.name) private userRepository: Model<UserDocument>,
     @InjectModel(Member.name) private memberRepository: Model<MemberDocument>,
+    @InjectModel(Org.name) private orgRepository: Model<OrgDocument>,
+    @InjectModel(Payment.name) private paymentRepository: Model<PaymentDocument>,
     @InjectConnection() private readonly connection: mongoose.Connection,
     private jwtService: JwtService,
     private apiService: ApiService,
@@ -177,6 +185,43 @@ export class UsersService {
     return this.apiService.getUSDCBalance(user.wallet);
   }
 
+  async getUserUsdcHistory(user: User): Promise<TxnHistoryItemDto[]> {
+    const { associatedAddress, parsedTxns } = await this.apiService.getUSDCHistory(user.wallet);
+    const history: TxnHistoryItemDto[] = [];
+    for (const txn of parsedTxns) {
+      const instructions = txn.transaction.message.instructions as ParsedInstruction[];
+      let historyItem: TxnHistoryItemDto;
+      for (const instruction of instructions) {
+        if (!isNil(historyItem) && historyItem.amount) break;
+        historyItem = {
+          amount: toNumber(get(instruction, 'parsed.info.amount', get(instruction, 'parsed.info.tokenAmount.amount', 0))),
+        };
+        const source = get(instruction, 'parsed.info.source', '');
+        if (isEqual(source.toString(), associatedAddress.toString())) {
+          historyItem.amount = -historyItem.amount;
+          historyItem.description = 'Sent';
+        }
+      }
+      const inAppEntity = await this._getEntityFromTxn(user, txn);
+      historyItem.addressOrUsername = get(inAppEntity, 'username');
+      historyItem.img = get(inAppEntity, 'img');
+      if (isNil(inAppEntity)) {
+        continue;
+      }
+      if (!isNil(inAppEntity.sale)) {
+        const org = inAppEntity.sale.org as OrgDocument;
+        historyItem.description = `Received for selling ${inAppEntity.sale.tokensAmount} Impact Shares of @${org.username}`;
+      } else if (!isNil(inAppEntity.org)) {
+        historyItem.description = 'Profit Share';
+      } else if (!isNil(inAppEntity.from)) {
+        historyItem.description = 'Received';
+      }
+      historyItem.processedAt = txn.blockTime * 1000;
+      history.push(historyItem);
+    }
+    return history;
+  }
+
   async sendUsdc(sender: UserDocument, sendUsdcDto: SendUsdcDto) {
     const balance: number = await this.apiService.getUSDCBalance(sender.wallet);
     if (balance < sendUsdcDto.amount) {
@@ -274,6 +319,60 @@ export class UsersService {
     }
 
     return this.userRepository.find(query);
+  }
+
+  async _getEntityFromTxn(user: User, txn: ParsedTransactionWithMeta)
+    : Promise<EntityFromTxnDto | null> {
+    const signature = txn.transaction.signatures[0];
+    const payment = await this.paymentRepository.findOne({
+      'cpResult.signature': signature,
+    }).populate(['sale.buyer', 'sale.org']);
+    if (!isNil(payment)) {
+      if (payment.type === PaymentType.AssetsSell) {
+        const buyer = payment.sale.buyer as UserDocument;
+        return {
+          username: buyer.nickname,
+          img: buyer.avatar,
+          sale: payment.sale,
+        };
+      }
+    }
+    const instructions = txn.transaction.message.instructions;
+    return instructions
+      .reduce<Promise<EntityFromTxnDto | null>>
+    (async (entity, instruction: ParsedInstruction) => {
+      if (!isNil(entity)) {
+        return entity;
+      }
+      const parsed = get(instruction, 'parsed');
+      const authority = get(parsed, 'info.authority', '');
+      const org = await this.orgRepository.findOne({ wallet: authority.toString() });
+      if (!isNil(org)) {
+        return { username: org.username, img: org.logo, org };
+      }
+      const destination = get(parsed, 'info.destination', '');
+      let accInfo: Account, owner: PublicKey;
+      if (!isEmpty(destination)) {
+        accInfo = await this.apiService.getAccountInfo(destination.toString());
+        owner = get(accInfo, 'owner');
+      }
+      if (isEqual(authority.toString(), user.wallet.toString())) {
+        const receiver = await this.userRepository.findOne({ wallet: owner.toString() });
+        if (!isNil(receiver)) {
+          return { username: receiver.nickname, img: receiver.avatar };
+        } else {
+          return { username: owner.toString() };
+        }
+      }
+      if (!isNil(owner) && isEqual(owner.toString(), user.wallet.toString())) {
+        const sender = await this.userRepository.findOne({ wallet: authority.toString() });
+        if (!isNil(sender)) {
+          return { username: sender.nickname, img: sender.avatar, from: sender };
+        } else {
+          return { username: authority.toString(), from: authority.toString() };
+        }
+      }
+    }, null);
   }
 
 }

@@ -37,7 +37,7 @@ export class OffersService {
         return res + get(member, 'investorSettings.equityAllocation', 0);
       }, 0);
       if (soldEquity + offer.memberProspect.investorSettings.equityAllocation > 100) {
-        throw new BadRequestException({ equityAllocation: `Only ${100 - soldEquity}% is available for sale` });
+        throw new BadRequestException({ equityAllocation: `Only ${100 - soldEquity}% is available to offer` });
       }
     }
     offer.org = orgId;
