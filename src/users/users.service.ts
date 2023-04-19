@@ -8,7 +8,7 @@ import { User, UserDocument } from './schema/user.schema';
 import { ApiService } from 'src/api-service/api.service';
 import { CreateUserResponseDto } from './dto/create-user.response.dto';
 import { UsersFilter } from './dto/users.filter.dto';
-import { flatten, get, isEmpty, isEqual, isNil, omitBy, set, toNumber } from 'lodash';
+import { get, isEmpty, isEqual, isNil, omitBy, toNumber } from 'lodash';
 import { SearchUserByNicknameDto } from './dto/search-user-by-nickname.dto';
 import { Request } from 'express';
 import { MembersService } from '../members/members.service';
@@ -23,9 +23,11 @@ import { SendUsdcDto } from './dto/send-usdc.dto';
 import { TxnHistoryItemDto } from '../common/dto/txn-history-item.dto';
 import { Payment, PaymentDocument } from '../payment/schema/payment.schema';
 import { PaymentType } from '../payment/enum/payment-type.enum';
-import { SaleOfferDocument } from '../offers/schema/sale-offer.schema';
+import { SaleOffer, SaleOfferDocument } from '../offers/schema/sale-offer.schema';
 import { EntityFromTxnDto } from '../common/dto/entity-from-txn.dto';
 import { Account } from '@solana/spl-token';
+import { Contribution, ContributionDocument } from '../contributions/schema/contribution.schema';
+import { areObjectIdsEqual } from '../utils/mongo';
 
 @Injectable()
 export class UsersService {
@@ -35,6 +37,8 @@ export class UsersService {
     @InjectModel(Member.name) private memberRepository: Model<MemberDocument>,
     @InjectModel(Org.name) private orgRepository: Model<OrgDocument>,
     @InjectModel(Payment.name) private paymentRepository: Model<PaymentDocument>,
+    @InjectModel(Contribution.name) private contributionRepository: Model<ContributionDocument>,
+    @InjectModel(SaleOffer.name) private saleOfferRepository: Model<SaleOfferDocument>,
     @InjectConnection() private readonly connection: mongoose.Connection,
     private jwtService: JwtService,
     private apiService: ApiService,
@@ -187,39 +191,16 @@ export class UsersService {
 
   async getUserUsdcHistory(user: User): Promise<TxnHistoryItemDto[]> {
     const { associatedAddress, parsedTxns } = await this.apiService.getUSDCHistory(user.wallet);
-    const history: TxnHistoryItemDto[] = [];
-    for (const txn of parsedTxns) {
-      const instructions = txn.transaction.message.instructions as ParsedInstruction[];
-      let historyItem: TxnHistoryItemDto;
-      for (const instruction of instructions) {
-        if (!isNil(historyItem) && historyItem.amount) break;
-        historyItem = {
-          amount: toNumber(get(instruction, 'parsed.info.amount', get(instruction, 'parsed.info.tokenAmount.amount', 0))),
-        };
-        const source = get(instruction, 'parsed.info.source', '');
-        if (isEqual(source.toString(), associatedAddress.toString())) {
-          historyItem.amount = -historyItem.amount;
-          historyItem.description = 'Sent';
-        }
-      }
-      const inAppEntity = await this._getEntityFromTxn(user, txn);
-      historyItem.addressOrUsername = get(inAppEntity, 'username');
-      historyItem.img = get(inAppEntity, 'img');
-      if (isNil(inAppEntity)) {
-        continue;
-      }
-      if (!isNil(inAppEntity.sale)) {
-        const org = inAppEntity.sale.org as OrgDocument;
-        historyItem.description = `Received for selling ${inAppEntity.sale.tokensAmount} Impact Shares of @${org.username}`;
-      } else if (!isNil(inAppEntity.org)) {
-        historyItem.description = 'Profit Share';
-      } else if (!isNil(inAppEntity.from)) {
-        historyItem.description = 'Received';
-      }
-      historyItem.processedAt = txn.blockTime * 1000;
-      history.push(historyItem);
+    return this._buildUsdcHistory(user, associatedAddress, parsedTxns);
+  }
+
+  async getUserAssetHistory(user: UserDocument, orgId: string) {
+    const org = await this.orgRepository.findById(orgId);
+    if (isNil(org)) {
+      throw new NotFoundException('Organization not found');
     }
-    return history;
+    const { associatedAddress, parsedTxns } = await this.apiService.getTokenHistory(user.wallet, org.mint);
+    return this._buildAssetHistory(user, associatedAddress, parsedTxns);
   }
 
   async sendUsdc(sender: UserDocument, sendUsdcDto: SendUsdcDto) {
@@ -321,31 +302,156 @@ export class UsersService {
     return this.userRepository.find(query);
   }
 
+  _getTxnAmount(txn: ParsedTransactionWithMeta, associatedAddress: PublicKey) {
+    let amount = 0;
+    let description = 'Received';
+    const instructions = txn.transaction.message.instructions as ParsedInstruction[];
+    for (const instruction of instructions) {
+      if (amount) break;
+      amount = toNumber(
+        get(instruction, 'parsed.info.amount', get(instruction, 'parsed.info.tokenAmount.amount', 0)),
+      );
+      const source = get(instruction, 'parsed.info.source', '');
+      if (isEqual(source.toString(), associatedAddress.toString())) {
+        amount = -amount;
+        description = 'Sent';
+      }
+    }
+    return { amount, description };
+  }
+
+  async _buildAssetHistory(
+    user: UserDocument,
+    associatedAddress: PublicKey,
+    parsedTxns: ParsedTransactionWithMeta[],
+  ): Promise<TxnHistoryItemDto[]> {
+    const history: TxnHistoryItemDto[] = [];
+    for (const txn of parsedTxns) {
+      if (!isNil(txn.meta.err)) {
+        continue;
+      }
+      const signature = txn.transaction.signatures[0];
+      let historyItems: TxnHistoryItemDto[] = [];
+      const inAppEntity = await this._getEntityFromTxn(user, txn);
+      if (isNil(inAppEntity)) {
+        continue;
+      }
+      if (!isNil(inAppEntity.org)) {
+        let isInvestor = false;
+        const contribution = await this.contributionRepository
+          .findOne({ txnHash: signature })
+          .populate({ path: 'split.member', populate: { path: 'user' } });
+        contribution.split.forEach((split) => {
+          const item: TxnHistoryItemDto = {};
+          const member = split.member as MemberDocument;
+          const memberUser = member.user as UserDocument;
+          const equityAllocation = get(member, 'investorSettings.equityAllocation');
+          item.amount = split.amount;
+          item.img = memberUser.avatar;
+          item.addressOrUsername = memberUser.nickname;
+          if (areObjectIdsEqual(member.user, user._id)) {
+            let description = 'Earned';
+            if (member.role == Role.Investor) {
+              description = `Received for ${equityAllocation}% of equity allocation`;
+              isInvestor = true;
+            }
+            item.description = description;
+            historyItems = isInvestor ? [item] : [...historyItems, item];
+          } else if (!isInvestor) {
+            item.amount = -item.amount;
+            item.description = `Sent for ${equityAllocation}% of equity allocation`;
+            historyItems.unshift(item);
+          }
+        });
+      } else if (!isNil(inAppEntity.sale)) {
+        const { amount } = this._getTxnAmount(txn, associatedAddress);
+        const user = (amount < 0 ? inAppEntity.sale.buyer : inAppEntity.sale.seller) as UserDocument;
+        const historyItem: TxnHistoryItemDto = {
+          amount,
+          addressOrUsername: user.nickname,
+          img: user.avatar,
+          description: `${amount < 0 ? 'Sold' : 'Bought'} for $${inAppEntity.sale.price}`,
+        };
+        historyItems.push(historyItem);
+      } else {
+        const historyItem: TxnHistoryItemDto = {
+          addressOrUsername: get(inAppEntity, 'username'),
+          img: get(inAppEntity, 'img'),
+        };
+        const { amount, description } = this._getTxnAmount(txn, associatedAddress);
+        historyItem.amount = amount;
+        historyItem.description = description;
+        historyItems.push(historyItem);
+      }
+      history.push(...historyItems);
+    }
+    return history;
+  }
+
+  async _buildUsdcHistory(
+    user: User,
+    associatedAddress: PublicKey,
+    parsedTxns: ParsedTransactionWithMeta[],
+  ): Promise<TxnHistoryItemDto[]> {
+    const history: TxnHistoryItemDto[] = [];
+    for (const txn of parsedTxns) {
+      if (!isNil(txn.meta.err)) {
+        continue;
+      }
+      const { amount, description } = this._getTxnAmount(txn, associatedAddress);
+      const historyItem: TxnHistoryItemDto = {
+        amount,
+        description,
+      };
+      const inAppEntity = await this._getEntityFromTxn(user, txn);
+      historyItem.addressOrUsername = get(inAppEntity, 'username');
+      historyItem.img = get(inAppEntity, 'img');
+      if (isNil(inAppEntity)) {
+        continue;
+      }
+      if (!isNil(inAppEntity.sale)) {
+        const org = inAppEntity.sale.org as OrgDocument;
+        historyItem.description = `Received for selling ${inAppEntity.sale.tokensAmount} Impact Shares of @${org.username}`;
+      } else if (!isNil(inAppEntity.org)) {
+        historyItem.description = 'Profit Share';
+      } else if (!isNil(inAppEntity.from)) {
+        historyItem.description = 'Received';
+      }
+      historyItem.processedAt = txn.blockTime * 1000;
+      history.push(historyItem);
+    }
+    return history;
+  }
+
   async _getEntityFromTxn(user: User, txn: ParsedTransactionWithMeta)
     : Promise<EntityFromTxnDto | null> {
     const signature = txn.transaction.signatures[0];
     const payment = await this.paymentRepository.findOne({
       'cpResult.signature': signature,
-    }).populate(['sale.buyer', 'sale.org']);
-    if (!isNil(payment)) {
-      if (payment.type === PaymentType.AssetsSell) {
-        const buyer = payment.sale.buyer as UserDocument;
-        return {
-          username: buyer.nickname,
-          img: buyer.avatar,
-          sale: payment.sale,
-        };
-      }
+    }).populate(['sale.buyer', 'sale.org', 'sale.seller']);
+    let sale: SaleOfferDocument;
+    if (!isNil(payment) && payment.type === PaymentType.AssetsSell) {
+      sale = payment.sale;
+    } else {
+      sale = await this.saleOfferRepository.findOne({ txnHash: signature }).populate(['buyer', 'seller']);
+    }
+    if (!isNil(sale)) {
+      const buyer = sale.buyer as UserDocument;
+      return {
+        username: buyer.nickname,
+        img: buyer.avatar,
+        sale,
+      };
     }
     const instructions = txn.transaction.message.instructions;
     return instructions
       .reduce<Promise<EntityFromTxnDto | null>>
     (async (entity, instruction: ParsedInstruction) => {
-      if (!isNil(entity)) {
+      if (!isNil(await entity)) {
         return entity;
       }
       const parsed = get(instruction, 'parsed');
-      const authority = get(parsed, 'info.authority', '');
+      const authority = get(parsed, 'info.authority', get(parsed, 'info.mintAuthority', ''));
       const org = await this.orgRepository.findOne({ wallet: authority.toString() });
       if (!isNil(org)) {
         return { username: org.username, img: org.logo, org };

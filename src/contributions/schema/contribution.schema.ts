@@ -45,7 +45,7 @@ export class Contribution {
   @Prop({ type: Date, default: null })
     stoppedAt: Date;
 
-  @ApiProperty({ example: 'base64 string' })
+  @ApiProperty({ example: 'Transaction signature' })
   @Prop({ type: String })
     txnHash: string;
 

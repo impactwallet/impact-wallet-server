@@ -164,4 +164,16 @@ export class UsersController {
 
     return this.userService.sendAssets(sendAssetsDto, sender, orgId);
   }
+
+  @ApiOperation({ summary: 'Get users asset transactions history' })
+  @ApiResponse({ status: 200, type: TxnHistoryItemDto })
+  @Get('assets/:orgId/history')
+  async getUserAssetHistory(
+  @Param('orgId') orgId: string,
+    @Req() req: Request
+  ) {
+    const user = await this.userService.getUserFromToken(req);
+
+    return this.userService.getUserAssetHistory(user, orgId);
+  }
 }

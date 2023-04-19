@@ -353,6 +353,21 @@ export class ApiService {
     }
   }
 
+  async getTokenHistory(wallet: string, mint: string): Promise<{
+    associatedAddress: PublicKey,
+    parsedTxns: ParsedTransactionWithMeta[],
+  }> {
+    const mintPublicKey = new PublicKey(mint);
+    const associatedAddress = await getAssociatedTokenAddress(
+      mintPublicKey,
+      new PublicKey(wallet),
+    );
+    const txns = await this.connection.getSignaturesForAddress(associatedAddress);
+    const signatures = txns.map((txn) => txn.signature);
+    const parsedTxns = await this.connection.getParsedTransactions(signatures);
+    return { associatedAddress, parsedTxns };
+  }
+
   async getUSDCHistory(wallet: string): Promise<{
     associatedAddress: PublicKey,
     parsedTxns: ParsedTransactionWithMeta[],
@@ -360,15 +375,7 @@ export class ApiService {
     if (!this.isMainnet) {
       return { associatedAddress: new PublicKey(''), parsedTxns: [] };
     }
-    const USDCMintPublicKey = new PublicKey(this.usdcMint);
-    const associatedAddress = await getAssociatedTokenAddress(
-      USDCMintPublicKey,
-      new PublicKey(wallet),
-    );
-    const txns = await this.connection.getSignaturesForAddress(associatedAddress);
-    const signatures = txns.map((txn) => txn.signature);
-    const parsedTxns = await this.connection.getParsedTransactions(signatures);
-    return { associatedAddress, parsedTxns };
+    return this.getTokenHistory(wallet, this.usdcMint);
   }
 
   async getAccountInfo(address: string) {
