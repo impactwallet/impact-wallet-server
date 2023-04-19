@@ -13,7 +13,7 @@ import { ReceiveInvestmentDto } from './dto/receive-investment.dto';
 import { ReceivePaymentDto } from './dto/receive-payment.dto';
 import { PaymentType } from './enum/payment-type.enum';
 import { Payment, PaymentDocument } from './schema/payment.schema';
-import { SaleOfferDocument } from '../offers/schema/sale-offer.schema';
+import { SaleOffer, SaleOfferDocument } from '../offers/schema/sale-offer.schema';
 import { SellAssetsDto } from './dto/sale-assets.dto';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { Role } from '../members/enum/roles.enum';
@@ -24,6 +24,7 @@ export class PaymentService {
   constructor(
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
     @InjectModel(Member.name) private memberModel: Model<MemberDocument>,
+    @InjectModel(SaleOffer.name) private saleOfferModel: Model<SaleOfferDocument>,
     @InjectConnection() private readonly connection: mongoose.Connection,
     private candypayService: CandyPayService,
     private apiService: ApiService,
@@ -209,6 +210,12 @@ export class PaymentService {
 
       const fromPk = await this.apiService.getPK(memberUser.wallet, memberUser.password);
       const signature = await this.apiService.transfer(fromPk, org.mint, [{wallet: buyer.wallet, amount: payment.sale.tokensAmount }]);
+
+      await this.saleOfferModel.findOneAndUpdate(
+        { _id: payment.sale._id },
+        { $set: { txnHash: signature } },
+        { session },
+      );
 
       const buyerMember = await this.memberModel.findOne({
         user: buyer._id,

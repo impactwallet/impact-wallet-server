@@ -5,11 +5,15 @@ import { Member, MemberSchema } from '../members/schema/member.schema';
 import { PaymentController } from './payment.controller';
 import { PaymentService } from './payment.service';
 import { Payment, PaymentSchema } from './schema/payment.schema';
+import { SaleOffer, SaleOfferSchema } from '../offers/schema/sale-offer.schema';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: Payment.name, schema: PaymentSchema }]),
-    MongooseModule.forFeature([{ name: Member.name, schema: MemberSchema }]),
+    MongooseModule.forFeature([
+      { name: Payment.name, schema: PaymentSchema },
+      { name: Member.name, schema: MemberSchema },
+      { name: SaleOffer.name, schema: SaleOfferSchema },
+    ]),
     ApiServiceModule,
   ],
   providers: [PaymentService],

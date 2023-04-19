@@ -32,6 +32,10 @@ export class SaleOffer {
   @ApiProperty({ example: 'ID or object', description: 'The buyer', required: false })
   @Prop({ required: function() { return this.status === OfferStatus.Approved; }, type: mongoose.Schema.Types.ObjectId, ref: 'User' })
     buyer?: mongoose.Types.ObjectId | UserDocument;
+
+  @ApiProperty({ example: 'Transaction signature' })
+  @Prop({ type: String })
+    txnHash: string;
 }
 
 export const SaleOfferSchema = SchemaFactory.createForClass(SaleOffer);
