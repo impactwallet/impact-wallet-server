@@ -308,11 +308,17 @@ export class UsersService {
     const instructions = txn.transaction.message.instructions as ParsedInstruction[];
     for (const instruction of instructions) {
       if (amount) break;
+      const source = get(instruction, 'parsed.info.source', '');
+      const destination = get(instruction, 'parsed.info.destination', '');
+      const isSent = isEqual(source.toString(), associatedAddress.toString());
+      const isReceived = isEqual(destination.toString(), associatedAddress.toString());
+      if (!isSent && !isReceived) {
+        continue;
+      }
       amount = toNumber(
         get(instruction, 'parsed.info.amount', get(instruction, 'parsed.info.tokenAmount.amount', 0)),
       );
-      const source = get(instruction, 'parsed.info.source', '');
-      if (isEqual(source.toString(), associatedAddress.toString())) {
+      if (isSent) {
         amount = -amount;
         description = 'Sent';
       }
@@ -330,7 +336,6 @@ export class UsersService {
       if (!isNil(txn.meta.err)) {
         continue;
       }
-      const signature = txn.transaction.signatures[0];
       let historyItems: TxnHistoryItemDto[] = [];
       const inAppEntity = await this._getEntityFromTxn(user, txn);
       if (isNil(inAppEntity)) {
@@ -339,10 +344,15 @@ export class UsersService {
       if (!isNil(inAppEntity.org)) {
         let isInvestor = false;
         const contribution = await this.contributionRepository
-          .findOne({ txnHash: signature })
-          .populate({ path: 'split.member', populate: { path: 'user' } });
+          .findOne({ txnHash: { $in: txn.transaction.signatures } })
+          .populate([
+            { path: 'member', populate: { path: 'user' } },
+            { path: 'split.member', populate: { path: 'user' } },
+          ]);
         contribution.split.forEach((split) => {
           const item: TxnHistoryItemDto = {};
+          const contributionMember = contribution.member as MemberDocument;
+          const contributionUser = contributionMember.user as UserDocument;
           const member = split.member as MemberDocument;
           const memberUser = member.user as UserDocument;
           const equityAllocation = get(member, 'investorSettings.equityAllocation');
@@ -350,10 +360,15 @@ export class UsersService {
           item.img = memberUser.avatar;
           item.addressOrUsername = memberUser.nickname;
           if (areObjectIdsEqual(member.user, user._id)) {
-            let description = 'Earned';
+            let description: string;
             if (member.role == Role.Investor) {
               description = `Received for ${equityAllocation}% of equity allocation`;
+              item.img = contributionUser.avatar;
+              item.addressOrUsername = contributionUser.nickname;
               isInvestor = true;
+            } else {
+              description = 'Earned';
+              item.amount = contribution.lamportsEarned;
             }
             item.description = description;
             historyItems = isInvestor ? [item] : [...historyItems, item];
@@ -425,15 +440,16 @@ export class UsersService {
 
   async _getEntityFromTxn(user: User, txn: ParsedTransactionWithMeta)
     : Promise<EntityFromTxnDto | null> {
-    const signature = txn.transaction.signatures[0];
     const payment = await this.paymentRepository.findOne({
-      'cpResult.signature': signature,
+      'cpResult.signature': { $in: txn.transaction.signatures },
     }).populate(['sale.buyer', 'sale.org', 'sale.seller']);
     let sale: SaleOfferDocument;
     if (!isNil(payment) && payment.type === PaymentType.AssetsSell) {
       sale = payment.sale;
     } else {
-      sale = await this.saleOfferRepository.findOne({ txnHash: signature }).populate(['buyer', 'seller']);
+      sale = await this.saleOfferRepository
+        .findOne({ txnHash: { $in: txn.transaction.signatures } })
+        .populate(['buyer', 'seller']);
     }
     if (!isNil(sale)) {
       const buyer = sale.buyer as UserDocument;
