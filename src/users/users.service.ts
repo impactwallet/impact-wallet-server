@@ -398,6 +398,9 @@ export class UsersService {
         historyItem.description = description;
         historyItems.push(historyItem);
       }
+      historyItems.forEach((item) => {
+        item.processedAt = txn.blockTime * 1000;
+      });
       history.push(...historyItems);
     }
     return history;
