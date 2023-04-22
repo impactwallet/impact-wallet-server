@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, HttpException, Injectable, NotF
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { get, isEmpty, isNil, truncate } from 'lodash';
 import { v4 as uuid } from 'uuid';
-import mongoose, { ClientSession, Model, Types } from 'mongoose';
+import mongoose, { ClientSession, Model, PipelineStage, Types } from 'mongoose';
 import { ApiService } from 'src/api-service/api.service';
 import { UsersService } from 'src/users/users.service';
 import { CreateOrgDto } from './dto/create-org.dto';
@@ -16,10 +16,12 @@ import { OrgUsernameFilter } from './dto/org-username.filter.dto';
 import { MemberEquityDto } from '../members/dto/member-equity.dto';
 import { delay, firstValueFrom, of } from 'rxjs';
 import { MintInfoDto } from './dto/mint-info.dto';
-import { MintStatus } from './enum/mint-status';
+import { MintStatus } from './enum/mint-status.enum';
 import { resizeBuffer } from '../utils/images';
 import { S3Service } from 'src/s3/s3.service';
 import { SendUsdcDto } from '../users/dto/send-usdc.dto';
+import { Role } from '../members/enum/roles.enum';
+import { OrgHistoryItemAction } from './enum/org-history-item-action.enum';
 
 const MINT_STATUS_RETRIES = 5;
 
@@ -108,6 +110,105 @@ export class OrgsService {
       .session(session);
     if (!org) throw new NotFoundException('Organization not found');
     return org;
+  }
+
+  async getOrgHistory(orgId: string) {
+    const pipelines: PipelineStage[] = [
+      {
+        $match: { _id: new Types.ObjectId(orgId) },
+      },
+      { $skip: 1 },
+      {
+        $unionWith: {
+          coll: 'members',
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$org', new Types.ObjectId(orgId)] },
+                    { $ne: ['$role', Role.Investor] },
+                  ],
+                },
+              },
+            },
+            {
+              $lookup: {
+                from: 'users',
+                localField: 'user',
+                foreignField: '_id',
+                as: 'user',
+              },
+            },
+            {
+              $addFields: {
+                user: { $arrayElemAt: ['$user', 0] },
+                action: OrgHistoryItemAction.Joined,
+              },
+            },
+          ],
+        },
+      },
+      {
+        $unionWith: {
+          coll: 'contributions',
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$org', new Types.ObjectId(orgId)] },
+                    { $ne: ['$stoppedAt', null] },
+                  ],
+                },
+              },
+            },
+            {
+              $lookup: {
+                from: 'members',
+                let: { member: '$member' },
+                pipeline: [
+                  { $match: { $expr: { $eq: ['$_id', '$$member'] } }},
+                  {
+                    $lookup: {
+                      from: 'users',
+                      localField: 'user',
+                      foreignField: '_id',
+                      as: 'user',
+                    },
+                  },
+                  {
+                    $addFields: {
+                      user: { $arrayElemAt: ['$user', 0] },
+                    },
+                  },
+                ],
+                as: 'member',
+              },
+            },
+            {
+              $addFields: {
+                user: { $arrayElemAt: ['$member.user', 0] },
+                action: OrgHistoryItemAction.Contributed,
+              },
+            },
+          ],
+        },
+      },
+      {
+        $project: {
+          'user.nickname': 1,
+          'user.avatar': 1,
+          createdAt: 1,
+          stoppedAt: 1,
+          action: 1,
+          date: { $ifNull: ['$stoppedAt', '$createdAt'] },
+        },
+      },
+      { $sort: { date: -1 } },
+      { $limit: 10 },
+    ];
+    return this.orgRepository.aggregate(pipelines);
   }
 
   private getOrgsWithFilter(queryParams: OrgsFilter) {

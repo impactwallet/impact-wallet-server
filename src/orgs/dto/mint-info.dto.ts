@@ -1,4 +1,4 @@
-import { MintStatus } from '../enum/mint-status';
+import { MintStatus } from '../enum/mint-status.enum';
 
 export class MintInfoDto {
   mint: string;

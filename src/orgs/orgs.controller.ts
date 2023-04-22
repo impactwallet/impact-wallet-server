@@ -82,6 +82,14 @@ export class OrgsController {
     return this.orgsService.getByOrgId(orgId);
   }
 
+  @ApiOperation({ summary: 'Get organization events history' })
+  @ApiResponse({ status: 200, type: [Org] })
+  @Get(':orgId/history')
+  async getOrgHistory(@Param('orgId') orgId: string, @Req() req: Request) {
+    await this.usersService.getUserFromToken(req);
+    return this.orgsService.getOrgHistory(orgId);
+  }
+
   @ApiOperation({ summary: 'Add member to organization' })
   @ApiResponse({ status: 200, type: Member })
   @Post(':orgId/members')
