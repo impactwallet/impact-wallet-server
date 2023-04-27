@@ -47,6 +47,9 @@ export class Payment {
   @Prop({ type: mongoose.Schema.Types.Mixed })
     cpResult: any;
 
+  @ApiProperty({ description: 'Transaction hash for in-app payments' })
+  @Prop({ type: String })
+    txnHash: string;
 }
 
 export const PaymentSchema = SchemaFactory.createForClass(Payment);

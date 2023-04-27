@@ -178,7 +178,7 @@ export class OrgsController {
       throw new NotFoundException({ message: 'Organization not found' });
     }
 
-    return this.offersService.updateOfferStatus(org, offerId, body, user);
+    return this.offersService.updateOfferStatus(org, offerId, body, user._id.toString());
   }
 
   @ApiOperation({ summary: 'Start contribution' })

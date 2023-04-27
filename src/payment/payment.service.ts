@@ -57,7 +57,7 @@ export class PaymentService {
     return newPayment;
   }
 
-  async receiveInvestment(org: OrgDocument, member: MemberProspect, body: ReceiveInvestmentDto, session?: ClientSession) {
+  async receiveInvestmentCandyPay(org: OrgDocument, member: MemberProspect, body: ReceiveInvestmentDto, session?: ClientSession) {
     const newPayment = new this.paymentModel({
       type: PaymentType.Investment,
       org: org._id,
@@ -81,6 +81,21 @@ export class PaymentService {
     await newPayment.save({ session });
 
     return newPayment;
+  }
+
+  receiveInvestmentInApp(
+    member: MemberProspect,
+    org: OrgDocument,
+    body: ReceiveInvestmentDto,
+  ) {
+    const newPayment = new this.paymentModel({
+      type: PaymentType.Investment,
+      org: org._id,
+      amount: body.amount,
+      investor: member,
+    });
+
+    return newPayment.save();
   }
 
   async sellAssets(saleOffer: SaleOfferDocument, body: SellAssetsDto) {
@@ -134,13 +149,13 @@ export class PaymentService {
       const signature = await this._handleRegularPayment(org, body);
       console.log('signature:', signature);
     } else if (payment.type === PaymentType.Investment) {
-      await this._handleInvestmentPayment(org, payment, body);
+      await this.handleInvestmentPayment(org, payment, body);
     } else if (payment.type === PaymentType.AssetsSell) {
       await this._handleAssetsSale(payment);
     }
   }
 
-  async _handleInvestmentPayment(org: OrgDocument, payment: PaymentDocument, body: any) {
+  async handleInvestmentPayment(org: OrgDocument, payment: PaymentDocument, body: { signature: string }) {
     const member = await this.memberModel.findOne({
       org: org._id,
       user: payment.investor.user,

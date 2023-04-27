@@ -7,6 +7,7 @@ import { Offer, OfferSchema } from './schema/offer.schema';
 import { SaleOffer, SaleOfferSchema } from './schema/sale-offer.schema';
 import { OffersController } from './offers.controller';
 import { UsersModule } from '../users/users.module';
+import { ApiServiceModule } from '../api-service/api.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { UsersModule } from '../users/users.module';
     ]),
     PaymentModule,
     UsersModule,
+    ApiServiceModule,
   ],
   controllers: [OffersController],
   providers: [OffersService],

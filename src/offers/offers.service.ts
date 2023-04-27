@@ -1,12 +1,12 @@
 import { BadRequestException, ForbiddenException, HttpException, Injectable, NotFoundException } from '@nestjs/common';
-import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { InjectModel } from '@nestjs/mongoose';
 import { get, isNil } from 'lodash';
 import mongoose, { ClientSession, Model, Types } from 'mongoose';
 import { Role } from '../members/enum/roles.enum';
 import { Member, MemberDocument } from '../members/schema/member.schema';
 import { OrgDocument } from '../orgs/schema/org.schema';
 import { PaymentService } from '../payment/payment.service';
-import { Payment } from '../payment/schema/payment.schema';
+import { Payment, PaymentDocument } from '../payment/schema/payment.schema';
 import { UserDocument } from '../users/schema/user.schema';
 import { OfferFiltersDto } from './dto/offer-filters.dto';
 import { OfferStatusBodyDto, OfferStatusDto } from './dto/offer-status.dto';
@@ -16,6 +16,8 @@ import { OfferStatus } from './enum/statuses.enum';
 import { Offer, OfferDocument } from './schema/offer.schema';
 import { SaleOffer, SaleOfferDocument } from './schema/sale-offer.schema';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { ApiService } from '../api-service/api.service';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class OffersService {
@@ -23,8 +25,9 @@ export class OffersService {
     @InjectModel(Offer.name) private offerRepository: Model<OfferDocument>,
     @InjectModel(Member.name) private memberRepository: Model<MemberDocument>,
     @InjectModel(SaleOffer.name) private saleOfferRepository: Model<SaleOfferDocument>,
-    @InjectConnection() private readonly connection: mongoose.Connection,
     private readonly paymentService: PaymentService,
+    private readonly apiService: ApiService,
+    private readonly userService: UsersService,
   ) {}
 
   async createOffer(orgId: string, offer: OfferDto) {
@@ -74,43 +77,50 @@ export class OffersService {
     return offer;
   }
 
-  async updateOfferStatus(org: OrgDocument, offerId: string, body: OfferStatusBodyDto, user: UserDocument) {
+  async updateOfferStatus(org: OrgDocument, offerId: string, body: OfferStatusBodyDto, userId: string) {
+    let payment: PaymentDocument;
+    const offer = await this.getOrgOfferById(org._id.toString(), offerId);
 
-    let payment: Payment;
-    const session = await this.connection.startSession();
-    await session.withTransaction(async () => {
-      const offer = await this.getOrgOfferById(org._id.toString(), offerId, session);
+    if (offer.status !== OfferStatus.Pending) {
+      throw new ForbiddenException('Offer already accepted/declined');
+    }
 
-      if (offer.status !== OfferStatus.Pending) {
-        throw new ForbiddenException('Offer already accepted/declined');
-      }
+    const user = await this.userService.getByUserId(userId, '+password');
   
-      switch (body.status) {
-      case OfferStatusDto.accepted:
-        offer.status = OfferStatus.Approved;
-        offer.memberProspect.user = user._id.toString();
-        offer.memberProspect.org = org._id.toString();
+    switch (body.status) {
+    case OfferStatusDto.accepted:
+      offer.status = OfferStatus.Approved;
+      offer.memberProspect.user = user._id.toString();
+      offer.memberProspect.org = org._id.toString();
 
-        if (offer.memberProspect.role === Role.Investor) {
-          const paymentInfo = {
-            info: `Investing $${offer.memberProspect.investorSettings.investmentAmount} for ${offer.memberProspect.investorSettings.equityAllocation}% of equity allocation`,
-            amount: offer.memberProspect.investorSettings.investmentAmount,
-          };
-          payment = await this.paymentService.receiveInvestment(org, offer.memberProspect, paymentInfo, session);
-        } else { 
-          const newMember = new this.memberRepository(offer.memberProspect.toObject());
-
-          await newMember.save({ session });
+      if (offer.memberProspect.role === Role.Investor) {
+        const balance = await this.apiService.getUSDCBalance(user.wallet);
+        const paymentInfo = {
+          info: `Investing $${offer.memberProspect.investorSettings.investmentAmount} for ${offer.memberProspect.investorSettings.equityAllocation}% of equity allocation`,
+          amount: offer.memberProspect.investorSettings.investmentAmount,
+        };
+        if (balance < paymentInfo.amount) {
+          throw new BadRequestException({ message: 'Insufficient funds' });
         }
-        break;
-      case OfferStatusDto.declined:
-        offer.status = OfferStatus.Declined;
-        break;
+        payment = await this.paymentService.receiveInvestmentInApp(offer.memberProspect, org, paymentInfo);
+        const pk = await this.apiService.getPK(user.wallet, user.password);
+        const txnHash = await this.apiService.transferUSDC(pk, [{ wallet: org.wallet, amount: payment.amount }]);
+
+        payment.txnHash = txnHash;
+        await payment.save();
+        await this.paymentService.handleInvestmentPayment(org, payment, { signature: txnHash });
+      } else {
+        const newMember = new this.memberRepository(offer.memberProspect.toObject());
+
+        await newMember.save();
       }
+      break;
+    case OfferStatusDto.declined:
+      offer.status = OfferStatus.Declined;
+      break;
+    }
   
-      await offer.save({ session });
-    });
-    await session.endSession();
+    await offer.save();
 
     return payment;
   }
