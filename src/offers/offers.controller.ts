@@ -53,6 +53,6 @@ export class OffersController {
   ) {
     const user = await this.userService.getUserFromToken(req);
 
-    return this.offerService.updateSaleOfferStatus(offerId, body, user);
+    return this.offerService.updateSaleOfferStatus(offerId, body, user._id.toString());
   }
 }

@@ -124,6 +124,16 @@ export class PaymentService {
     return newPayment.save();
   }
 
+  sellAssetsInApp(saleOffer: SaleOfferDocument, body: SellAssetsDto) {
+    const newPayment = new this.paymentModel({
+      type: PaymentType.AssetsSell,
+      amount: body.price,
+      sale: saleOffer,
+    });
+
+    return newPayment.save();
+  }
+
   async handlePayment(headers: any, body: any) {
     try {
       await verifyWebhookSignature({
@@ -151,7 +161,7 @@ export class PaymentService {
     } else if (payment.type === PaymentType.Investment) {
       await this.handleInvestmentPayment(org, payment, body);
     } else if (payment.type === PaymentType.AssetsSell) {
-      await this._handleAssetsSale(payment);
+      await this.handleAssetsSale(payment);
     }
   }
 
@@ -206,60 +216,50 @@ export class PaymentService {
     return signature;
   }
 
-  async _handleAssetsSale(payment: PaymentDocument) {
-    const session = await this.connection.startSession();
-    await session.withTransaction(async () => {
-      const member = await this.memberModel.findOne({
-        user: payment.sale.seller,
-        org: payment.sale.org,
-      }).populate({ path: 'user', select: '+password' }).session(session);
-      const memberUser = member.user as UserDocument;
-      await payment.populate(['sale.org', 'sale.buyer']);
-      const org = payment.sale.org as OrgDocument;
-      const buyer = payment.sale.buyer as UserDocument;
-      const lamportsAmount = payment.sale.tokensAmount * LAMPORTS_PER_SOL;
+  async handleAssetsSale(payment: PaymentDocument) {
+    const member = await this.memberModel.findOne({
+      user: payment.sale.seller,
+      org: payment.sale.org,
+    }).populate({ path: 'user', select: '+password' });
+    const memberUser = member.user as UserDocument;
+    await payment.populate(['sale.org', 'sale.buyer']);
+    const org = payment.sale.org as OrgDocument;
+    const buyer = payment.sale.buyer as UserDocument;
+    const lamportsAmount = payment.sale.tokensAmount * LAMPORTS_PER_SOL;
 
-      if (member.lamportsEarned < lamportsAmount) {
-        throw new BadRequestException('Not enough tokens to sell');
-      }
+    const fromPk = await this.apiService.getPK(memberUser.wallet, memberUser.password);
+    const signature = await this.apiService.transfer(fromPk, org.mint, [{wallet: buyer.wallet, amount: payment.sale.tokensAmount }]);
 
-      const fromPk = await this.apiService.getPK(memberUser.wallet, memberUser.password);
-      const signature = await this.apiService.transfer(fromPk, org.mint, [{wallet: buyer.wallet, amount: payment.sale.tokensAmount }]);
+    await this.saleOfferModel.findOneAndUpdate(
+      { _id: payment.sale._id },
+      { $set: { txnHash: signature } },
+    );
 
-      await this.saleOfferModel.findOneAndUpdate(
-        { _id: payment.sale._id },
-        { $set: { txnHash: signature } },
-        { session },
-      );
-
-      const buyerMember = await this.memberModel.findOne({
-        user: buyer._id,
-        org: org._id,
-      }).session(session);
-
-      if (isNil(buyerMember)) {
-        const newMember = new this.memberModel({
-          role: Role.Member,
-          occupation: 'Buyer',
-          user: buyer._id,
-          org: org._id,
-          lamportsEarned: lamportsAmount,
-        });
-        await newMember.save({ session });
-      } else {
-        buyerMember.lamportsEarned += lamportsAmount;
-        await buyerMember.save({ session });
-      }
-
-      await this.memberModel.findOneAndUpdate(
-        { _id: member._id },
-        { $inc: { lamportsEarned: -lamportsAmount } },
-      ).session(session);
-
-      this.apiService.sendNotification(`${buyer.nickname} just bought ${payment.sale.tokensAmount} ${org.name} impact shares from ${memberUser.nickname} for ${payment.amount} USDC:\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
+    const buyerMember = await this.memberModel.findOne({
+      user: buyer._id,
+      org: org._id,
     });
 
-    await session.endSession();
+    if (isNil(buyerMember)) {
+      const newMember = new this.memberModel({
+        role: Role.Member,
+        occupation: 'Buyer',
+        user: buyer._id,
+        org: org._id,
+        lamportsEarned: lamportsAmount,
+      });
+      await newMember.save();
+    } else {
+      buyerMember.lamportsEarned += lamportsAmount;
+      await buyerMember.save();
+    }
+
+    await this.memberModel.findOneAndUpdate(
+      { _id: member._id },
+      { $inc: { lamportsEarned: -lamportsAmount } },
+    );
+
+    this.apiService.sendNotification(`${buyer.nickname} just bought ${payment.sale.tokensAmount} ${org.name} impact shares from ${memberUser.nickname} for ${payment.amount} USDC:\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
   }
 
 }

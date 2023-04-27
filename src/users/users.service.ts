@@ -429,7 +429,8 @@ export class UsersService {
       }
       if (!isNil(inAppEntity.sale)) {
         const org = inAppEntity.sale.org as OrgDocument;
-        historyItem.description = `Received for selling ${inAppEntity.sale.tokensAmount} Impact Shares of @${org.username}`;
+        const action = amount < 0 ? 'Paid for' : 'Received for selling';
+        historyItem.description = `${action} ${inAppEntity.sale.tokensAmount} Impact Shares of @${org.username}`;
       } else if (!isNil(inAppEntity.org)) {
         historyItem.description = 'Profit Share';
       } else if (!isNil(inAppEntity.from)) {
@@ -444,7 +445,10 @@ export class UsersService {
   async _getEntityFromTxn(user: User, txn: ParsedTransactionWithMeta)
     : Promise<EntityFromTxnDto | null> {
     const payment = await this.paymentRepository.findOne({
-      'cpResult.signature': { $in: txn.transaction.signatures },
+      $or: [
+        { 'cpResult.signature': { $in: txn.transaction.signatures } },
+        { txnHash: { $in: txn.transaction.signatures } },
+      ],
     }).populate(['sale.buyer', 'sale.org', 'sale.seller']);
     let sale: SaleOfferDocument;
     if (!isNil(payment) && payment.type === PaymentType.AssetsSell) {

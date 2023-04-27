@@ -125,23 +125,45 @@ export class OffersService {
     return payment;
   }
 
-  async updateSaleOfferStatus(offerId: string, body: OfferStatusBodyDto, buyer: UserDocument) {
-    const offer = await this.getSaleOfferById(offerId, 'org');
+  async updateSaleOfferStatus(offerId: string, body: OfferStatusBodyDto, buyerId: string) {
+    const offer = await this.getSaleOfferById(offerId, ['org', 'seller']);
     if (offer.status !== OfferStatus.Pending) {
       throw new ForbiddenException('Offer already accepted/declined');
     }
 
-    let payment: Payment;
+    const buyer = await this.userService.getByUserId(buyerId, '+password');
+    const seller = offer.seller as UserDocument;
+    const org = offer.org as OrgDocument;
+    let payment: PaymentDocument;
 
     switch (body.status) {
     case OfferStatusDto.accepted:
+      const member = await this.memberRepository.findOne({
+        user: seller._id,
+        org: org._id,
+      }).populate({ path: 'user', select: '+password' });
+      const balance = await this.apiService.getUSDCBalance(buyer.wallet);
+      const lamportsAmount = offer.tokensAmount * LAMPORTS_PER_SOL;
+
       offer.status = OfferStatus.Approved;
       offer.buyer = buyer._id;
       const paymentInfo = {
         info: `Selling ${offer.tokensAmount} impact shares for $${offer.price}`,
         price: offer.price,
       };
-      payment = await this.paymentService.sellAssets(offer, paymentInfo);
+      if (balance < paymentInfo.price) {
+        throw new BadRequestException({ message: 'Insufficient funds' });
+      }
+      if (member.lamportsEarned < lamportsAmount) {
+        throw new BadRequestException({ message: 'Not enough tokens to sell' });
+      }
+      payment = await this.paymentService.sellAssetsInApp(offer, paymentInfo);
+      const pk = await this.apiService.getPK(buyer.wallet, buyer.password);
+      const txnHash = await this.apiService.transferUSDC(pk, [{ wallet: seller.wallet, amount: payment.amount }]);
+
+      payment.txnHash = txnHash;
+      await payment.save();
+      await this.paymentService.handleAssetsSale(payment);
       break;
     case OfferStatusDto.declined:
       offer.status = OfferStatus.Declined;
