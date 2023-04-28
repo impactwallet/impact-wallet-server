@@ -3,10 +3,10 @@ import { HttpService } from '@nestjs/axios';
 import * as FormData from 'form-data';
 import { firstValueFrom } from 'rxjs';
 import { AxiosRequestConfig } from 'axios';
-import { Keypair, Transaction, Connection, clusterApiUrl, Cluster, PublicKey, TransactionSignature, LAMPORTS_PER_SOL, SystemProgram, ParsedTransactionWithMeta } from '@solana/web3.js';
+import { Keypair, Transaction, Connection, clusterApiUrl, Cluster, PublicKey, TransactionSignature, LAMPORTS_PER_SOL, SystemProgram, ParsedTransactionWithMeta, TransactionInstruction } from '@solana/web3.js';
 import { getAssociatedTokenAddress, createTransferInstruction, createAssociatedTokenAccountInstruction, createMintToInstruction, getAssociatedTokenAddressSync, getAccount, TokenAccountNotFoundError, TokenInvalidAccountOwnerError } from '@solana/spl-token';
 import { decode } from 'bs58';
-import { get, isEmpty, truncate } from 'lodash';
+import { get, isEmpty, isNil, truncate } from 'lodash';
 import { Org } from '../orgs/schema/org.schema';
 import { ConfigService } from '@nestjs/config';
 
@@ -30,6 +30,7 @@ export class ApiService {
   network: Cluster = process.env.NETWORK as Cluster;
   connection = new Connection(clusterApiUrl(this.network), 'confirmed');
   usdcMint = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+  memoProgramId = 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr';
   explorerUrl = 'https://explorer.solana.com';
 
   get commonHeaders() {
@@ -286,7 +287,7 @@ export class ApiService {
       throw err;
     }
   }
-  async mintToken(org: Org, receivers: { wallet: string, amount: number }[]) {
+  async mintToken(org: Org, receivers: { wallet: string, amount: number }[], memo?: string) {
     try {
       const payer = new PublicKey(this.isMainnet ? process.env.FEE_PAYER : org.wallet);
       const orgPk = await this.getPK(org.wallet, org.password);
@@ -316,6 +317,21 @@ export class ApiService {
           new PublicKey(org.wallet),
           amount,
         ));
+        if (!isNil(memo)) {
+          txn.add(
+            new TransactionInstruction({
+              keys: [
+                {
+                  pubkey: Keypair.fromSecretKey(decode(orgPk)).publicKey,
+                  isSigner: true,
+                  isWritable: true,
+                },
+              ],
+              data: Buffer.from(memo, 'utf-8'),
+              programId: new PublicKey(this.memoProgramId),
+            })
+          );
+        }
       });
       await Promise.all(promises);
       const blockhash = (await this.connection.getLatestBlockhash('finalized')).blockhash;

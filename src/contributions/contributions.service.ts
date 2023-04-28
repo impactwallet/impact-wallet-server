@@ -15,6 +15,7 @@ import { ApiService } from '../api-service/api.service';
 import { OrgDocument } from '../orgs/schema/org.schema';
 import { ContributionsFilterDto } from './dto/contributions-filter.dto';
 import { Role } from '../members/enum/roles.enum';
+import { StopContributionDto } from './dto/stop-contribution.dto';
 
 @Injectable()
 export class ContributionsService {
@@ -109,6 +110,7 @@ export class ContributionsService {
     orgId: string,
     contributionId: string,
     user: UserDocument,
+    body: StopContributionDto,
     session?: ClientSession,
   ): Promise<ContributionDocument> {
     const contribution = await this.contributionModel.findOne({
@@ -158,7 +160,7 @@ export class ContributionsService {
       duration,
     });
 
-    const txnHash = await this.apiService.mintToken(org, contribution.split);
+    const txnHash = await this.apiService.mintToken(org, contribution.split, body.memo);
     this.apiService.sendNotification(`Tokens ${org.username.toUpperCase()} minted ant sent to a member ${memberUser.nickname}:\n\n${txnHash}\n\n${this.apiService.buildExplorerLink('/tx/' + txnHash)}`);
     contribution.txnHash = txnHash;
 

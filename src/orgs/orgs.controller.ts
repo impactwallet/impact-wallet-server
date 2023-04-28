@@ -27,6 +27,7 @@ import { Payment } from '../payment/schema/payment.schema';
 import { ReceivePaymentDto } from '../payment/dto/receive-payment.dto';
 import { PaymentService } from '../payment/payment.service';
 import { SendUsdcDto } from '../users/dto/send-usdc.dto';
+import { StopContributionDto } from '../contributions/dto/stop-contribution.dto';
 
 @ApiTags('Orgs')
 @Controller('orgs')
@@ -202,10 +203,11 @@ export class OrgsController {
 
   @ApiOperation({ summary: 'Stop contribution' })
   @ApiResponse({ status: 200, description: 'Stopped contribution', type: Contribution })
-  @Delete(':orgId/contributions/:contributionId')
+  @Patch(':orgId/contributions/:contributionId')
   async stopContribution(
   @Param('orgId') orgId: string,
     @Param('contributionId') contributionId: string,
+    @Body(new ValidationPipe()) body: StopContributionDto,
     @Req() req: Request,
   ) {
     const user = await this.usersService.getUserFromToken(req);
@@ -220,7 +222,7 @@ export class OrgsController {
 
       await this.orgsService.ensureMint(orgId, session);
 
-      contribution = await this.contributionsService.stopContribution(orgId, contributionId, user, session);
+      contribution = await this.contributionsService.stopContribution(orgId, contributionId, user, body, session);
 
       await this.orgsService.updateMintedAmount(org._id, contribution.lamportsEarned, session);
     });
