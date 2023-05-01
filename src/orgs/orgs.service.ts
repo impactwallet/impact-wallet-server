@@ -282,10 +282,10 @@ export class OrgsService {
     );
   }
 
-  async ensureMint(orgId: string, session?: ClientSession) {
-    await this.ensureMintNotInProgress(orgId, undefined, session);
+  async ensureMint(orgId: string) {
+    await this.ensureMintNotInProgress(orgId);
 
-    const org = await this.getByOrgId(orgId, '+password', session);
+    const org = await this.getByOrgId(orgId, '+password');
 
     if (!isNil(org.mint) && !isEmpty(org.mint)) {
       return;
@@ -298,10 +298,10 @@ export class OrgsService {
       this.apiService.sendNotification(`New ${truncate(org.username.toUpperCase(), { length: 10 })} token created:\n\n${mint}\n\n${this.apiService.buildExplorerLink('/address/' + mint)}`);
       org.mint = mint;
       mintInfo = { mint, mintError: null, mintStatus: MintStatus.success };
-      await this.updateMint(org._id, mintInfo, session);
+      await this.updateMint(org._id, mintInfo);
     } catch (err) {
       const mintInfo = { mint: null, mintError: get(err, 'message', err), mintStatus: MintStatus.error };
-      this.updateMint(org._id, mintInfo, session);
+      this.updateMint(org._id, mintInfo);
       throw err;
     }
   }

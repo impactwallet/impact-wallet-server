@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, HttpStatus, UploadedFile, UseInterceptors, ValidationPipe } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, HttpStatus, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { HttpCode, Req, Headers, Res } from '@nestjs/common/decorators';
 import { ApiConsumes, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -11,9 +11,6 @@ import { SearchUserByNicknameDto } from './dto/search-user-by-nickname.dto';
 import { Request, Response } from 'express';
 import { ApiMockHeader } from '../headers/mock';
 import { Member } from '../members/schema/member.schema';
-import { Contribution } from '../contributions/schema/contribution.schema';
-import { ContributionsService } from '../contributions/contributions.service';
-import { ContributionsFilterDto } from '../contributions/dto/contributions-filter.dto';
 import { SendAssetsDto } from 'src/users/dto/send-assets.dto';
 import { SendUsdcDto } from './dto/send-usdc.dto';
 import { TxnHistoryItemDto } from '../common/dto/txn-history-item.dto';
@@ -24,7 +21,6 @@ export class UsersController {
 
   constructor(
     private readonly userService: UsersService,
-    private readonly contributionsService: ContributionsService,
   ) {
   }
 
@@ -70,21 +66,6 @@ export class UsersController {
   @Get(':userId/memberships')
   getUserMemberships(@Param('userId') userId: string, @Req() req: Request) {
     return this.userService.getUserMemberships(userId, req);
-  }
-
-  @ApiOperation({ summary: 'Get users contributions' })
-  @ApiResponse({ status: 200, type: [Contribution] })
-  @Get(':userId/contributions')
-  async getUserContributions(
-  @Param('userId') userId: string,
-    @Query(new ValidationPipe()) filter: ContributionsFilterDto,
-    @Req() req: Request,
-  ) {
-    await this.userService.getUserFromToken(req);
-
-    filter.userId = userId;
-
-    return this.contributionsService.getContributions(filter);
   }
 
   @ApiOperation({ summary: 'Get users avatar' })

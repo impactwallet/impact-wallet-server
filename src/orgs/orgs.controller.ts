@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query, Req, UploadedFile, UseInterceptors, Headers, NotFoundException, Patch, ValidationPipe, Delete, Res } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query, Req, UploadedFile, UseInterceptors, Headers, NotFoundException, Patch, ValidationPipe, Res } from '@nestjs/common';
 import { ApiConsumes, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Org } from './schema/org.schema';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -17,27 +17,19 @@ import { isNil } from 'lodash';
 import { OfferDto } from '../offers/dto/offer.dto';
 import { OfferFiltersDto } from '../offers/dto/offer-filters.dto';
 import { OfferStatusBodyDto } from '../offers/dto/offer-status.dto';
-import { StartContributionDto } from '../contributions/dto/start-contribution.dto';
-import { ContributionsService } from '../contributions/contributions.service';
-import { InjectConnection } from '@nestjs/mongoose';
-import mongoose from 'mongoose';
-import { Contribution, ContributionDocument } from '../contributions/schema/contribution.schema';
 import { MemberEquityDto } from '../members/dto/member-equity.dto';
 import { Payment } from '../payment/schema/payment.schema';
 import { ReceivePaymentDto } from '../payment/dto/receive-payment.dto';
 import { PaymentService } from '../payment/payment.service';
 import { SendUsdcDto } from '../users/dto/send-usdc.dto';
-import { StopContributionDto } from '../contributions/dto/stop-contribution.dto';
 
 @ApiTags('Orgs')
 @Controller('orgs')
 export class OrgsController {
   constructor(
-    @InjectConnection() private readonly connection: mongoose.Connection,
     private readonly orgsService: OrgsService,
     private readonly usersService: UsersService,
     private readonly offersService: OffersService,
-    private readonly contributionsService: ContributionsService,
     private readonly paymentService: PaymentService,
   ) {
   }
@@ -180,55 +172,6 @@ export class OrgsController {
     }
 
     return this.offersService.updateOfferStatus(org, offerId, body, user._id.toString());
-  }
-
-  @ApiOperation({ summary: 'Start contribution' })
-  @ApiResponse({ status: 201, description: 'New contribution', type: Contribution })
-  @Post(':orgId/contributions')
-  @HttpCode(HttpStatus.CREATED)
-  async startContribution(
-  @Param('orgId') orgId: string,
-    @Body(new ValidationPipe()) body: StartContributionDto,
-    @Req() req: Request,
-  ) {
-    const user = await this.usersService.getUserFromToken(req);
-
-    const org = await this.orgsService.getByOrgId(orgId);
-    if (isNil(org)) {
-      throw new NotFoundException({ message: 'Organization not found' });
-    }
-
-    return this.contributionsService.startContribution(orgId, body, user);
-  }
-
-  @ApiOperation({ summary: 'Stop contribution' })
-  @ApiResponse({ status: 200, description: 'Stopped contribution', type: Contribution })
-  @Patch(':orgId/contributions/:contributionId')
-  async stopContribution(
-  @Param('orgId') orgId: string,
-    @Param('contributionId') contributionId: string,
-    @Body(new ValidationPipe()) body: StopContributionDto,
-    @Req() req: Request,
-  ) {
-    const user = await this.usersService.getUserFromToken(req);
-
-    let contribution: ContributionDocument;
-    const session = await this.connection.startSession();
-    await session.withTransaction(async () => {
-      const org = await this.orgsService.getByOrgId(orgId, null, session);
-      if (isNil(org)) {
-        throw new NotFoundException({ message: 'Organization not found' });
-      }
-
-      await this.orgsService.ensureMint(orgId, session);
-
-      contribution = await this.contributionsService.stopContribution(orgId, contributionId, user, body, session);
-
-      await this.orgsService.updateMintedAmount(org._id, contribution.lamportsEarned, session);
-    });
-    await session.endSession();
-
-    return contribution;
   }
 
   @ApiOperation({ summary: 'Get orgs logo' })

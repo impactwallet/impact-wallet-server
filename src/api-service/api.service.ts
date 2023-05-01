@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import * as FormData from 'form-data';
-import { firstValueFrom } from 'rxjs';
+import { delay, firstValueFrom, of } from 'rxjs';
 import { AxiosRequestConfig } from 'axios';
 import { Keypair, Transaction, Connection, clusterApiUrl, Cluster, PublicKey, TransactionSignature, LAMPORTS_PER_SOL, SystemProgram, ParsedTransactionWithMeta, TransactionInstruction } from '@solana/web3.js';
 import { getAssociatedTokenAddress, createTransferInstruction, createAssociatedTokenAccountInstruction, createMintToInstruction, getAssociatedTokenAddressSync, getAccount, TokenAccountNotFoundError, TokenInvalidAccountOwnerError } from '@solana/spl-token';
@@ -11,7 +11,7 @@ import { Org } from '../orgs/schema/org.schema';
 import { ConfigService } from '@nestjs/config';
 
 const REQUEST_TIMEOUT = 1000 * 60 * 60;
-
+const RETRIES = 5;
 
 @Injectable()
 export class ApiService {
@@ -334,8 +334,8 @@ export class ApiService {
         }
       });
       await Promise.all(promises);
-      const blockhash = (await this.connection.getLatestBlockhash('finalized')).blockhash;
-      txn.recentBlockhash = blockhash;
+      const blockhash = (await this.connection.getLatestBlockhash('finalized'));
+      txn.recentBlockhash = blockhash.blockhash;
       txn.feePayer = payer;
       const serializedTxn = this.createSignedSerializedTxn(txn, orgPk, true, false);
       const txnHash = await this.sendTxn(serializedTxn);
@@ -368,6 +368,30 @@ export class ApiService {
       throw err;
     }
   }
+
+  async getParsedTransaction(signature: TransactionSignature, retries = RETRIES): Promise<ParsedTransactionWithMeta> {
+    const fn = async (r: number) => {
+      let txn: ParsedTransactionWithMeta;
+      let error: any;
+      try {
+        const connection = new Connection(clusterApiUrl(this.network), {
+          commitment: 'confirmed',
+          disableRetryOnRateLimit: true,
+        });
+        txn = await connection.getParsedTransaction(signature, 'confirmed');
+      } catch (err) {
+        error = err;
+      }
+      if ((isNil(txn) || !isNil(error)) && r > 0) {
+        await firstValueFrom(of(true).pipe(delay((retries - (r - 1)) * 10000)));
+        console.log(`Retrying getting txn ${r}: ${error}`);
+        return this.getParsedTransaction(signature, --r);
+      }
+      return txn;
+    };
+    return fn(retries);
+  }
+
 
   async getTokenHistory(wallet: string, mint: string): Promise<{
     associatedAddress: PublicKey,

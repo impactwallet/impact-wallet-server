@@ -49,6 +49,12 @@ export class Contribution {
   @Prop({ type: String })
     txnHash: string;
 
+  @Prop({ type: String })
+    txnStatus: string;
+
+  @Prop({ type: String })
+    txnError: string;
+
   @ApiProperty({ example: 0 })
   @Prop({ type: Number, default: 0 })
     lamportsEarned: number;

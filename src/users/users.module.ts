@@ -3,7 +3,6 @@ import { JwtModule } from '@nestjs/jwt';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ApiServiceModule } from 'src/api-service/api.module';
 import { S3Module } from 'src/s3/s3.module';
-import { ContributionsModule } from '../contributions/contributions.module';
 import { MembersModule } from '../members/members.module';
 import { User, UserSchema } from './schema/user.schema';
 import { UsersController } from './users.controller';
@@ -29,7 +28,6 @@ import { SaleOffer, SaleOfferSchema } from '../offers/schema/sale-offer.schema';
     }),
     ApiServiceModule,
     MembersModule,
-    ContributionsModule,
     S3Module,
   ],
   providers: [UsersService],

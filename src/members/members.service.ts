@@ -46,7 +46,7 @@ export class MembersService {
     lamportsEarned: number,
     session?: ClientSession,
   ) {
-    return this.memberRepository.updateOne(
+    return this.memberRepository.findOneAndUpdate(
       { _id: new mongoose.Types.ObjectId(memberId) },
       { $inc: { contributed: duration, lamportsEarned } }
     ).session(session);

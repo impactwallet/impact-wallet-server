@@ -349,6 +349,9 @@ export class UsersService {
             { path: 'member', populate: { path: 'user' } },
             { path: 'split.member', populate: { path: 'user' } },
           ]);
+        if (isNil(contribution)) {
+          continue;
+        }
         contribution.split.forEach((split) => {
           const item: TxnHistoryItemDto = {};
           const contributionMember = contribution.member as MemberDocument;
