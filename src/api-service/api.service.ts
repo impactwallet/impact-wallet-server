@@ -26,7 +26,8 @@ export class ApiService {
   }
 
   tgBaseUrl: string;
-  baseUrl = 'https://api.shyft.to/sol/v1';
+  shyftBaseUrl = 'https://api.shyft.to/sol/v1';
+  solscanBaseUrl = 'https://public-api.solscan.io';
   network: Cluster = process.env.NETWORK as Cluster;
   connection = new Connection(clusterApiUrl(this.network), 'confirmed');
   usdcMint = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
@@ -54,6 +55,27 @@ export class ApiService {
       }));
     } catch (err) {
       console.log(`Notification error: ${err.message}`);
+    }
+  }
+
+  async getTokenHolders(mint: string) {
+    const config: AxiosRequestConfig = {
+      headers: {
+        token: process.env.SOLSCAN_APIKEY,
+      },
+      params: {
+        tokenAddress: mint,
+        limit: 100,
+      },
+      timeout: REQUEST_TIMEOUT,
+    };
+    try {
+      const response = await firstValueFrom(this.http.get(`${this.solscanBaseUrl}/token/holders`, config));
+      return get(response, 'data.data');
+    } catch (err) {
+      err.message = `Error fetching token holders: ${err.message}`;
+      console.log(JSON.stringify(get(err, 'response.data', err)));
+      throw err;
     }
   }
 
@@ -144,7 +166,7 @@ export class ApiService {
 
     try {
       const response = await firstValueFrom(
-        this.http.get(`${this.baseUrl}/semi_wallet/get_keypair`, config)
+        this.http.get(`${this.shyftBaseUrl}/semi_wallet/get_keypair`, config)
       );
       return get(response, 'data.result.secretKey');
     } catch (err) {
@@ -220,7 +242,7 @@ export class ApiService {
 
     const body = JSON.stringify({ password });
     try {
-      const response = await firstValueFrom(this.http.post(`${this.baseUrl}/semi_wallet/create`, body, config));
+      const response = await firstValueFrom(this.http.post(`${this.shyftBaseUrl}/semi_wallet/create`, body, config));
       const walletAddress = get(response, 'data.result.wallet_address');
       await this.airdrop(walletAddress, password);
       return walletAddress;
@@ -246,7 +268,7 @@ export class ApiService {
     });
     try {
       const endpoint = this.isMainnet && isRelay ? '/txn_relayer/sign' : '/transaction/send_txn';
-      const response = await firstValueFrom(this.http.post(`${this.baseUrl}${endpoint}`, body, config));
+      const response = await firstValueFrom(this.http.post(`${this.shyftBaseUrl}${endpoint}`, body, config));
       return get(response, 'data.result.signature', get(response, 'data.result.tx'));
     } catch (err) {
       err.message = `Error sending transaction: ${err.message}`;
@@ -273,7 +295,7 @@ export class ApiService {
 
     try {
       const response = await firstValueFrom(
-        this.http.post(`${this.baseUrl}/token/create_detach`, body, config),
+        this.http.post(`${this.shyftBaseUrl}/token/create_detach`, body, config),
       );
       const encodedTxn = get(response, 'data.result.encoded_transaction');
       const mint = get(response, 'data.result.mint');
@@ -359,7 +381,7 @@ export class ApiService {
 
     try {
       const response = await firstValueFrom(
-        this.http.get(`${this.baseUrl}/wallet/token_balance`, config),
+        this.http.get(`${this.shyftBaseUrl}/wallet/token_balance`, config),
       );
       return get(response, 'data.result.balance');
     } catch (err) {

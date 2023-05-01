@@ -199,14 +199,11 @@ export class PaymentService {
     const paymentAmount = body.payment_amount;
     const treasury = paymentAmount * (org.settings.treasury / 100);
     const amountToSplit = paymentAmount - treasury;
-    const members = await this.memberModel.find({
-      org: org._id,
-      lamportsEarned: { $gt: 0 },
-    }).populate('user');
-    const membersWithAmount = members.map(member => {
+    const holders = await this.apiService.getTokenHolders(org.mint);
+    const membersWithAmount = holders.map((holder: any) => {
       return {
-        wallet: (member.user as UserDocument).wallet,
-        amount: amountToSplit * (member.lamportsEarned / org.lamportsMinted),
+        wallet: holder.owner,
+        amount: amountToSplit * (holder.amount / org.lamportsMinted),
       };
     });
 
