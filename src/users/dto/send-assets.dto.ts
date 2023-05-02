@@ -5,6 +5,9 @@ export class SendAssetsDto {
   @ApiProperty({ description: 'ID recipient' })
     recipientId: string;
 
+  @ApiProperty({ description: 'Recipient address' })
+    recipientAddress: string;
+
   @ApiProperty({ description: 'Number of impact shares' })
     amount: number;
 }

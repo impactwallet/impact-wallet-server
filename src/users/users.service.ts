@@ -229,7 +229,14 @@ export class UsersService {
 
     await session.withTransaction(async () => {
       const orgObjectId = new mongoose.Types.ObjectId(orgId);
-      const recipient = await this.getByUserId(sendAssetsDto.recipientId, undefined, session);
+      let recipientAddress: string;
+      let recipient: UserDocument;
+      if (!isNil(sendAssetsDto.recipientId)) {
+        recipient = await this.getByUserId(sendAssetsDto.recipientId, undefined, session);
+        recipientAddress = recipient.wallet;
+      } else {
+        recipientAddress = sendAssetsDto.recipientAddress;
+      }
       const senderPassword = (await this.getByUserId(sender._id.toString(), '+password', session)).password;
       const senderMember = await this.memberRepository.findOne({
         user: sender._id,
@@ -246,27 +253,29 @@ export class UsersService {
       const org = senderMember.org as OrgDocument;
 
       const fromPk = await this.apiService.getPK(sender.wallet, senderPassword);
-      const signature = await this.apiService.transfer(fromPk, org.mint, [{ wallet: recipient.wallet, amount: sendAssetsDto.amount }]);
+      const signature = await this.apiService.transfer(fromPk, org.mint, [{ wallet: recipientAddress, amount: sendAssetsDto.amount }]);
 
-      const recepientMember = await this.memberRepository.findOne({
-        user: recipient._id,
-        org: orgObjectId,
-      }).session(session);
-
-      if (isNil(recepientMember)) {
-        const newMember = new this.memberRepository({
-          role: Role.Member,
-          occupation: 'Receiver',
+      if (!isNil(recipient)) {
+        const recepientMember = await this.memberRepository.findOne({
           user: recipient._id,
           org: orgObjectId,
-          lamportsEarned: sendAssetsDto.amount * LAMPORTS_PER_SOL,
-        });
-        await newMember.save({ session });
-      } else {
-        await this.memberRepository.findOneAndUpdate(
-          { _id: recepientMember._id },
-          { $inc: { 'lamportsEarned': sendAssetsDto.amount * LAMPORTS_PER_SOL } },
-        ).session(session);
+        }).session(session);
+
+        if (isNil(recepientMember)) {
+          const newMember = new this.memberRepository({
+            role: Role.Member,
+            occupation: 'Receiver',
+            user: recipient._id,
+            org: orgObjectId,
+            lamportsEarned: sendAssetsDto.amount * LAMPORTS_PER_SOL,
+          });
+          await newMember.save({ session });
+        } else {
+          await this.memberRepository.findOneAndUpdate(
+            { _id: recepientMember._id },
+            { $inc: { 'lamportsEarned': sendAssetsDto.amount * LAMPORTS_PER_SOL } },
+          ).session(session);
+        }
       }
 
       await this.memberRepository.findOneAndUpdate(
@@ -274,7 +283,7 @@ export class UsersService {
         { $inc: { 'lamportsEarned': -sendAssetsDto.amount * LAMPORTS_PER_SOL } },
       ).session(session);
 
-      this.apiService.sendNotification(`User ${sender.nickname} sent ${sendAssetsDto.amount} impact shares of ${org.name} to user ${recipient.nickname}\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
+      this.apiService.sendNotification(`User ${sender.nickname} sent ${sendAssetsDto.amount} impact shares of ${org.name} to user ${get(recipient, 'nickname', recipientAddress)}\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
     });
 
     await session.endSession();
