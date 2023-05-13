@@ -9,6 +9,7 @@ import { OffersModule } from './offers/offers.module';
 import { AuthModule } from './auth/auth.module';
 import { ContributionsModule } from './contributions/contributions.module';
 import { ConfigModule } from '@nestjs/config';
+import { ConfigurationModule } from './configuration/config.module';
 
 
 @Module({
@@ -27,6 +28,7 @@ import { ConfigModule } from '@nestjs/config';
     MembersModule,
     OffersModule,
     ContributionsModule,
+    ConfigurationModule
   ],
 })
 

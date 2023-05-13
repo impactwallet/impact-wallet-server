@@ -43,7 +43,7 @@ export class MemberProspect {
   @Prop()
     agreement: string;
 
-  @ApiProperty({ description: 'Future nvestor settings' })
+  @ApiProperty({ description: 'Future investor settings' })
   @Prop({ required: function() { return this.role === Role.Investor; } })
     investorSettings: InvestorSettings;
 
