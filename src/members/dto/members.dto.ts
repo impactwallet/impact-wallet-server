@@ -33,6 +33,6 @@ export class MemberDto {
 
   org: string;
 
-  @ApiProperty({ description: 'Investor settings' })
+  @ApiProperty({ type: InvestorSettingsDto , description: 'Investor settings' })
     investorSettings: InvestorSettingsDto;
 }

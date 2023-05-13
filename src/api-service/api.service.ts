@@ -309,14 +309,14 @@ export class ApiService {
       throw err;
     }
   }
-  async mintToken(org: Org, receivers: { wallet: string, amount: number }[], memo?: string) {
+  async mintToken(mint: string, authorityPk: string, receivers: { wallet: string, amount: number }[], memo?: string) {
     try {
-      const payer = new PublicKey(this.isMainnet ? process.env.FEE_PAYER : org.wallet);
-      const orgPk = await this.getPK(org.wallet, org.password);
+      const authorityKeypair = Keypair.fromSecretKey(decode(authorityPk));
+      const payer = new PublicKey(this.isMainnet ? process.env.FEE_PAYER : authorityKeypair.publicKey);
       const txn = new Transaction();
       const promises = receivers.map(async ({ wallet, amount }) => {
         const associatedTokenAddress = getAssociatedTokenAddressSync(
-          new PublicKey(org.mint),
+          new PublicKey(mint),
           new PublicKey(wallet),
         );
         try {
@@ -328,15 +328,15 @@ export class ApiService {
                 payer,
                 associatedTokenAddress,
                 new PublicKey(wallet),
-                new PublicKey(org.mint),
+                new PublicKey(mint),
               )
             );
           }
         }
         txn.add(createMintToInstruction(
-          new PublicKey(org.mint),
+          new PublicKey(mint),
           associatedTokenAddress,
-          new PublicKey(org.wallet),
+          new PublicKey(authorityKeypair.publicKey),
           amount,
         ));
         if (!isNil(memo)) {
@@ -344,7 +344,7 @@ export class ApiService {
             new TransactionInstruction({
               keys: [
                 {
-                  pubkey: Keypair.fromSecretKey(decode(orgPk)).publicKey,
+                  pubkey: authorityKeypair.publicKey,
                   isSigner: true,
                   isWritable: true,
                 },
@@ -359,7 +359,7 @@ export class ApiService {
       const blockhash = (await this.connection.getLatestBlockhash('finalized'));
       txn.recentBlockhash = blockhash.blockhash;
       txn.feePayer = payer;
-      const serializedTxn = this.createSignedSerializedTxn(txn, orgPk, true, false);
+      const serializedTxn = this.createSignedSerializedTxn(txn, authorityPk, true, false);
       const txnHash = await this.sendTxn(serializedTxn);
       return txnHash;
     } catch (err) {
