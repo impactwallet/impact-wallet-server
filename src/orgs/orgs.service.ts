@@ -10,7 +10,7 @@ import { OrgsFilter } from './dto/orgs.filter.dto';
 import { Org, OrgDocument } from './schema/org.schema';
 import { MemberDto } from 'src/members/dto/members.dto';
 import { MembersService } from 'src/members/members.service';
-import { Member } from 'src/members/schema/member.schema';
+import { MemberDocument } from 'src/members/schema/member.schema';
 import { Request } from 'express';
 import { OrgUsernameFilter } from './dto/org-username.filter.dto';
 import { MemberEquityDto } from '../members/dto/member-equity.dto';
@@ -22,6 +22,7 @@ import { S3Service } from 'src/s3/s3.service';
 import { SendUsdcDto } from '../users/dto/send-usdc.dto';
 import { Role } from '../members/enum/roles.enum';
 import { OrgHistoryItemAction } from './enum/org-history-item-action.enum';
+import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 
 const MINT_STATUS_RETRIES = 5;
 
@@ -38,9 +39,9 @@ export class OrgsService {
 
   async createOrg(orgsDto: CreateOrgDto, logo: any, mock: boolean, req: Request) {
     await this.usersService.getUserFromToken(req);
-    const newOrg = await this.createOrganization(orgsDto, logo, mock, req);
-    if (!mock) this.createToken(newOrg);
-    return newOrg;
+    const { org } = await this.createOrganization(orgsDto, logo, mock);
+    if (!mock) this.createToken(org);
+    return org;
   }
 
   async createToken(org: OrgDocument, initialMint?: { wallet: string, amount: number }) {
@@ -51,15 +52,14 @@ export class OrgsService {
       await this.updateMint(org._id, mintInfo);
       const { file } = await this.getLogo(org.logo.split('/')[3]);
       const mint = await this.apiService.createFungibleTokensForOrganization(org, Buffer.from(file));
-      this.apiService.sendNotification(
-        `New ${truncate(org.username.toUpperCase(), { length: 10 })} token created:\n\n${mint}\n\n${this.apiService.buildExplorerLink('/address/' + mint)}`); org
+      this.apiService.sendNotification(`New ${org.username.toUpperCase().substring(0, 10)} token created:\n\n${mint}\n\n${this.apiService.buildExplorerLink('/address/' + mint)}`);
 
       if (!isNil(initialMint)) {
         const orgPk = await this.apiService.getPK(org.wallet, org.password);
-        let txnHash: string;
-        txnHash = await this.apiService.mintToken(mint, orgPk, [initialMint]);
+        const txnHash = await this.apiService.mintToken(mint, orgPk, [initialMint]);
+        await this.updateMintedAmount(org._id, initialMint.amount);
         this.apiService.sendNotification(
-          `${initialMint.amount} tokens ${org.username.toUpperCase()} minted to: ${initialMint.wallet}:\n\n${txnHash}\n\n`
+          `${initialMint.amount / LAMPORTS_PER_SOL} ${org.username.toUpperCase().substring(0, 10)} minted to ${initialMint.wallet}:\n\n${this.apiService.buildExplorerLink('/tx/' + txnHash)}`
         );
       }
       mintInfo = { mint, mintError: null, mintStatus: MintStatus.success };
@@ -68,11 +68,10 @@ export class OrgsService {
     } catch (err) {
       const mintInfo = { mint: null, mintError: get(err, 'message', err), mintStatus: MintStatus.error };
       this.updateMint(org._id, mintInfo).exec();
-    };
-
+    }
   }
 
-  async createOrganization(orgsDto: CreateOrgDto, logo: any, mock: boolean, req: Request) {
+  async createOrganization(orgsDto: CreateOrgDto, logo: any, mock: boolean) {
     if (logo) {
       const resized = await resizeBuffer(logo.buffer);
       const fileName = `${uuid()}.jpg`;
@@ -82,6 +81,7 @@ export class OrgsService {
 
     const session = await this.connection.startSession();
     const newOrg = new this.orgRepository(orgsDto);
+    let member: MemberDocument;
 
     await session.withTransaction(async () => {
       try {
@@ -106,12 +106,12 @@ export class OrgsService {
         throw new HttpException(message, code);
       }
       orgsDto.member.org = newOrg._id.toString();
-      await this.addMemberToOrg(newOrg._id, orgsDto.member, session);
+      member = await this.addMemberToOrg(newOrg._id, orgsDto.member, session);
     });
 
     await session.endSession();
 
-    return newOrg;
+    return { org: newOrg, member };
   }
 
   async getOrgsByQuery(query: OrgsFilter, req: Request) {
@@ -241,7 +241,7 @@ export class OrgsService {
     orgId: string | mongoose.Types.ObjectId,
     addMemberToOrg: MemberDto,
     session?: ClientSession,
-  ): Promise<Member> {
+  ) {
     addMemberToOrg.org = orgId.toString();
 
     try {

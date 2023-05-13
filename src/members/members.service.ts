@@ -11,7 +11,7 @@ export class MembersService {
 
   constructor(@InjectModel(Member.name) private memberRepository: Model<MemberDocument>) { }
 
-  async createMember(memberDto: MemberDto, session?: ClientSession): Promise<Member> {
+  async createMember(memberDto: MemberDto, session?: ClientSession) {
     const member = new this.memberRepository(memberDto);
     return member.save({ session });
   }

@@ -281,8 +281,8 @@ export class ApiService {
     const body = new FormData();
     body.append('network', this.network);
     body.append('wallet', org.wallet);
-    body.append('name', truncate(org.name, { length: 32 }));
-    body.append('symbol', truncate(org.username.toUpperCase(), { length: 10 }));
+    body.append('name', org.name.substring(0, 32));
+    body.append('symbol', org.username.toUpperCase().substring(0, 10));
     if (this.isMainnet) {
       body.append('fee_payer', process.env.FEE_PAYER);
     }

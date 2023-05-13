@@ -8,11 +8,11 @@ export type ConfigDocument = HydratedDocument<Config>;
 export class Config {
 
   @Prop({ select: false, required: true, unique: true })
-  id : number;
+    id : number;
 
   @ApiProperty({ example: 'Lite', description: 'Current application version. ("Lite" or "Pro")' })
   @Prop({ required: true })
-  mode : string;
+    mode : string;
 
 }
 
