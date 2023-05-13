@@ -38,6 +38,41 @@ export class OrgsService {
 
   async createOrg(orgsDto: CreateOrgDto, logo: any, mock: boolean, req: Request) {
     await this.usersService.getUserFromToken(req);
+    const newOrg = await this.createOrganization(orgsDto, logo, mock, req);
+    if (!mock) this.createToken(newOrg);
+    return newOrg;
+  }
+
+  async createToken(org: OrgDocument, initialMint?: { wallet: string, amount: number }) {
+
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+    try {
+      let mintInfo = { mint: null, mintError: null, mintStatus: MintStatus.inProgress };
+      await this.updateMint(org._id, mintInfo);
+      const { file } = await this.getLogo(org.logo.split('/')[3]);
+      const mint = await this.apiService.createFungibleTokensForOrganization(org, Buffer.from(file));
+      this.apiService.sendNotification(
+        `New ${truncate(org.username.toUpperCase(), { length: 10 })} token created:\n\n${mint}\n\n${this.apiService.buildExplorerLink('/address/' + mint)}`); org
+
+      if (!isNil(initialMint)) {
+        const orgPk = await this.apiService.getPK(org.wallet, org.password);
+        let txnHash: string;
+        txnHash = await this.apiService.mintToken(mint, orgPk, [initialMint]);
+        this.apiService.sendNotification(
+          `${initialMint.amount} tokens ${org.username.toUpperCase()} minted to: ${initialMint.wallet}:\n\n${txnHash}\n\n`
+        );
+      }
+      mintInfo = { mint, mintError: null, mintStatus: MintStatus.success };
+      await this.updateMint(org._id, mintInfo, null);
+
+    } catch (err) {
+      const mintInfo = { mint: null, mintError: get(err, 'message', err), mintStatus: MintStatus.error };
+      this.updateMint(org._id, mintInfo).exec();
+    };
+
+  }
+
+  async createOrganization(orgsDto: CreateOrgDto, logo: any, mock: boolean, req: Request) {
     if (logo) {
       const resized = await resizeBuffer(logo.buffer);
       const fileName = `${uuid()}.jpg`;
@@ -75,25 +110,6 @@ export class OrgsService {
     });
 
     await session.endSession();
-
-    if (!mock) {
-      firstValueFrom(of(true).pipe(delay(5000)))
-        .then(() => {
-          const mintInfo = { mint: null, mintError: null, mintStatus: MintStatus.inProgress };
-          return this.updateMint(newOrg._id, mintInfo);
-        })
-        .then(() => this.getLogo(newOrg.logo.split('/')[3]))
-        .then(({ file }) => this.apiService.createFungibleTokensForOrganization(newOrg, Buffer.from(file)))
-        .then((mint) => {
-          this.apiService.sendNotification(`New ${truncate(newOrg.username.toUpperCase(), { length: 10 })} token created:\n\n${mint}\n\n${this.apiService.buildExplorerLink('/address/' + mint)}`);
-          const mintInfo = { mint, mintError: null, mintStatus: MintStatus.success };
-          return this.updateMint(newOrg._id, mintInfo, null);
-        })
-        .catch((err) => {
-          const mintInfo = { mint: null, mintError: get(err, 'message', err), mintStatus: MintStatus.error };
-          this.updateMint(newOrg._id, mintInfo).exec();
-        });
-    }
 
     return newOrg;
   }
@@ -168,7 +184,7 @@ export class OrgsService {
                 from: 'members',
                 let: { member: '$member' },
                 pipeline: [
-                  { $match: { $expr: { $eq: ['$_id', '$$member'] } }},
+                  { $match: { $expr: { $eq: ['$_id', '$$member'] } } },
                   {
                     $lookup: {
                       from: 'users',

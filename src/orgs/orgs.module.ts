@@ -9,6 +9,8 @@ import { MembersModule } from 'src/members/members.module';
 import { OffersModule } from '../offers/offers.module';
 import { S3Module } from 'src/s3/s3.module';
 import { PaymentModule } from '../payment/payment.module';
+import { OrgsLiteController } from './orgs.controller.lite';
+import { OrgsLiteService } from './orgs.service.lite';
 
 @Module({
   imports: [
@@ -20,8 +22,8 @@ import { PaymentModule } from '../payment/payment.module';
     S3Module,
     PaymentModule,
   ],
-  providers: [OrgsService],
+  providers: [OrgsService, OrgsLiteService],
   exports: [OrgsService],
-  controllers: [OrgsController],
+  controllers: [OrgsController, OrgsLiteController],
 })
 export class OrgsModule { }

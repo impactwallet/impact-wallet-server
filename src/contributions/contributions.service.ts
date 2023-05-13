@@ -26,7 +26,7 @@ export class ContributionsService {
     private readonly membersService: MembersService,
     private readonly apiService: ApiService,
     private readonly orgsService: OrgsService,
-  ) {}
+  ) { }
 
   getContributions(filter: ContributionsFilterDto) {
     const query = {};
@@ -197,7 +197,8 @@ export class ContributionsService {
 
   async mintAndConfirmWithRetryAndReverse(org: OrgDocument, contribution: ContributionDocument, body: StopContributionDto) {
     try {
-      contribution.txnHash = await this.apiService.mintToken(org, contribution.split, body.memo);
+      const orgPk = await this.apiService.getPK(org.wallet, org.password);
+      contribution.txnHash = await this.apiService.mintToken(org.mint, orgPk, contribution.split, body.memo);
 
       const txnHash = await this.confirmContribution(org, contribution);
 
@@ -210,7 +211,7 @@ export class ContributionsService {
       this.apiService.sendNotification(
         `Tokens ${org.username.toUpperCase()} minted ant sent to members: ${nicknames}:\n\n${txnHash}\n\n${this.apiService.buildExplorerLink('/tx/' + txnHash)}`
       );
-    } catch(err) {
+    } catch (err) {
       contribution.txnError = err.message;
       contribution.txnStatus = 'failed';
       try {
@@ -248,7 +249,8 @@ export class ContributionsService {
       return contribution.txnHash;
     }
     try {
-      const txnHash = await this.apiService.mintToken(org, contribution.split);
+      const orgPk = await this.apiService.getPK(org.wallet, org.password);
+      const txnHash = await this.apiService.mintToken(org.mint, orgPk, contribution.split);
       contribution.txnHash = txnHash;
     } catch (err) {
       txnError = err.message;

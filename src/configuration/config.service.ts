@@ -13,7 +13,7 @@ export class ConfigService {
   ) { }
 
   async getConfig() {
-    const config = await this.configRepository.findOne({ id: 1 }, { _id: 0 }).exec();
+    const config = await this.configRepository.findOne({ id: 1 }, { _id: 0 });
     if (!config) {
       return {
         mode: `Lite`

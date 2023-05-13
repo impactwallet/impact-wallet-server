@@ -25,7 +25,7 @@ export class CreateOrgDto {
   @ApiProperty({ example: 'jpg, png', description: 'Logo organization', required: true })
     logo: string;
 
-  @ApiProperty({ example: 'Member object', description: 'First member', required: true })
+  @ApiProperty({ type: MemberDto, description: 'First member', required: true })
     member: MemberDto;
 
 }
