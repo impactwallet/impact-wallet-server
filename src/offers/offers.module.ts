@@ -8,6 +8,7 @@ import { SaleOffer, SaleOfferSchema } from './schema/sale-offer.schema';
 import { OffersController } from './offers.controller';
 import { UsersModule } from '../users/users.module';
 import { ApiServiceModule } from '../api-service/api.module';
+import { OffersLiteService } from './offers.lite.service';
 
 @Module({
   imports: [
@@ -21,7 +22,7 @@ import { ApiServiceModule } from '../api-service/api.module';
     ApiServiceModule,
   ],
   controllers: [OffersController],
-  providers: [OffersService],
-  exports: [OffersService],
+  providers: [OffersService, OffersLiteService],
+  exports: [OffersService, OffersLiteService],
 })
-export class OffersModule {}
+export class OffersModule { }
