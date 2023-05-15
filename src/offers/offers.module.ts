@@ -8,7 +8,7 @@ import { SaleOffer, SaleOfferSchema } from './schema/sale-offer.schema';
 import { OffersController } from './offers.controller';
 import { UsersModule } from '../users/users.module';
 import { ApiServiceModule } from '../api-service/api.module';
-import { OffersLiteService } from './offers.lite.service';
+import { OffersLiteService } from './offers.service.lite';
 
 @Module({
   imports: [

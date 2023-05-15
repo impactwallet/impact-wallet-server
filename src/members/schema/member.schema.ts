@@ -43,8 +43,8 @@ export class Equity {
   type: EquityType;
 
   @ApiProperty({ example: `Year` })
-  @Prop({ enum: Object.keys(PeriodType) })
-  period: PeriodType
+  @Prop({ required: function () { return this.type === EquityType.DuringPeriod; } })
+  period?: PeriodType
 
 }
 
@@ -61,7 +61,7 @@ export class Compensation {
   type: CompensationType;
 
   @ApiProperty({ example: `Year` })
-  @Prop({ enum: Object.keys(PeriodType) })
+  @Prop({ required: function () { return this.type === EquityType.DuringPeriod; } })
   period: PeriodType
 
 }
@@ -83,12 +83,12 @@ export class Member {
   @Prop({ default: 1 })
   impactRatio: number;
 
-  @ApiProperty({ description: 'Equity settings' })
-  @Prop({ required: function () { return this.equity !== null; }, type: EquitySchema })
+  @ApiProperty({ type: Equity, description: 'Equity settings' })
+  @Prop({ required: function () { return this.equity === null; }, type: EquitySchema })
   equity: Equity;
 
-  @ApiProperty({ description: 'Compensation settings' })
-  @Prop({ required: function () { return this.compensation !== null; }, type: CompensationSchema })
+  @ApiProperty({ type: Compensation, description: 'Compensation settings' })
+  @Prop({ required: function () { return this.compensation === null; }, type: CompensationSchema })
   compensation: Compensation;
 
   @ApiProperty({ example: false })

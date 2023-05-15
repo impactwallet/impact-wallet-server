@@ -1,8 +1,7 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query, Req, UploadedFile, UseInterceptors, Headers, NotFoundException, Patch, ValidationPipe, Res } from '@nestjs/common';
 import { ApiConsumes, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { Org } from './schema/org.schema';
+import { Org, OrgDocument } from './schema/org.schema';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { CreateOrgDto } from './dto/create-org.dto';
 import { Request } from 'express';
 import { ApiMockHeader } from '../headers/mock';
 import { OrgsLiteService } from './orgs.service.lite';
@@ -11,7 +10,9 @@ import { OfferLiteDto } from '../offers/dto/offer.lite.dto';
 import { UsersService } from '../users/users.service';
 import { OrgsService } from './orgs.service';
 import { isNil } from 'lodash';
-import { OffersLiteService } from '../offers/offers.lite.service';
+import { OffersLiteService } from '../offers/offers.service.lite';
+import { CreateOrgDto } from './dto/create-org.dto';
+import { UserDocument } from 'src/users/schema/user.schema';
 
 @ApiTags('Orgs')
 @Controller('lite/orgs')
@@ -41,7 +42,7 @@ export class OrgsLiteController {
 
   @ApiOperation({ summary: 'Create new offer in lite mode' })
   @ApiResponse({ status: 200, type: Offer })
-  @Post('lite/:orgId/offers')
+  @Post(':orgId/offers')
   @HttpCode(HttpStatus.CREATED)
   async createOffer(
     @Param('orgId') orgId: string,
