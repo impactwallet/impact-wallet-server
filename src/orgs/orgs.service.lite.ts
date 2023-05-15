@@ -8,6 +8,7 @@ import { CreateOrgDto } from './dto/create-org.dto';
 import { OrgsService } from './orgs.service';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { MembersService } from '../members/members.service';
+import { EquityType } from '../members/enum/equity-type.enum';
 
 
 @Injectable()
@@ -15,14 +16,16 @@ export class OrgsLiteService {
 
   constructor(
     @InjectModel(Org.name) public orgRepository: Model<OrgDocument>,
-    private usersService: UsersService,
-    private orgsService: OrgsService,
-    private memberService: MembersService,
+    private readonly usersService: UsersService,
+    private readonly orgsService: OrgsService,
+    private readonly memberService: MembersService
   ) { }
 
 
   async createOrgLite(orgsDto: CreateOrgDto, logo: any, mock: boolean, req: Request) {
     const user = await this.usersService.getUserFromToken(req);
+    orgsDto.member.equity = { amount: 100, type: EquityType.Immediately };
+
     const { org, member } = await this.orgsService.createOrganization(orgsDto, logo, mock);
     const initialMint = { wallet: user.wallet, amount: 100 * LAMPORTS_PER_SOL };
     this.orgsService.createToken(org, initialMint)

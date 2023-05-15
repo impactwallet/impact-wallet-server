@@ -2,7 +2,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { ApiProperty } from '@nestjs/swagger';
 import mongoose, { HydratedDocument } from 'mongoose';
 import { Role } from '../../members/enum/roles.enum';
-import { InvestorSettings } from '../../members/schema/member.schema';
+import { Compensation, CompensationSchema, Equity, EquitySchema, InvestorSettings } from '../../members/schema/member.schema';
 import { Org } from '../../orgs/schema/org.schema';
 import { OfferStatus } from '../enum/statuses.enum';
 
@@ -13,7 +13,7 @@ export type MemberProspectDocument = HydratedDocument<MemberProspect>;
 export class MemberProspect {
 
   @ApiProperty({ example: 'CEO' })
-  @Prop({ required: function() { return this.role !== Role.Investor; } })
+  @Prop({ required: function () { return this.role !== Role.Investor; } })
     occupation: string;
 
   @ApiProperty({ example: 'Member', enum: Object.keys(Role) })
@@ -24,13 +24,13 @@ export class MemberProspect {
   @Prop({ default: 1 })
     impactRatio: number;
 
-  @ApiProperty({ example: false })
-  @Prop({ default: false })
-    isMonthlyCompensated: boolean;
+  @ApiProperty({ description: 'Equity settings' })
+  @Prop({ required: function () { return this.equity === null; }, type: EquitySchema })
+    equity: Equity;
 
-  @ApiProperty({ example: 3000 })
-  @Prop()
-    monthlyCompensation: number;
+  @ApiProperty({ description: 'Compensation settings' })
+  @Prop({ required: function () { return this.compensation === null; }, type: CompensationSchema })
+    compensation: Compensation;
 
   @ApiProperty({ example: false, default: false })
   @Prop({ default: false })
@@ -44,7 +44,7 @@ export class MemberProspect {
     agreement: string;
 
   @ApiProperty({ description: 'Future investor settings' })
-  @Prop({ required: function() { return this.role === Role.Investor; } })
+  @Prop({ required: function () { return this.role === Role.Investor; } })
     investorSettings: InvestorSettings;
 
   @Prop({ type: mongoose.Schema.Types.ObjectId })

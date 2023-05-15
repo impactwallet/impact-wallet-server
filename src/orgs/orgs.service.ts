@@ -23,6 +23,7 @@ import { SendUsdcDto } from '../users/dto/send-usdc.dto';
 import { Role } from '../members/enum/roles.enum';
 import { OrgHistoryItemAction } from './enum/org-history-item-action.enum';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { EquityDto } from 'src/members/dto/equity.dto';
 
 const MINT_STATUS_RETRIES = 5;
 

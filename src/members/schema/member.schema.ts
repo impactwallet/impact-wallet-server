@@ -4,6 +4,9 @@ import mongoose, { HydratedDocument } from 'mongoose';
 import { OrgDocument } from '../../orgs/schema/org.schema';
 import { UserDocument } from '../../users/schema/user.schema';
 import { Role } from '../enum/roles.enum';
+import { EquityType } from '../enum/equity-type.enum';
+import { CompensationType } from '../enum/compensation-type.enum';
+import { PeriodType } from '../enum/period-type.enum';
 
 export type MemberDocument = HydratedDocument<Member>;
 export type InvestorSettingsDocument = HydratedDocument<InvestorSettings>;
@@ -21,11 +24,60 @@ export class InvestorSettings {
 
 export const InvestorSettingsSchema = SchemaFactory.createForClass(InvestorSettings);
 
+@Schema({ _id: false })
+export class Period {
+  @ApiProperty({ example: 10 })
+  @Prop({ type: Number, required: true })
+    value: number;
+
+  @ApiProperty({ example: 'Years', enum: Object.keys(PeriodType) })
+  @Prop({ enum: Object.keys(PeriodType), required: true })
+    timeframe: PeriodType;
+}
+
+export const PeriodSchema = SchemaFactory.createForClass(Period);
+
+@Schema({ _id: false })
+export class Equity {
+  @ApiProperty({ example: 50 })
+  @Prop({ type: Number, required: true })
+    amount: number;
+
+  @ApiProperty({ example: 'Immediately' })
+  @Prop({ enum: Object.keys(EquityType), required: true })
+    type: EquityType;
+
+  @ApiProperty({ example: 'Years' })
+  @Prop({ required: function() { return this.type === EquityType.DuringPeriod; }, enum: Object.keys(PeriodType) })
+    period?: PeriodType;
+
+}
+
+export const EquitySchema = SchemaFactory.createForClass(Equity);
+
+@Schema({ _id: false })
+export class Compensation {
+  @ApiProperty({ example: 3000 })
+  @Prop({ type: Number, required: true })
+    amount: number;
+
+  @ApiProperty({ example: 'PerMonth' })
+  @Prop({ enum: Object.keys(CompensationType), required: true })
+    type: CompensationType;
+
+  @ApiProperty({ example: 'Year' })
+  @Prop({ required: function() { return this.type === CompensationType.OneTime; }, enum: Object.keys(PeriodType) })
+    period?: PeriodType;
+
+}
+
+export const CompensationSchema = SchemaFactory.createForClass(Compensation);
+
 @Schema({ timestamps: true })
 export class Member {
 
   @ApiProperty({ example: 'CEO' })
-  @Prop({ required: function() { return this.role !== Role.Investor; } })
+  @Prop({ required: function () { return this.role !== Role.Investor; } })
     occupation: string;
 
   @ApiProperty({ example: 'Member', enum: Object.keys(Role) })
@@ -36,13 +88,13 @@ export class Member {
   @Prop({ default: 1 })
     impactRatio: number;
 
-  @ApiProperty({ example: false })
-  @Prop({ default: false })
-    isMonthlyCompensated: boolean;
+  @ApiProperty({ type: Equity, description: 'Equity settings' })
+  @Prop({ type: EquitySchema })
+    equity: Equity;
 
-  @ApiProperty({ example: 3000 })
-  @Prop({ type: Number })
-    monthlyCompensation: number;
+  @ApiProperty({ type: Compensation, description: 'Compensation settings' })
+  @Prop({ type: CompensationSchema })
+    compensation: Compensation;
 
   @ApiProperty({ example: false })
   @Prop({ default: false })
@@ -72,7 +124,7 @@ export class Member {
     lamportsEarned: number;
 
   @ApiProperty({ description: 'Investor settings' })
-  @Prop({ required: function() { return this.role === Role.Investor; }, type: InvestorSettingsSchema })
+  @Prop({ required: function () { return this.role === Role.Investor; }, type: InvestorSettingsSchema })
     investorSettings: InvestorSettings;
 
 }

@@ -27,5 +27,4 @@ export class CreateOrgDto {
 
   @ApiProperty({ type: MemberDto, description: 'First member', required: true })
     member: MemberDto;
-
 }

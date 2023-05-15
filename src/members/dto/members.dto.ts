@@ -1,6 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Role } from '../enum/roles.enum';
 import { InvestorSettingsDto } from './investor-settings.dto';
+import { EquityDto } from './equity.dto';
+import { CompensationDto } from './compensation.dto';
 
 export class MemberDto {
 
@@ -13,11 +15,11 @@ export class MemberDto {
   @ApiProperty({ example: '1.5', description: 'Impact ratio' })
     impactRatio: number;
 
-  @ApiProperty({ example: false, description: 'Is a member monthly compensated' })
-    isMonthlyCompensated: boolean;
+  @ApiProperty({ type: EquityDto, description: 'Compensation settings', required: false })
+    equity: EquityDto;
 
-  @ApiProperty({ example: 1500, description: 'Monthly compensation' })
-    monthlyCompensation: number;
+  @ApiProperty({ description: 'Compensation settings', required: false })
+    compensation: CompensationDto;
 
   @ApiProperty({ example: false, description: 'Auto contribution' })
     isAutoContributing: boolean;
@@ -33,6 +35,6 @@ export class MemberDto {
 
   org: string;
 
-  @ApiProperty({ type: InvestorSettingsDto , description: 'Investor settings' })
+  @ApiProperty({ type: InvestorSettingsDto, description: 'Investor settings' })
     investorSettings: InvestorSettingsDto;
 }
