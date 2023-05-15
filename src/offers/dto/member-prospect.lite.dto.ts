@@ -6,28 +6,19 @@ import { EquityDto } from 'src/members/dto/equity.dto';
 
 export class MemberProspectLiteDto {
   @ApiProperty({ example: 'CEO' })
-  occupation: string;
+    occupation: string;
 
   @ApiProperty({ example: 'Member', enum: Object.keys(Role) })
-  role: string;
+    role: string;
 
   @ApiProperty({ type: EquityDto, description: 'Equity settings' })
-  equity: EquityDto;
+    equity: EquityDto;
 
   @ApiProperty({ type: CompensationDto, description: 'Compensation settings' })
-  compensation: CompensationDto;
-
-  @ApiProperty({ example: 0 })
-  lamportsEarned: number;
-
-  @ApiProperty({ example: false, default: false })
-  isAutoContributing: boolean;
-
-  @ApiProperty({ example: 40, default: 40, maximum: 112 })
-  hoursPerWeek: number;
+    compensation: CompensationDto;
 
   agreement: string;
 
   @ApiProperty({ description: 'Future investor settings' })
-  investorSettings: InvestorSettingsDto;
+    investorSettings: InvestorSettingsDto;
 }

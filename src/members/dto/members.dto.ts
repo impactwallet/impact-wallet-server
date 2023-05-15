@@ -1,39 +1,40 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Role } from '../enum/roles.enum';
 import { InvestorSettingsDto } from './investor-settings.dto';
-import { Compensation, Equity } from '../schema/member.schema';
+import { EquityDto } from './equity.dto';
+import { CompensationDto } from './compensation.dto';
 
 export class MemberDto {
 
   @ApiProperty({ example: 'CEO', description: 'Occupation in organization' })
-  occupation: string;
+    occupation: string;
 
   @ApiProperty({ example: 'Member', description: 'Role in organization', enum: Object.keys(Role) })
-  role: Role;
+    role: Role;
 
   @ApiProperty({ example: '1.5', description: 'Impact ratio' })
-  impactRatio: number;
+    impactRatio: number;
 
-  @ApiProperty({ type: Equity, description: 'Compensation settings' })
-  equity: Equity;
+  @ApiProperty({ type: EquityDto, description: 'Compensation settings', required: false })
+    equity: EquityDto;
 
-  @ApiProperty({ description: 'Compensation settings' })
-  compensation: Compensation;
+  @ApiProperty({ description: 'Compensation settings', required: false })
+    compensation: CompensationDto;
 
   @ApiProperty({ example: false, description: 'Auto contribution' })
-  isAutoContributing: boolean;
+    isAutoContributing: boolean;
 
   @ApiProperty({ example: 40, default: 40, description: 'Hours per week', maximum: 112 })
-  hoursPerWeek: number;
+    hoursPerWeek: number;
 
   @ApiProperty({ example: 'agreement.pdf', description: 'Work agreement' })
-  agreement: string;
+    agreement: string;
 
   @ApiProperty({ example: '0b1bd52d-7d8e-4518-b0a3-13ae5ad52d47', description: 'User id' })
-  user: string;
+    user: string;
 
   org: string;
 
   @ApiProperty({ type: InvestorSettingsDto, description: 'Investor settings' })
-  investorSettings: InvestorSettingsDto;
+    investorSettings: InvestorSettingsDto;
 }

@@ -15,36 +15,41 @@ export type InvestorSettingsDocument = HydratedDocument<InvestorSettings>;
 export class InvestorSettings {
   @ApiProperty({ description: 'Investment amount', type: Number })
   @Prop({ type: Number, required: true })
-  investmentAmount: number;
+    investmentAmount: number;
 
   @ApiProperty({ description: 'Equity allocation', type: Number })
   @Prop({ type: Number, required: true })
-  equityAllocation: number;
+    equityAllocation: number;
 }
 
 export const InvestorSettingsSchema = SchemaFactory.createForClass(InvestorSettings);
 
 @Schema({ _id: false })
 export class Period {
-  value: number;
-  timeFrame: PeriodType;
+  @ApiProperty({ example: 10 })
+  @Prop({ type: Number, required: true })
+    value: number;
+
+  @ApiProperty({ example: 'Years', enum: Object.keys(PeriodType) })
+  @Prop({ enum: Object.keys(PeriodType), required: true })
+    timeframe: PeriodType;
 }
 
 export const PeriodSchema = SchemaFactory.createForClass(Period);
 
 @Schema({ _id: false })
 export class Equity {
-  @ApiProperty({ example: 3000 })
-  @Prop({ type: Number })
-  amount: number;
+  @ApiProperty({ example: 50 })
+  @Prop({ type: Number, required: true })
+    amount: number;
 
-  @ApiProperty({ example: `Immediately` })
-  @Prop({ enum: Object.keys(EquityType) })
-  type: EquityType;
+  @ApiProperty({ example: 'Immediately' })
+  @Prop({ enum: Object.keys(EquityType), required: true })
+    type: EquityType;
 
-  @ApiProperty({ example: `Year` })
-  @Prop({ required: function () { return this.type === EquityType.DuringPeriod; } })
-  period?: PeriodType
+  @ApiProperty({ example: 'Years' })
+  @Prop({ required: function() { return this.type === EquityType.DuringPeriod; }, enum: Object.keys(PeriodType) })
+    period?: PeriodType;
 
 }
 
@@ -53,16 +58,16 @@ export const EquitySchema = SchemaFactory.createForClass(Equity);
 @Schema({ _id: false })
 export class Compensation {
   @ApiProperty({ example: 3000 })
-  @Prop({ type: Number })
-  amount: number;
+  @Prop({ type: Number, required: true })
+    amount: number;
 
-  @ApiProperty({ example: `Per Month` })
-  @Prop({ enum: Object.keys(CompensationType) })
-  type: CompensationType;
+  @ApiProperty({ example: 'PerMonth' })
+  @Prop({ enum: Object.keys(CompensationType), required: true })
+    type: CompensationType;
 
-  @ApiProperty({ example: `Year` })
-  @Prop({ required: function () { return this.type === EquityType.DuringPeriod; } })
-  period: PeriodType
+  @ApiProperty({ example: 'Year' })
+  @Prop({ required: function() { return this.type === CompensationType.OneTime; }, enum: Object.keys(PeriodType) })
+    period?: PeriodType;
 
 }
 
@@ -73,54 +78,54 @@ export class Member {
 
   @ApiProperty({ example: 'CEO' })
   @Prop({ required: function () { return this.role !== Role.Investor; } })
-  occupation: string;
+    occupation: string;
 
   @ApiProperty({ example: 'Member', enum: Object.keys(Role) })
   @Prop({ enum: Object.keys(Role), required: true })
-  role: string;
+    role: string;
 
   @ApiProperty({ example: 1 })
   @Prop({ default: 1 })
-  impactRatio: number;
+    impactRatio: number;
 
   @ApiProperty({ type: Equity, description: 'Equity settings' })
-  @Prop({ required: function () { return this.equity === null; }, type: EquitySchema })
-  equity: Equity;
+  @Prop({ type: EquitySchema })
+    equity: Equity;
 
   @ApiProperty({ type: Compensation, description: 'Compensation settings' })
-  @Prop({ required: function () { return this.compensation === null; }, type: CompensationSchema })
-  compensation: Compensation;
+  @Prop({ type: CompensationSchema })
+    compensation: Compensation;
 
   @ApiProperty({ example: false })
   @Prop({ default: false })
-  isAutoContributing: boolean;
+    isAutoContributing: boolean;
 
   @ApiProperty({ example: 40, default: 40 })
   @Prop({ type: Number, default: 40, max: 112 })
-  hoursPerWeek: number;
+    hoursPerWeek: number;
 
   @Prop()
-  agreement: string;
+    agreement: string;
 
   @ApiProperty({ example: 'ID or object' })
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true })
-  user: string | UserDocument;
+    user: string | UserDocument;
 
   @ApiProperty({ example: 'ID or object' })
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Org', required: true })
-  org: string | OrgDocument;
+    org: string | OrgDocument;
 
   @ApiProperty({ example: 0 })
   @Prop({ type: Number, default: 0 })
-  contributed: number;
+    contributed: number;
 
   @ApiProperty({ example: 0 })
   @Prop({ type: Number, default: 0 })
-  lamportsEarned: number;
+    lamportsEarned: number;
 
   @ApiProperty({ description: 'Investor settings' })
   @Prop({ required: function () { return this.role === Role.Investor; }, type: InvestorSettingsSchema })
-  investorSettings: InvestorSettings;
+    investorSettings: InvestorSettings;
 
 }
 

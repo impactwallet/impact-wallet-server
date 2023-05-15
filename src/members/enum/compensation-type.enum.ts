@@ -1,4 +1,4 @@
 export enum CompensationType {
-  PerMonth = 'Per Month',
-  OneTime = 'One time payment'
+  PerMonth = 'PerMonth',
+  OneTime = 'OneTime'
 }
