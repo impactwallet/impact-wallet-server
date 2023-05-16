@@ -6,7 +6,7 @@ import { AxiosRequestConfig } from 'axios';
 import { Keypair, Transaction, Connection, clusterApiUrl, Cluster, PublicKey, TransactionSignature, LAMPORTS_PER_SOL, SystemProgram, ParsedTransactionWithMeta, TransactionInstruction } from '@solana/web3.js';
 import { getAssociatedTokenAddress, createTransferInstruction, createAssociatedTokenAccountInstruction, createMintToInstruction, getAssociatedTokenAddressSync, getAccount, TokenAccountNotFoundError, TokenInvalidAccountOwnerError } from '@solana/spl-token';
 import { decode } from 'bs58';
-import { get, isEmpty, isNil, truncate } from 'lodash';
+import { get, isEmpty, isNil } from 'lodash';
 import { Org } from '../orgs/schema/org.schema';
 import { ConfigService } from '@nestjs/config';
 
@@ -79,7 +79,7 @@ export class ApiService {
     }
   }
 
-  async transfer(senderPk: string, mint: string, recepients: { wallet: string, amount: number }[]) {
+  async transfer(senderPk: string, mint: string, recepients: { wallet: string, amount: number }[], retries = 0) {
     try {
       const multiplier = mint === this.usdcMint ? 1000000 : LAMPORTS_PER_SOL;
       const mintPublicKey = new PublicKey(mint);
@@ -136,6 +136,11 @@ export class ApiService {
       const signature = await this.sendTxn(serializedTxn);
       return signature;
     } catch (err) {
+      if (retries > 0) {
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        console.log(`Retrying transfer, retries left: ${retries}`);
+        return this.transfer(senderPk, mint, recepients, --retries);
+      }
       err.message = `Error transfering tokens: ${err.message}`;
       throw err;
     }

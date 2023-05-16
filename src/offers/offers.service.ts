@@ -1,12 +1,12 @@
 import { BadRequestException, ForbiddenException, HttpException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { get, isNil } from 'lodash';
-import mongoose, { ClientSession, Model, Types } from 'mongoose';
+import mongoose, { Model, Types } from 'mongoose';
 import { Role } from '../members/enum/roles.enum';
 import { Member, MemberDocument } from '../members/schema/member.schema';
 import { OrgDocument } from '../orgs/schema/org.schema';
 import { PaymentService } from '../payment/payment.service';
-import { Payment, PaymentDocument } from '../payment/schema/payment.schema';
+import { PaymentDocument } from '../payment/schema/payment.schema';
 import { UserDocument } from '../users/schema/user.schema';
 import { OfferFiltersDto } from './dto/offer-filters.dto';
 import { OfferStatusBodyDto, OfferStatusDto } from './dto/offer-status.dto';
@@ -18,17 +18,20 @@ import { SaleOffer, SaleOfferDocument } from './schema/sale-offer.schema';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { ApiService } from '../api-service/api.service';
 import { UsersService } from '../users/users.service';
+import { OffersServiceBase } from './offers.service.base';
 
 @Injectable()
-export class OffersService {
+export class OffersService extends OffersServiceBase {
   constructor(
-    @InjectModel(Offer.name) private offerRepository: Model<OfferDocument>,
+  @InjectModel(Offer.name) offerRepository: Model<OfferDocument>,
     @InjectModel(Member.name) private memberRepository: Model<MemberDocument>,
     @InjectModel(SaleOffer.name) private saleOfferRepository: Model<SaleOfferDocument>,
     private readonly paymentService: PaymentService,
     private readonly apiService: ApiService,
     private readonly userService: UsersService,
-  ) {}
+  ) {
+    super(offerRepository);
+  }
 
   async createOffer(orgId: string, offer: OfferDto) {
     if (offer.memberProspect.role === Role.Investor) {
@@ -63,18 +66,6 @@ export class OffersService {
       query['memberProspect.role'] = filters.role;
     }
     return this.offerRepository.find(query);
-  }
-
-  async getOrgOfferById(orgId: string, offerId: string, session?: ClientSession) {
-    const query = {
-      _id: new mongoose.Types.ObjectId(offerId),
-      org: new mongoose.Types.ObjectId(orgId),
-    };
-    const offer = await this.offerRepository.findOne(query).populate('org').session(session);
-    if (isNil(offer)) {
-      throw new NotFoundException('Offer not found');
-    }
-    return offer;
   }
 
   async updateOfferStatus(org: OrgDocument, offerId: string, body: OfferStatusBodyDto, userId: string) {
