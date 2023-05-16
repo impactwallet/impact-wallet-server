@@ -25,12 +25,12 @@ export class MemberProspect {
     impactRatio: number;
 
   @ApiProperty({ description: 'Equity settings' })
-  @Prop({ required: function () { return this.equity === null; }, type: EquitySchema })
-    equity: Equity;
+  @Prop({ type: EquitySchema })
+    equity?: Equity;
 
   @ApiProperty({ description: 'Compensation settings' })
-  @Prop({ required: function () { return this.compensation === null; }, type: CompensationSchema })
-    compensation: Compensation;
+  @Prop({ type: CompensationSchema })
+    compensation?: Compensation;
 
   @ApiProperty({ example: false, default: false })
   @Prop({ default: false })

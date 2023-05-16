@@ -40,7 +40,7 @@ export const PeriodSchema = SchemaFactory.createForClass(Period);
 @Schema({ _id: false })
 export class Equity {
   @ApiProperty({ example: 50 })
-  @Prop({ type: Number, required: true })
+  @Prop({ type: Number, required: true, max: 100, min: 0 })
     amount: number;
 
   @ApiProperty({ example: 'Immediately' })
@@ -48,8 +48,8 @@ export class Equity {
     type: EquityType;
 
   @ApiProperty({ example: 'Years' })
-  @Prop({ required: function() { return this.type === EquityType.DuringPeriod; }, enum: Object.keys(PeriodType) })
-    period?: PeriodType;
+  @Prop({ required: function() { return this.type === EquityType.DuringPeriod; }, type: PeriodSchema })
+    period?: Period;
 
 }
 
@@ -66,8 +66,8 @@ export class Compensation {
     type: CompensationType;
 
   @ApiProperty({ example: 'Year' })
-  @Prop({ required: function() { return this.type === CompensationType.OneTime; }, enum: Object.keys(PeriodType) })
-    period?: PeriodType;
+  @Prop({ required: function() { return this.type === CompensationType.OneTime; }, type: PeriodSchema })
+    period?: Period;
 
 }
 
@@ -90,11 +90,11 @@ export class Member {
 
   @ApiProperty({ type: Equity, description: 'Equity settings' })
   @Prop({ type: EquitySchema })
-    equity: Equity;
+    equity?: Equity;
 
   @ApiProperty({ type: Compensation, description: 'Compensation settings' })
   @Prop({ type: CompensationSchema })
-    compensation: Compensation;
+    compensation?: Compensation;
 
   @ApiProperty({ example: false })
   @Prop({ default: false })
