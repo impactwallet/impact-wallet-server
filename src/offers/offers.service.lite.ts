@@ -71,16 +71,17 @@ export class OffersLiteService extends OffersServiceBase {
             const memberUser = member.user as UserDocument;
             const pk = await this.apiService.getPK(memberUser.wallet, memberUser.password);
             const amount = member.equity.amount * (newMember.equity.amount / 100);
-            await this.apiService.transfer(pk, org.mint, [{ wallet: user.wallet, amount }], 5);
+            const txnHash = await this.apiService.transfer(pk, org.mint, [{ wallet: user.wallet, amount }], 5);
             await this.memberRepository.findOneAndUpdate(
               { _id: new Types.ObjectId(member._id) },
               {
-                $set: {
-                  'equity.amount': { $inc: -amount },
-                  lamportsEarned: { $inc: -(amount * LAMPORTS_PER_SOL) },
+                $inc: {
+                  'equity.amount': -amount,
+                  lamportsEarned: -(amount * LAMPORTS_PER_SOL),
                 },
               },
             );
+            this.apiService.sendNotification(`${amount}% of equity transferred from ${memberUser.nickname} to ${user.nickname}:\n\n${this.apiService.buildExplorerLink('/tx/' + txnHash)}`);
           });
       }
 
