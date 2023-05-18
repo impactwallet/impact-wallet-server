@@ -17,6 +17,7 @@ import { SaleOffer, SaleOfferDocument } from '../offers/schema/sale-offer.schema
 import { SellAssetsDto } from './dto/sale-assets.dto';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { Role } from '../members/enum/roles.enum';
+import { EquityType } from '../members/enum/equity-type.enum';
 
 @Injectable()
 export class PaymentService {
@@ -166,30 +167,41 @@ export class PaymentService {
   }
 
   async handleInvestmentPayment(org: OrgDocument, payment: PaymentDocument, body: { signature: string }) {
-    const member = await this.memberModel.findOne({
+    let member = await this.memberModel.findOne({
       org: org._id,
       user: payment.investor.user,
     }).populate('user');
     let memberUser = get(member, 'user') as UserDocument;
 
     if (isNil(member)) {
-      const newMember = new this.memberModel(payment.investor.toObject());
-      await newMember.save();
-      await newMember.populate('user');
-      memberUser = newMember.user as UserDocument;
+      member = new this.memberModel(payment.investor.toObject());
+      member.equity = {
+        amount: payment.investor.investorSettings.equityAllocation,
+        type: EquityType.Immediately,
+      };
+      await member.save();
+      await member.populate('user');
+      memberUser = member.user as UserDocument;
     } else {
-      await this.memberModel.findOneAndUpdate(
+      member = await this.memberModel.findOneAndUpdate(
         { _id: member._id },
         {
           $inc: {
+            'equity.amount': payment.investor.investorSettings.equityAllocation,
             'investorSettings.investmentAmount': payment.investor.investorSettings.investmentAmount,
             'investorSettings.equityAllocation': payment.investor.investorSettings.equityAllocation,
           },
+          $set: {
+            'equity.type': EquityType.Immediately,
+          },
         },
+        { new: true, upsert: true },
       );
     }
     
     this.apiService.sendNotification(`${memberUser.nickname} just invested ${payment.amount} into ${org.name}:\n\n${body.signature}\n\n${this.apiService.buildExplorerLink('/tx/' + body.signature)}`);
+
+    return member;
   }
 
   async _handleRegularPayment(org: OrgDocument, body: any) {

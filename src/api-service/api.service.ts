@@ -282,7 +282,7 @@ export class ApiService {
     }
   }
 
-  async createFungibleTokensForOrganization(org: Org, logo: Buffer): Promise<string> {
+  async createFungibleTokensForOrganization(org: Org, logo: Buffer) {
     const body = new FormData();
     body.append('network', this.network);
     body.append('wallet', org.wallet);
@@ -307,8 +307,8 @@ export class ApiService {
       const txn = Transaction.from(Buffer.from(encodedTxn, 'base64'));
       const pk = await this.getPK(org.wallet, org.password);
       const serializedTxn = this.createSignedSerializedTxn(txn, pk, true, false);
-      await this.sendTxn(serializedTxn);
-      return mint;
+      const txnHash = await this.sendTxn(serializedTxn);
+      return { mint, txnHash };
     } catch (err) {
       err.message = `Error creating token: ${err.message}`;
       throw err;
@@ -468,7 +468,7 @@ export class ApiService {
 
   async confirmTxnWithRetry(
     txnHash: string,
-    retryFn: () => Promise<string>,
+    retryFn: () => Promise<any>,
     retries = 5,
   ): Promise<string> {
     const parsedTxn = await this.getParsedTransaction(txnHash);
@@ -478,6 +478,7 @@ export class ApiService {
     }
     try {
       txnHash = await retryFn();
+      txnHash = get(txnHash, 'txnHash', txnHash);
     } catch (err) {
       txnError = err.message;
     }

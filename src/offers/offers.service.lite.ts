@@ -1,4 +1,4 @@
-import { ForbiddenException, HttpException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, HttpException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Member, MemberDocument } from '../members/schema/member.schema';
@@ -15,6 +15,7 @@ import { UserDocument } from '../users/schema/user.schema';
 import { ApiService } from '../api-service/api.service';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { Role } from '../members/enum/roles.enum';
+import { PaymentService } from '../payment/payment.service';
 
 @Injectable()
 export class OffersLiteService extends OffersServiceBase {
@@ -23,6 +24,7 @@ export class OffersLiteService extends OffersServiceBase {
     @InjectModel(Member.name) private memberRepository: Model<MemberDocument>,
     private readonly userService: UsersService,
     private readonly apiService: ApiService,
+    private readonly paymentService: PaymentService,
   ) {
     super(offerRepository);
   }
@@ -52,24 +54,48 @@ export class OffersLiteService extends OffersServiceBase {
       offer.memberProspect.user = user._id.toString();
       offer.memberProspect.org = org._id.toString();
 
-      const newMember = new this.memberRepository(offer.memberProspect.toObject());
-      if (!isNil(newMember.equity) && newMember.equity.type === EquityType.Immediately) {
-        newMember.lamportsEarned = newMember.equity.amount * LAMPORTS_PER_SOL;
+      let newMember: MemberDocument;
+
+      if (offer.memberProspect.role === Role.Investor) {
+        const balance = await this.apiService.getUSDCBalance(user.wallet);
+        const paymentInfo = {
+          info: `Investing $${offer.memberProspect.investorSettings.investmentAmount} for ${offer.memberProspect.investorSettings.equityAllocation}% of equity allocation`,
+          amount: offer.memberProspect.investorSettings.investmentAmount,
+        };
+        if (balance < paymentInfo.amount) {
+          throw new BadRequestException({ message: 'Insufficient funds' });
+        }
+        const payment = await this.paymentService.receiveInvestmentInApp(offer.memberProspect, org, paymentInfo);
+        const pk = await this.apiService.getPK(user.wallet, user.password);
+        const txnHash = await this.apiService.transferUSDC(pk, [{ wallet: org.wallet, amount: payment.amount }]);
+
+        payment.txnHash = txnHash;
+        await payment.save();
+        newMember = await this.paymentService.handleInvestmentPayment(org, payment, { signature: txnHash });
+      } else {
+        newMember = new this.memberRepository(offer.memberProspect.toObject());
+        if (!isNil(newMember.equity) && newMember.equity.type === EquityType.Immediately) {
+          newMember.lamportsEarned = newMember.equity.amount * LAMPORTS_PER_SOL;
+        }
+        await newMember.save();
       }
-      await newMember.save();
 
       if (!isNil(newMember.equity) && newMember.equity.type === EquityType.Immediately) {
         this.memberRepository.find({
           _id: { $ne: new Types.ObjectId(newMember._id) },
           org: new Types.ObjectId(org._id),
           equity: { $ne: null },
-          role: { $ne: Role.Investor },
         })
           .populate({ path: 'user', select: '+password' })
           .cursor()
           .eachAsync(async (member) => {
             const memberUser = member.user as UserDocument;
-            const amount = member.equity.amount * (newMember.equity.amount / 100);
+            let amount: number;
+            if (offer.memberProspect.role === Role.Investor) {
+              amount = member.equity.amount * (offer.memberProspect.investorSettings.equityAllocation / 100);
+            } else {
+              amount = member.equity.amount * (newMember.equity.amount / 100);
+            }
             const transferFn = this.transfer.bind(this, memberUser, user, org.mint, amount);
             let txnHash = await transferFn();
             txnHash = await this.apiService.confirmTxnWithRetry(txnHash, transferFn);

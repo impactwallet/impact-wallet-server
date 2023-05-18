@@ -23,7 +23,6 @@ import { SendUsdcDto } from '../users/dto/send-usdc.dto';
 import { Role } from '../members/enum/roles.enum';
 import { OrgHistoryItemAction } from './enum/org-history-item-action.enum';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
-import { EquityDto } from 'src/members/dto/equity.dto';
 
 const MINT_STATUS_RETRIES = 5;
 
@@ -52,12 +51,15 @@ export class OrgsService {
       let mintInfo = { mint: null, mintError: null, mintStatus: MintStatus.inProgress };
       await this.updateMint(org._id, mintInfo);
       const { file } = await this.getLogo(org.logo.split('/')[3]);
-      const mint = await this.apiService.createFungibleTokensForOrganization(org, Buffer.from(file));
+      const createTokenFn = this.apiService.createFungibleTokensForOrganization.bind(this.apiService, org, Buffer.from(file));
+      const { mint, txnHash } = await createTokenFn();
+      await this.apiService.confirmTxnWithRetry(txnHash, createTokenFn);
       this.apiService.sendNotification(`New ${org.username.toUpperCase().substring(0, 10)} token created:\n\n${mint}\n\n${this.apiService.buildExplorerLink('/address/' + mint)}`);
 
       if (!isNil(initialMint)) {
-        const orgPk = await this.apiService.getPK(org.wallet, org.password);
-        const txnHash = await this.apiService.mintToken(mint, orgPk, [initialMint]);
+        const mintTokenFn = this.mintToken.bind(this, org, mint, [initialMint]);
+        let txnHash = await mintTokenFn();
+        txnHash = await this.apiService.confirmTxnWithRetry(txnHash, mintTokenFn);
         await this.updateMintedAmount(org._id, initialMint.amount);
         this.apiService.sendNotification(
           `${initialMint.amount / LAMPORTS_PER_SOL} ${org.username.toUpperCase().substring(0, 10)} minted to ${initialMint.wallet}:\n\n${this.apiService.buildExplorerLink('/tx/' + txnHash)}`
@@ -70,6 +72,11 @@ export class OrgsService {
       const mintInfo = { mint: null, mintError: get(err, 'message', err), mintStatus: MintStatus.error };
       this.updateMint(org._id, mintInfo).exec();
     }
+  }
+
+  async mintToken(org: OrgDocument, mint: string, receivers: [{ wallet: string, amount: number }]) {
+    const orgPk = await this.apiService.getPK(org.wallet, org.password);
+    return this.apiService.mintToken(mint, orgPk, receivers);
   }
 
   async createOrganization(orgsDto: CreateOrgDto, logo: any, mock: boolean) {
@@ -311,7 +318,9 @@ export class OrgsService {
     try {
       let mintInfo = { mint: null, mintError: null, mintStatus: MintStatus.inProgress };
       const { file } = await this.getLogo(org.logo.split('/')[3]);
-      const mint = await this.apiService.createFungibleTokensForOrganization(org, Buffer.from(file));
+      const createTokenFn = this.apiService.createFungibleTokensForOrganization.bind(this.apiService, org, Buffer.from(file));
+      const { mint, txnHash } = await createTokenFn();
+      await this.apiService.confirmTxnWithRetry(txnHash, createTokenFn);
       this.apiService.sendNotification(`New ${truncate(org.username.toUpperCase(), { length: 10 })} token created:\n\n${mint}\n\n${this.apiService.buildExplorerLink('/address/' + mint)}`);
       org.mint = mint;
       mintInfo = { mint, mintError: null, mintStatus: MintStatus.success };
