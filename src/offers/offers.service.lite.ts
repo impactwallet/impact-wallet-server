@@ -16,17 +16,20 @@ import { ApiService } from '../api-service/api.service';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { Role } from '../members/enum/roles.enum';
 import { PaymentService } from '../payment/payment.service';
+import { SaleOffer, SaleOfferDocument } from './schema/sale-offer.schema';
+import { PaymentDocument } from '../payment/schema/payment.schema';
 
 @Injectable()
 export class OffersLiteService extends OffersServiceBase {
   constructor(
   @InjectModel(Offer.name) offerRepository: Model<OfferDocument>,
     @InjectModel(Member.name) private memberRepository: Model<MemberDocument>,
+    @InjectModel(SaleOffer.name) saleOfferRepository: Model<SaleOfferDocument>,
     private readonly userService: UsersService,
     private readonly apiService: ApiService,
     private readonly paymentService: PaymentService,
   ) {
-    super(offerRepository);
+    super(offerRepository, saleOfferRepository);
   }
 
   async createLiteOffer(orgId: string, offer: OfferLiteDto) {
@@ -124,6 +127,56 @@ export class OffersLiteService extends OffersServiceBase {
   async transfer(source: any, destination: any, mint: string, amount: number) {
     const pk = await this.apiService.getPK(source.wallet, source.password);
     return this.apiService.transfer(pk, mint, [{ wallet: destination.wallet, amount }]);
+  }
+
+  async updateSaleOfferStatus(offerId: string, body: OfferStatusBodyDto, buyerId: string) {
+    const offer = await this.getSaleOfferById(offerId, ['org', 'seller']);
+    if (offer.status !== OfferStatus.Pending) {
+      throw new ForbiddenException('Offer already accepted/declined');
+    }
+
+    const buyer = await this.userService.getByUserId(buyerId, '+password');
+    const seller = offer.seller as UserDocument;
+    const org = offer.org as OrgDocument;
+    let payment: PaymentDocument;
+
+    switch (body.status) {
+    case OfferStatusDto.accepted:
+      const member = await this.memberRepository.findOne({
+        user: seller._id,
+        org: org._id,
+      }).populate({ path: 'user', select: '+password' });
+      const balance = await this.apiService.getUSDCBalance(buyer.wallet);
+      const lamportsAmount = offer.tokensAmount * LAMPORTS_PER_SOL;
+
+      offer.status = OfferStatus.Approved;
+      offer.buyer = buyer._id;
+      const paymentInfo = {
+        info: `Selling ${offer.tokensAmount} impact shares for $${offer.price}`,
+        price: offer.price,
+      };
+      if (balance < paymentInfo.price) {
+        throw new BadRequestException({ message: 'Insufficient funds' });
+      }
+      if (member.lamportsEarned < lamportsAmount) {
+        throw new BadRequestException({ message: 'Not enough tokens to sell' });
+      }
+      payment = await this.paymentService.sellAssetsInApp(offer, paymentInfo);
+      const pk = await this.apiService.getPK(buyer.wallet, buyer.password);
+      const txnHash = await this.apiService.transferUSDC(pk, [{ wallet: seller.wallet, amount: payment.amount }]);
+
+      payment.txnHash = txnHash;
+      await payment.save();
+      await this.paymentService.handleAssetsSale(payment);
+      break;
+    case OfferStatusDto.declined:
+      offer.status = OfferStatus.Declined;
+      break;
+    }
+
+    await offer.save();
+
+    return payment;
   }
 
 }

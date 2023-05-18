@@ -9,6 +9,7 @@ import { OffersController } from './offers.controller';
 import { UsersModule } from '../users/users.module';
 import { ApiServiceModule } from '../api-service/api.module';
 import { OffersLiteService } from './offers.service.lite';
+import { OffersControllerLite } from './offers.controller.lite';
 
 @Module({
   imports: [
@@ -21,7 +22,7 @@ import { OffersLiteService } from './offers.service.lite';
     UsersModule,
     ApiServiceModule,
   ],
-  controllers: [OffersController],
+  controllers: [OffersController, OffersControllerLite],
   providers: [OffersService, OffersLiteService],
   exports: [OffersService, OffersLiteService],
 })

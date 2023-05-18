@@ -25,12 +25,12 @@ export class OffersService extends OffersServiceBase {
   constructor(
   @InjectModel(Offer.name) offerRepository: Model<OfferDocument>,
     @InjectModel(Member.name) private memberRepository: Model<MemberDocument>,
-    @InjectModel(SaleOffer.name) private saleOfferRepository: Model<SaleOfferDocument>,
+    @InjectModel(SaleOffer.name) saleOfferRepository: Model<SaleOfferDocument>,
     private readonly paymentService: PaymentService,
     private readonly apiService: ApiService,
     private readonly userService: UsersService,
   ) {
-    super(offerRepository);
+    super(offerRepository, saleOfferRepository);
   }
 
   async createOffer(orgId: string, offer: OfferDto) {

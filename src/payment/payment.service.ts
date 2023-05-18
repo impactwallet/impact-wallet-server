@@ -236,8 +236,9 @@ export class PaymentService {
     const buyer = payment.sale.buyer as UserDocument;
     const lamportsAmount = payment.sale.tokensAmount * LAMPORTS_PER_SOL;
 
-    const fromPk = await this.apiService.getPK(memberUser.wallet, memberUser.password);
-    const signature = await this.apiService.transfer(fromPk, org.mint, [{wallet: buyer.wallet, amount: payment.sale.tokensAmount }]);
+    const transferFn = this.transfer.bind(this, memberUser, buyer, org.mint, payment.sale.tokensAmount);
+    let signature = await transferFn();
+    signature = await this.apiService.confirmTxnWithRetry(signature, transferFn);
 
     await this.saleOfferModel.findOneAndUpdate(
       { _id: payment.sale._id },
@@ -256,19 +257,35 @@ export class PaymentService {
         user: buyer._id,
         org: org._id,
         lamportsEarned: lamportsAmount,
+        equity: {
+          amount: payment.sale.tokensAmount,
+          type: EquityType.Immediately,
+        },
       });
       await newMember.save();
     } else {
       buyerMember.lamportsEarned += lamportsAmount;
+      buyerMember.equity = {
+        amount: get(buyerMember, 'equity.amount', 0) + payment.sale.tokensAmount,
+        type: EquityType.Immediately,
+      };
       await buyerMember.save();
     }
 
     await this.memberModel.findOneAndUpdate(
       { _id: member._id },
-      { $inc: { lamportsEarned: -lamportsAmount } },
+      { $inc: {
+        lamportsEarned: -lamportsAmount,
+        'equity.amount': -payment.sale.tokensAmount,
+      } },
     );
 
     this.apiService.sendNotification(`${buyer.nickname} just bought ${payment.sale.tokensAmount} ${org.name} impact shares from ${memberUser.nickname} for ${payment.amount} USDC:\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
+  }
+
+  async transfer(source: any, destination: any, mint: string, amount: number) {
+    const fromPk = await this.apiService.getPK(source.wallet, source.password);
+    return this.apiService.transfer(fromPk, mint, [{wallet: destination.wallet, amount: amount }]);
   }
 
 }

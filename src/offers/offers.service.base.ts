@@ -2,9 +2,13 @@ import { NotFoundException } from '@nestjs/common';
 import { isNil } from 'lodash';
 import { ClientSession, Model, Types } from 'mongoose';
 import { OfferDocument } from './schema/offer.schema';
+import { SaleOfferDocument } from './schema/sale-offer.schema';
 
 export class OffersServiceBase {
-  constructor(protected offerRepository: Model<OfferDocument>,) {}
+  constructor(
+    protected offerRepository: Model<OfferDocument>,
+    protected saleOfferRepository: Model<SaleOfferDocument>,
+  ) {}
 
   async getOrgOfferById(orgId: string, offerId: string, session?: ClientSession) {
     const query = {
@@ -14,6 +18,14 @@ export class OffersServiceBase {
     const offer = await this.offerRepository.findOne(query).populate('org').session(session);
     if (isNil(offer)) {
       throw new NotFoundException('Offer not found');
+    }
+    return offer;
+  }
+
+  async getSaleOfferById(offerId: string, populate?: any) {
+    const offer = await this.saleOfferRepository.findById(offerId).populate(populate);
+    if (isNil(offer)) {
+      throw new NotFoundException('Sale offer not found');
     }
     return offer;
   }
