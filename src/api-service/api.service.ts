@@ -465,4 +465,25 @@ export class ApiService {
   buildExplorerLink(endpoint: string) {
     return `${this.explorerUrl}${endpoint}`;
   }
+
+  async confirmTxnWithRetry(
+    txnHash: string,
+    retryFn: () => Promise<string>,
+    retries = 5,
+  ): Promise<string> {
+    const parsedTxn = await this.getParsedTransaction(txnHash);
+    let txnError = get(parsedTxn, 'meta.err');
+    if (!isNil(parsedTxn) && isNil(txnError)) {
+      return txnHash;
+    }
+    try {
+      txnHash = await retryFn();
+    } catch (err) {
+      txnError = err.message;
+    }
+    if (!isNil(txnError) && retries > 0) {
+      return this.confirmTxnWithRetry(txnHash, retryFn, --retries);
+    }
+    throw txnError;
+  }
 }

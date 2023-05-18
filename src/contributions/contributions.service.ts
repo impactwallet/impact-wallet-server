@@ -197,10 +197,10 @@ export class ContributionsService {
 
   async mintAndConfirmWithRetryAndReverse(org: OrgDocument, contribution: ContributionDocument, body: StopContributionDto) {
     try {
-      const orgPk = await this.apiService.getPK(org.wallet, org.password);
-      contribution.txnHash = await this.apiService.mintToken(org.mint, orgPk, contribution.split, body.memo);
-
-      const txnHash = await this.confirmContribution(org, contribution);
+      const mintContributionTokensFn = this.mintContributionTokens.bind(this, org, contribution, body.memo);
+      let txnHash = await mintContributionTokensFn();
+      txnHash = await this.apiService.confirmTxnWithRetry(txnHash, mintContributionTokensFn);
+      contribution.txnHash = txnHash;
 
       contribution.txnStatus = 'confirmed';
       const nicknames = contribution.split
@@ -238,27 +238,9 @@ export class ContributionsService {
     return contribution.save();
   }
 
-  async confirmContribution(
-    org: OrgDocument,
-    contribution: ContributionDocument,
-    retries = 5,
-  ): Promise<string> {
-    const parsedTxn = await this.apiService.getParsedTransaction(contribution.txnHash);
-    let txnError = get(parsedTxn, 'meta.err');
-    if (!isNil(parsedTxn) && isNil(txnError)) {
-      return contribution.txnHash;
-    }
-    try {
-      const orgPk = await this.apiService.getPK(org.wallet, org.password);
-      const txnHash = await this.apiService.mintToken(org.mint, orgPk, contribution.split);
-      contribution.txnHash = txnHash;
-    } catch (err) {
-      txnError = err.message;
-    }
-    if (!isNil(txnError) && retries > 0) {
-      return this.confirmContribution(org, contribution, --retries);
-    }
-    throw txnError;
+  async mintContributionTokens(org: OrgDocument, contribution: ContributionDocument, memo?: string) {
+    const orgPk = await this.apiService.getPK(org.wallet, org.password);
+    return this.apiService.mintToken(org.mint, orgPk, contribution.split, memo);
   }
 
   async _calculateAndUpdateInvestorsShares(org: OrgDocument, lamportsEarned: number) {
