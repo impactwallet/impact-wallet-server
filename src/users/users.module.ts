@@ -12,6 +12,8 @@ import { Org, OrgSchema } from '../orgs/schema/org.schema';
 import { Payment, PaymentSchema } from '../payment/schema/payment.schema';
 import { Contribution, ContributionSchema } from '../contributions/schema/contribution.schema';
 import { SaleOffer, SaleOfferSchema } from '../offers/schema/sale-offer.schema';
+import { UsersServiceLite } from './users.service.lite';
+import { UsersControllerLite } from './users.controller.lite';
 
 @Module({
   imports: [
@@ -30,8 +32,8 @@ import { SaleOffer, SaleOfferSchema } from '../offers/schema/sale-offer.schema';
     MembersModule,
     S3Module,
   ],
-  providers: [UsersService],
-  controllers: [UsersController],
-  exports: [UsersService],
+  providers: [UsersService, UsersServiceLite],
+  controllers: [UsersController, UsersControllerLite],
+  exports: [UsersService, UsersServiceLite],
 })
 export class UsersModule { }

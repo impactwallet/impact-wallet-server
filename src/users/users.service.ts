@@ -1,8 +1,8 @@
-import { Injectable, NotFoundException, UnauthorizedException, ConflictException, HttpException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, HttpException, BadRequestException } from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
 import { v4 as uuid } from 'uuid';
-import mongoose, { ClientSession, Model } from 'mongoose';
+import mongoose, { Model } from 'mongoose';
 import { CreateUserDto } from './dto/create-user.dto';
 import { User, UserDocument } from './schema/user.schema';
 import { ApiService } from 'src/api-service/api.service';
@@ -28,23 +28,26 @@ import { EntityFromTxnDto } from '../common/dto/entity-from-txn.dto';
 import { Account } from '@solana/spl-token';
 import { Contribution, ContributionDocument } from '../contributions/schema/contribution.schema';
 import { areObjectIdsEqual } from '../utils/mongo';
+import { UsersServiceBase } from './users.service.base';
 
 @Injectable()
-export class UsersService {
+export class UsersService extends UsersServiceBase {
 
   constructor(
-    @InjectModel(User.name) private userRepository: Model<UserDocument>,
+  @InjectModel(User.name) userRepository: Model<UserDocument>,
     @InjectModel(Member.name) private memberRepository: Model<MemberDocument>,
     @InjectModel(Org.name) private orgRepository: Model<OrgDocument>,
     @InjectModel(Payment.name) private paymentRepository: Model<PaymentDocument>,
     @InjectModel(Contribution.name) private contributionRepository: Model<ContributionDocument>,
     @InjectModel(SaleOffer.name) private saleOfferRepository: Model<SaleOfferDocument>,
     @InjectConnection() private readonly connection: mongoose.Connection,
-    private jwtService: JwtService,
+    jwtService: JwtService,
     private apiService: ApiService,
     private membersService: MembersService,
     private s3Service: S3Service
-  ) { }
+  ) {
+    super(userRepository, jwtService);
+  }
 
   async getUsersByNicknamePrivate(name: string): Promise<User[]> {
     const regex = new RegExp(name.toString(), 'i');
@@ -136,42 +139,11 @@ export class UsersService {
     };
   }
 
-
-  async getByUserId(id: string, select?: string, session?: ClientSession): Promise<UserDocument> {
-    const user = await this.userRepository.findById(
-      new mongoose.Types.ObjectId(id),
-      select,
-      { session },
-    );
-    if (isNil(user)) {
-      throw new NotFoundException('User not found');
-    }
-    return user;
-  }
-
   private async getBySecretLink(secretLink: string) {
     const user = await this.userRepository.findOne({ secretLink }, '+secretLink');
     if (isNil(user)) {
       throw new NotFoundException('User not found');
     }
-    return user;
-  }
-
-  async getUserFromToken(req: Request): Promise<UserDocument> {
-    const authHeader: string = req.headers['authorization'];
-    if (!authHeader) throw new UnauthorizedException({ message: 'User not authorized' });
-    const bearer = authHeader.split(' ')[0];
-    const token = authHeader.split(' ')[1];
-    if (bearer !== 'Bearer' || !token) {
-      throw new UnauthorizedException({ message: 'User not authorized' });
-    }
-    const payload = this.jwtService.verify(token);
-    const user = await this.userRepository.findById(get(payload, '_id'));
-
-    if (isNil(user)) {
-      throw new UnauthorizedException({ message: 'User not authorized' });
-    }
-
     return user;
   }
 
