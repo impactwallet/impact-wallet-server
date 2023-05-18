@@ -482,6 +482,7 @@ export class ApiService {
       txnError = err.message;
     }
     if (!isNil(txnError) && retries > 0) {
+      console.log(`Retrying txn ${txnHash}: ${txnError}`);
       return this.confirmTxnWithRetry(txnHash, retryFn, --retries);
     }
     throw txnError;

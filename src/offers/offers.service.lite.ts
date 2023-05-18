@@ -69,9 +69,10 @@ export class OffersLiteService extends OffersServiceBase {
           .cursor()
           .eachAsync(async (member) => {
             const memberUser = member.user as UserDocument;
-            const pk = await this.apiService.getPK(memberUser.wallet, memberUser.password);
             const amount = member.equity.amount * (newMember.equity.amount / 100);
-            const txnHash = await this.apiService.transfer(pk, org.mint, [{ wallet: user.wallet, amount }], 5);
+            const transferFn = this.transfer.bind(this, memberUser, user, org.mint, amount);
+            let txnHash = await transferFn();
+            txnHash = await this.apiService.confirmTxnWithRetry(txnHash, transferFn);
             await this.memberRepository.findOneAndUpdate(
               { _id: new Types.ObjectId(member._id) },
               {
@@ -92,6 +93,11 @@ export class OffersLiteService extends OffersServiceBase {
     }
   
     return offer.save();
+  }
+
+  async transfer(source: any, destination: any, mint: string, amount: number) {
+    const pk = await this.apiService.getPK(source.wallet, source.password);
+    return this.apiService.transfer(pk, mint, [{ wallet: destination.wallet, amount }]);
   }
 
 }
