@@ -452,12 +452,15 @@ export class ApiService {
 
   createSignedSerializedTxn(
     transaction: Transaction,
-    fromPrivateKey: string,
+    fromPrivateKey: string | string[],
     requireAllSignatures = true,
     verifySignatures = true,
   ) {
-    const fromSigner = Keypair.fromSecretKey(decode(fromPrivateKey));
-    transaction.partialSign(fromSigner);
+    const pks = Array.isArray(fromPrivateKey) ? fromPrivateKey : [fromPrivateKey];
+    pks.forEach((pk) => {
+      const fromSigner = Keypair.fromSecretKey(decode(pk));
+      transaction.partialSign(fromSigner);
+    });
     const serializedTxn = transaction.serialize({ requireAllSignatures, verifySignatures }).toString('base64');
     return serializedTxn;
   }
@@ -487,5 +490,27 @@ export class ApiService {
       return this.confirmTxnWithRetry(txnHash, retryFn, --retries);
     }
     throw txnError;
+  }
+
+  async recordMemo(memo: string, keys: { pubKey: string, pk: string }[]) {
+    const payer = new PublicKey(this.isMainnet ? process.env.FEE_PAYER : keys[0].pubKey);
+    const txn = new Transaction().add(
+      new TransactionInstruction({
+        keys: keys.map((key) => ({
+          pubkey: new PublicKey(key.pubKey),
+          isSigner: true,
+          isWritable: false,
+        })),
+        data: Buffer.from(memo, 'utf-8'),
+        programId: new PublicKey(this.memoProgramId),
+      }),
+    );
+    
+    const blockhash = (await this.connection.getLatestBlockhash('finalized'));
+    txn.recentBlockhash = blockhash.blockhash;
+    txn.feePayer = payer;
+    const serializedTxn = this.createSignedSerializedTxn(txn, keys.map((key) => key.pk), true, false);
+    const txnHash = await this.sendTxn(serializedTxn);
+    return txnHash;
   }
 }

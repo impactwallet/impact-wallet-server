@@ -7,6 +7,8 @@ import { Contribution, ContributionSchema } from './schema/contribution.schema';
 import { ContributionsController } from './contributions.controller';
 import { OrgsModule } from '../orgs/orgs.module';
 import { UsersModule } from '../users/users.module';
+import { ContributionsServiceLite } from './contributions.service.lite';
+import { ContributionsControllerLite } from './contributions.controller.lite';
 
 @Module({
   imports: [
@@ -16,7 +18,7 @@ import { UsersModule } from '../users/users.module';
     OrgsModule,
     UsersModule,
   ],
-  providers: [ContributionsService],
-  controllers: [ContributionsController],
+  providers: [ContributionsService, ContributionsServiceLite],
+  controllers: [ContributionsController, ContributionsControllerLite],
 })
 export class ContributionsModule {}
