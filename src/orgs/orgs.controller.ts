@@ -195,10 +195,8 @@ export class OrgsController {
   async receivePayment(
   @Param('orgId') orgId: string,
     @Body(new ValidationPipe()) body: ReceivePaymentDto,
-    @Req() req: Request,
   ) {
-    await this.usersService.getUserFromToken(req);
-
+    // TODO: implement api key logic
     const org = await this.orgsService.getByOrgId(orgId);
     if (isNil(org)) {
       throw new NotFoundException({ message: 'Organization not found' });
