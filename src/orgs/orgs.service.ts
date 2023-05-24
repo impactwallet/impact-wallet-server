@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, HttpException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { get, isEmpty, isNil, truncate } from 'lodash';
+import { get, identity, isEmpty, isNil, pickBy, truncate } from 'lodash';
 import { v4 as uuid } from 'uuid';
 import mongoose, { ClientSession, Model, PipelineStage, Types } from 'mongoose';
 import { ApiService } from 'src/api-service/api.service';
@@ -56,27 +56,28 @@ export class OrgsService {
       await this.apiService.confirmTxnWithRetry(txnHash, createTokenFn);
       this.apiService.sendNotification(`New ${org.username.toUpperCase().substring(0, 10)} token created:\n\n${mint}\n\n${this.apiService.buildExplorerLink('/address/' + mint)}`);
 
-      if (!isNil(initialMint)) {
-        const mintTokenFn = this.mintToken.bind(this, org, mint, [initialMint]);
-        let txnHash = await mintTokenFn();
-        txnHash = await this.apiService.confirmTxnWithRetry(txnHash, mintTokenFn);
-        await this.updateMintedAmount(org._id, initialMint.amount);
-        this.apiService.sendNotification(
-          `${initialMint.amount / LAMPORTS_PER_SOL} ${org.username.toUpperCase().substring(0, 10)} minted to ${initialMint.wallet}:\n\n${this.apiService.buildExplorerLink('/tx/' + txnHash)}`
-        );
-      }
       mintInfo = { mint, mintError: null, mintStatus: MintStatus.success };
       await this.updateMint(org._id, mintInfo, null);
-
+      org.mint = mint;
     } catch (err) {
       const mintInfo = { mint: null, mintError: get(err, 'message', err), mintStatus: MintStatus.error };
       this.updateMint(org._id, mintInfo).exec();
     }
+
+    if (!isNil(initialMint)) {
+      const mintTokenFn = this.mintToken.bind(this, org, [initialMint]);
+      let txnHash = await mintTokenFn();
+      txnHash = await this.apiService.confirmTxnWithRetry(txnHash, mintTokenFn);
+      await this.updateMintedAmount(org._id, initialMint.amount);
+      this.apiService.sendNotification(
+        `${initialMint.amount / LAMPORTS_PER_SOL} ${org.username.toUpperCase().substring(0, 10)} minted to ${initialMint.wallet}:\n\n${this.apiService.buildExplorerLink('/tx/' + txnHash)}`
+      );
+    }
   }
 
-  async mintToken(org: OrgDocument, mint: string, receivers: [{ wallet: string, amount: number }]) {
+  async mintToken(org: OrgDocument, receivers: [{ wallet: string, amount: number }]) {
     const orgPk = await this.apiService.getPK(org.wallet, org.password);
-    return this.apiService.mintToken(mint, orgPk, receivers);
+    return this.apiService.mintToken(org.mint, orgPk, receivers);
   }
 
   async createOrganization(orgsDto: CreateOrgDto, logo: any, mock: boolean) {
@@ -88,7 +89,7 @@ export class OrgsService {
     }
 
     const session = await this.connection.startSession();
-    const newOrg = new this.orgRepository(orgsDto);
+    const newOrg = new this.orgRepository(pickBy(orgsDto, identity));
     let member: MemberDocument;
 
     await session.withTransaction(async () => {

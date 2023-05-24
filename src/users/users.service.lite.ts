@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { InjectModel, InjectConnection } from '@nestjs/mongoose';
+import { InjectModel } from '@nestjs/mongoose';
 import mongoose, { Model } from 'mongoose';
 import { ApiService } from 'src/api-service/api.service';
 import { get, isNil } from 'lodash';
