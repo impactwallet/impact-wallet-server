@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { InjectModel } from '@nestjs/mongoose';
 import mongoose, { Model } from 'mongoose';
 import { ApiService } from 'src/api-service/api.service';
-import { get, isNil } from 'lodash';
+import { get, isNil, set } from 'lodash';
 import { SendAssetsDto } from './dto/send-assets.dto';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { Member, MemberDocument } from 'src/members/schema/member.schema';
@@ -73,13 +73,9 @@ export class UsersServiceLite extends UsersServiceBase {
         });
         await newMember.save();
       } else {
-        await this.memberRepository.findOneAndUpdate(
-          { _id: recepientMember._id },
-          { $inc: {
-            'lamportsEarned': sendAssetsDto.amount * LAMPORTS_PER_SOL,
-            'equity.amount': sendAssetsDto.amount,
-          } },
-        );
+        set(recepientMember, 'equity.amount', get(recepientMember, 'equity.amount', 0) + sendAssetsDto.amount);
+        set(recepientMember, 'equity.type', get(recepientMember, 'equity.type', EquityType.Immediately));
+        await recepientMember.save();
       }
     }
 
