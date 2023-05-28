@@ -99,7 +99,7 @@ export class OrgsService {
         if (error.code === 11000) {
           throw new ConflictException({ error });
         }
-        throw new HttpException(get(error, 'message', error), 400);
+        throw new HttpException(get(error, 'message', error.toString()), 400);
       }
       try {
         if (!mock) {
@@ -111,7 +111,7 @@ export class OrgsService {
         await newOrg.save({ session });
       } catch (error) {
         const code = get(error, 'response.status', 400);
-        const message = get(error, 'message', error);
+        const message = get(error, 'message', error.toString());
         throw new HttpException(message, code);
       }
       orgsDto.member.org = newOrg._id.toString();
