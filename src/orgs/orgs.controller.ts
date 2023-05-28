@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query, Req, UploadedFile, UseInterceptors, Headers, NotFoundException, Patch, ValidationPipe, Res } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query, Req, UploadedFile, UseInterceptors, Headers, NotFoundException, ValidationPipe, Res } from '@nestjs/common';
 import { ApiConsumes, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Org } from './schema/org.schema';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -10,12 +10,7 @@ import { Member } from 'src/members/schema/member.schema';
 import { Request, Response } from 'express';
 import { OrgUsernameFilter } from './dto/org-username.filter.dto';
 import { ApiMockHeader } from '../headers/mock';
-import { Offer } from '../offers/schema/offer.schema';
-import { OffersService } from '../offers/offers.service';
 import { isNil } from 'lodash';
-import { OfferDto } from '../offers/dto/offer.dto';
-import { OfferFiltersDto } from '../offers/dto/offer-filters.dto';
-import { OfferStatusBodyDto } from '../offers/dto/offer-status.dto';
 import { MemberEquityDto } from '../members/dto/member-equity.dto';
 import { Payment } from '../payment/schema/payment.schema';
 import { ReceivePaymentDto } from '../payment/dto/receive-payment.dto';
@@ -29,7 +24,6 @@ export class OrgsController {
   constructor(
     private readonly orgsService: OrgsService,
     private readonly authService: AuthService,
-    private readonly offersService: OffersService,
     private readonly paymentService: PaymentService,
   ) {
   }
@@ -113,65 +107,6 @@ export class OrgsController {
   ) {
     await this.authService.getUserFromToken(req);
     return this.orgsService.getMemberEquity(orgId, memberId);
-  }
-
-  @ApiOperation({ summary: 'Create new offer' })
-  @ApiResponse({ status: 200, type: Offer })
-  @Post(':orgId/offers')
-  @HttpCode(HttpStatus.CREATED)
-  async createOffer(
-  @Param('orgId') orgId: string,
-    @Body() offer: OfferDto,
-    @Req() req: Request,
-  ) {
-    await this.authService.getUserFromToken(req);
-
-    const org = await this.orgsService.getByOrgId(orgId);
-    if (isNil(org)) {
-      throw new NotFoundException({ message: 'Organization not found' });
-    }
-
-    return this.offersService.createOffer(orgId, offer);
-  }
-
-  @ApiOperation({ summary: 'Get org offers' })
-  @ApiResponse({ status: 200, type: [Offer] })
-  @Get(':orgId/offers')
-  async getOrgOffers(@Param('orgId') orgId: string, @Query() filters: OfferFiltersDto, @Req() req: Request) {
-    await this.authService.getUserFromToken(req);
-    return this.offersService.getOrgOffers(orgId, filters);
-  }
-
-  @ApiOperation({ summary: 'Get org offer by ID' })
-  @ApiResponse({ status: 200, type: Offer })
-  @Get(':orgId/offers/:offerId')
-  async getOrgOfferById(
-  @Param('orgId') orgId: string,
-    @Param('offerId') offerId: string,
-    @Req() req: Request,
-  ) {
-    await this.authService.getUserFromToken(req);
-    return this.offersService.getOrgOfferById(orgId, offerId);
-  }
-
-  @ApiOperation({ summary: 'Accept/decline offer' })
-  @ApiResponse({ status: 200, description: 'Offer status updated and new member added to the org' })
-  @ApiResponse({ status: 403, description: 'Offer already accepted/declined' })
-  @Patch(':orgId/offers/:offerId')
-  async updateOfferStatus(
-  @Param('orgId') orgId: string,
-    @Param('offerId') offerId: string,
-    @Body(new ValidationPipe()) body: OfferStatusBodyDto,
-    @Req() req: Request,
-  ) {
-    const user = await this.authService.getUserFromToken(req);
-
-    const org = await this.orgsService.getByOrgId(orgId);
-    if (isNil(org)) {
-      throw new NotFoundException({ message: 'Organization not found' });
-    }
-
-    return this.offersService.updateOfferStatus(org, offerId, body, user._id.toString());
   }
 
   @ApiOperation({ summary: 'Get orgs logo' })

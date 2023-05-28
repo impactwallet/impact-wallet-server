@@ -92,10 +92,10 @@ export class UsersController {
   async getUserBalance(
   @Req() req: Request
   ) {
-    const user: User = await this.authService.getUserFromToken(req);
+    const account = await this.authService.getUserFromToken(req);
 
     return {
-      balance: await this.userService.getUserBalance(user),
+      balance: await this.userService.getUserBalance(account),
     };
   }
 
@@ -105,9 +105,9 @@ export class UsersController {
   async getUserUsdcHistory(
   @Req() req: Request
   ) {
-    const user: User = await this.authService.getUserFromToken(req);
+    const account = await this.authService.getUserFromToken(req);
 
-    return this.userService.getUserUsdcHistory(user);
+    return this.userService.getUserUsdcHistory(account);
   }
 
   @ApiOperation({ summary: 'Send USDC' })
@@ -118,9 +118,9 @@ export class UsersController {
   @Body() sendUsdcDto: SendUsdcDto,
     @Req() req: Request
   ) {
-    const user: UserDocument = await this.authService.getUserFromToken(req);
+    const account = await this.authService.getUserFromToken(req);
 
-    return await this.userService.sendUsdc(user, sendUsdcDto);
+    return await this.userService.sendUsdc(account, sendUsdcDto);
   }
 
   @ApiOperation({ summary: 'Restore user' })
@@ -143,9 +143,9 @@ export class UsersController {
     @Body() sendAssetsDto: SendAssetsDto,
     @Req() req: Request,
   ) {
-    const sender = await this.authService.getUserFromToken(req);
+    const account = await this.authService.getUserFromToken(req);
 
-    return this.userService.sendAssets(sendAssetsDto, sender, orgId);
+    return this.userService.sendAssets(sendAssetsDto, account, orgId);
   }
 
   @ApiOperation({ summary: 'Get users asset transactions history' })

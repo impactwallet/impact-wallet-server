@@ -6,6 +6,7 @@ import { User, UserDocument } from '../users/schema/user.schema';
 import { Org, OrgDocument } from '../orgs/schema/org.schema';
 import { get, isNil } from 'lodash';
 import { InjectModel } from '@nestjs/mongoose';
+import { AccountModel } from './models/account.model';
 
 @Injectable()
 export class AuthService {
@@ -15,7 +16,7 @@ export class AuthService {
     @InjectModel(Org.name) protected orgModel: Model<OrgDocument>,
   ) {}
 
-  async getUserFromToken(req: Request) {
+  async getUserFromToken(req: Request): Promise<AccountModel> {
     const authHeader: string = req.headers['authorization'];
     if (!authHeader) throw new UnauthorizedException({ message: 'User not authorized' });
     const bearer = authHeader.split(' ')[0];
@@ -30,6 +31,12 @@ export class AuthService {
       throw new UnauthorizedException({ message: 'User not authorized' });
     }
 
-    return user;
+    const orgId = get(payload, 'orgId');
+    let org: OrgDocument;
+    if (!isNil(orgId)) {
+      org = await this.orgModel.findById(orgId);
+    }
+
+    return new AccountModel(user, org);
   }
 }

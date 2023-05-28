@@ -6,7 +6,6 @@ import { OrgsService } from './orgs.service';
 import { UsersModule } from 'src/users/users.module';
 import { ApiServiceModule } from 'src/api-service/api.module';
 import { MembersModule } from 'src/members/members.module';
-import { OffersModule } from '../offers/offers.module';
 import { S3Module } from 'src/s3/s3.module';
 import { PaymentModule } from '../payment/payment.module';
 import { OrgsLiteController } from './orgs.controller.lite';
@@ -19,13 +18,12 @@ import { AuthModule } from '../auth/auth.module';
     UsersModule,
     MembersModule,
     ApiServiceModule,
-    OffersModule,
     S3Module,
     PaymentModule,
     AuthModule,
   ],
   providers: [OrgsService, OrgsLiteService],
-  exports: [OrgsService],
+  exports: [OrgsService, OrgsLiteService],
   controllers: [OrgsController, OrgsLiteController],
 })
 export class OrgsModule { }

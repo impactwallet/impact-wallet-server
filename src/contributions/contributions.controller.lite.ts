@@ -26,10 +26,10 @@ export class ContributionsControllerLite {
     @Body(new ValidationPipe()) body: StartContributionLiteDto,
     @Req() req: Request,
   ) {
-    const user = await this.authService.getUserFromToken(req);
+    const account = await this.authService.getUserFromToken(req);
 
     return {
-      txnHash: await this.contributionsService.recordContribution(orgId, body, user),
+      txnHash: await this.contributionsService.recordContribution(orgId, body, account),
     };
   }
 }

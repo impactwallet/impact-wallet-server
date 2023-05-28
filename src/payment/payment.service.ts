@@ -1,7 +1,7 @@
 import { CheckoutItemEntity, verifyWebhookSignature } from '@candypay/checkout-sdk';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { get, isNil } from 'lodash';
+import { defaultTo, get, isNil } from 'lodash';
 import mongoose, { ClientSession, Model } from 'mongoose';
 import { ApiService } from '../api-service/api.service';
 import { CandyPayService } from '../api-service/candypay.service';
@@ -169,9 +169,9 @@ export class PaymentService {
   async handleInvestmentPayment(org: OrgDocument, payment: PaymentDocument, body: { signature: string }) {
     let member = await this.memberModel.findOne({
       org: org._id,
-      user: payment.investor.user,
-    }).populate('user');
-    let memberUser = get(member, 'user') as UserDocument;
+      user: defaultTo(payment.investor.user, payment.investor.orgUser),
+    }).populate(['user', 'orgUser']);
+    let memberUser = defaultTo(get(member, 'user') as UserDocument, get(member, 'orgUser') as OrgDocument);
 
     if (isNil(member)) {
       member = new this.memberModel(payment.investor.toObject());
@@ -180,8 +180,8 @@ export class PaymentService {
         type: EquityType.Immediately,
       };
       await member.save();
-      await member.populate('user');
-      memberUser = member.user as UserDocument;
+      await member.populate(['user', 'orgUser']);
+      memberUser = defaultTo(get(member, 'user') as UserDocument, get(member, 'orgUser') as OrgDocument);
     } else {
       member = await this.memberModel.findOneAndUpdate(
         { _id: member._id },
@@ -199,7 +199,8 @@ export class PaymentService {
       );
     }
     
-    this.apiService.sendNotification(`${memberUser.nickname} just invested ${payment.amount} into ${org.name}:\n\n${body.signature}\n\n${this.apiService.buildExplorerLink('/tx/' + body.signature)}`);
+    const username = defaultTo((memberUser as UserDocument).nickname, (memberUser as OrgDocument).username);
+    this.apiService.sendNotification(`${username} just invested ${payment.amount} into ${org.name}:\n\n${body.signature}\n\n${this.apiService.buildExplorerLink('/tx/' + body.signature)}`);
 
     return member;
   }
@@ -227,13 +228,28 @@ export class PaymentService {
 
   async handleAssetsSale(payment: PaymentDocument) {
     const member = await this.memberModel.findOne({
-      user: payment.sale.seller,
+      $or: [
+        { user: payment.sale.seller },
+        { orgUser: payment.sale.seller },
+      ],
       org: payment.sale.org,
-    }).populate({ path: 'user', select: '+password' });
-    const memberUser = member.user as UserDocument;
-    await payment.populate(['sale.org', 'sale.buyer']);
+    }).populate([
+      { path: 'user', select: '+password' },
+      { path: 'orgUser', select: '+password' },
+    ]);
+    const memberUser = defaultTo(member.user as UserDocument, member.orgUser as OrgDocument);
+    await payment.populate([
+      'sale.org',
+      {
+        path: 'sale',
+        populate: [
+          { path: 'buyer', model: 'User' },
+          { path: 'buyer', model: 'Org' },
+        ],
+      },
+    ]);
     const org = payment.sale.org as OrgDocument;
-    const buyer = payment.sale.buyer as UserDocument;
+    const buyer = payment.sale.buyer as UserDocument | OrgDocument;
     const lamportsAmount = payment.sale.tokensAmount * LAMPORTS_PER_SOL;
 
     const transferFn = this.transfer.bind(this, memberUser, buyer, org.mint, payment.sale.tokensAmount);
@@ -280,7 +296,9 @@ export class PaymentService {
       } },
     );
 
-    this.apiService.sendNotification(`${buyer.nickname} just bought ${payment.sale.tokensAmount} ${org.name} impact shares from ${memberUser.nickname} for ${payment.amount} USDC:\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
+    const buyerUsername = defaultTo((buyer as UserDocument).nickname, (buyer as OrgDocument).username);
+    const sellerUsername = defaultTo((memberUser as UserDocument).nickname, (memberUser as OrgDocument).username);
+    this.apiService.sendNotification(`${buyerUsername} just bought ${payment.sale.tokensAmount} ${org.name} impact shares from ${sellerUsername} for ${payment.amount} USDC:\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
   }
 
   async transfer(source: any, destination: any, mint: string, amount: number) {

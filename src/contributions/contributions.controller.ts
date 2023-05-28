@@ -45,9 +45,9 @@ export class ContributionsController {
     @Body(new ValidationPipe()) body: StartContributionDto,
     @Req() req: Request,
   ) {
-    const user = await this.authService.getUserFromToken(req);
+    const account = await this.authService.getUserFromToken(req);
 
-    return this.contributionsService.startContribution(orgId, body, user);
+    return this.contributionsService.startContribution(orgId, body, account);
   }
 
   @ApiTags('Orgs')
@@ -60,8 +60,8 @@ export class ContributionsController {
     @Body(new ValidationPipe()) body: StopContributionDto,
     @Req() req: Request,
   ) {
-    const user = await this.authService.getUserFromToken(req);
+    const account = await this.authService.getUserFromToken(req);
 
-    return this.contributionsService.stopContribution(orgId, contributionId, user, body);
+    return this.contributionsService.stopContribution(orgId, contributionId, account, body);
   }
 }

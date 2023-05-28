@@ -9,7 +9,7 @@ export class SaleOfferDto {
     price: number;
 
   @ApiProperty({ description: 'ID of the seller' })
-    userId: string;
+    sellerId: string;
 
   @ApiProperty({ description: 'ID of the org/asset' })
     orgId: string;

@@ -11,6 +11,7 @@ import { ApiServiceModule } from '../api-service/api.module';
 import { OffersLiteService } from './offers.service.lite';
 import { OffersControllerLite } from './offers.controller.lite';
 import { AuthModule } from '../auth/auth.module';
+import { OrgsModule } from '../orgs/orgs.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { AuthModule } from '../auth/auth.module';
     UsersModule,
     ApiServiceModule,
     AuthModule,
+    OrgsModule,
   ],
   controllers: [OffersController, OffersControllerLite],
   providers: [OffersService, OffersLiteService],

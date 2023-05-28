@@ -22,16 +22,16 @@ export class SaleOffer {
     price: number;
 
   @ApiProperty({ example: 'ID or object', description: 'The seller' })
-  @Prop({ required: true, type: mongoose.Schema.Types.ObjectId, ref: 'User' })
-    seller: mongoose.Types.ObjectId | UserDocument;
+  @Prop({ required: true, type: mongoose.Schema.Types.ObjectId })
+    seller: mongoose.Types.ObjectId | UserDocument | OrgDocument;
 
   @ApiProperty({ example: 'ID or object', description: 'Org owning the token' })
   @Prop({ required: true, type: mongoose.Schema.Types.ObjectId, ref: 'Org' })
     org: mongoose.Types.ObjectId | OrgDocument;
 
-  @ApiProperty({ example: 'ID or object', description: 'The buyer', required: false })
-  @Prop({ required: function() { return this.status === OfferStatus.Approved; }, type: mongoose.Schema.Types.ObjectId, ref: 'User' })
-    buyer?: mongoose.Types.ObjectId | UserDocument;
+  @ApiProperty({ example: 'ID or object', description: 'The buyer - user or org', required: false })
+  @Prop({ required: function() { return this.status === OfferStatus.Approved; }, type: mongoose.Schema.Types.ObjectId })
+    buyer?: mongoose.Types.ObjectId | UserDocument | OrgDocument;
 
   @ApiProperty({ example: 'Transaction signature' })
   @Prop({ type: String })
