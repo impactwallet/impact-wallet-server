@@ -7,20 +7,22 @@ import { ApiMockHeader } from '../headers/mock';
 import { OrgsLiteService } from './orgs.service.lite';
 import { Offer } from '../offers/schema/offer.schema';
 import { OfferLiteDto } from '../offers/dto/offer.lite.dto';
-import { UsersService } from '../users/users.service';
 import { OrgsService } from './orgs.service';
 import { isNil } from 'lodash';
 import { OffersLiteService } from '../offers/offers.service.lite';
 import { CreateOrgDto } from './dto/create-org.dto';
 import { OfferStatusBodyDto } from '../offers/dto/offer-status.dto';
+import { AuthService } from '../auth/auth.service';
 
 @ApiTags('Orgs - Lite')
 @Controller('lite/orgs')
 export class OrgsLiteController {
-  constructor(private readonly orgsLiteService: OrgsLiteService,
-    private readonly usersService: UsersService,
+  constructor(
+    private readonly orgsLiteService: OrgsLiteService,
     private readonly orgsService: OrgsService,
-    private readonly offersLiteService: OffersLiteService) {
+    private readonly offersLiteService: OffersLiteService,
+    private readonly authService: AuthService,
+  ) {
   }
 
 
@@ -49,7 +51,7 @@ export class OrgsLiteController {
     @Body() offer: OfferLiteDto,
     @Req() req: Request,
   ) {
-    await this.usersService.getUserFromToken(req);
+    await this.authService.getUserFromToken(req);
 
     const org = await this.orgsService.getByOrgId(orgId);
     if (isNil(org)) {
@@ -69,7 +71,7 @@ export class OrgsLiteController {
     @Body(new ValidationPipe()) body: OfferStatusBodyDto,
     @Req() req: Request,
   ) {
-    const user = await this.usersService.getUserFromToken(req);
+    const user = await this.authService.getUserFromToken(req);
 
     const org = await this.orgsService.getByOrgId(orgId);
     if (isNil(org)) {

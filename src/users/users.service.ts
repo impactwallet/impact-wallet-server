@@ -1,6 +1,5 @@
 import { Injectable, NotFoundException, ConflictException, HttpException, BadRequestException } from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/mongoose';
-import { JwtService } from '@nestjs/jwt';
 import { v4 as uuid } from 'uuid';
 import mongoose, { Model } from 'mongoose';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -29,6 +28,8 @@ import { Account } from '@solana/spl-token';
 import { Contribution, ContributionDocument } from '../contributions/schema/contribution.schema';
 import { areObjectIdsEqual } from '../utils/mongo';
 import { UsersServiceBase } from './users.service.base';
+import { AuthService } from '../auth/auth.service';
+import { JwtService } from '@nestjs/jwt';
 
 @Injectable()
 export class UsersService extends UsersServiceBase {
@@ -41,12 +42,13 @@ export class UsersService extends UsersServiceBase {
     @InjectModel(Contribution.name) private contributionRepository: Model<ContributionDocument>,
     @InjectModel(SaleOffer.name) private saleOfferRepository: Model<SaleOfferDocument>,
     @InjectConnection() private readonly connection: mongoose.Connection,
-    jwtService: JwtService,
     private apiService: ApiService,
     private membersService: MembersService,
-    private s3Service: S3Service
+    private jwtService: JwtService,
+    private s3Service: S3Service,
+    private authService: AuthService,
   ) {
-    super(userRepository, jwtService);
+    super(userRepository);
   }
 
   async getUsersByNicknamePrivate(name: string): Promise<User[]> {
@@ -64,7 +66,7 @@ export class UsersService extends UsersServiceBase {
   }
 
   async getUsersByQuery(query: UsersFilter, req: Request): Promise<User[]> {
-    await this.getUserFromToken(req);
+    await this.authService.getUserFromToken(req);
 
     if (query.exactMatch) {
       return this.getUsersByQueryWithExactMatch(query);
@@ -148,7 +150,7 @@ export class UsersService extends UsersServiceBase {
   }
 
   async getUserMemberships(user: string, req: Request) {
-    await this.getUserFromToken(req);
+    await this.authService.getUserFromToken(req);
     const filters = { user };
     return this.membersService.getMembers(filters, 'org');
   }

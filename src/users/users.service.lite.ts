@@ -11,7 +11,6 @@ import { Role } from '../members/enum/roles.enum';
 import { User, UserDocument } from './schema/user.schema';
 import { UsersServiceBase } from './users.service.base';
 import { EquityType } from '../members/enum/equity-type.enum';
-import { JwtService } from '@nestjs/jwt';
 
 @Injectable()
 export class UsersServiceLite extends UsersServiceBase {
@@ -20,9 +19,8 @@ export class UsersServiceLite extends UsersServiceBase {
   @InjectModel(User.name) userRepository: Model<UserDocument>,
     @InjectModel(Member.name) private memberRepository: Model<MemberDocument>,
     private apiService: ApiService,
-    jwtService: JwtService,
   ) {
-    super(userRepository, jwtService);
+    super(userRepository);
   }
 
   async sendAssets(sendAssetsDto: SendAssetsDto, sender: UserDocument, orgId: string) {

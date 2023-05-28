@@ -4,6 +4,7 @@ import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 import { SendAssetsDto } from 'src/users/dto/send-assets.dto';
 import { UsersServiceLite } from './users.service.lite';
+import { AuthService } from '../auth/auth.service';
 
 @ApiTags('Users - Lite')
 @Controller('lite/users')
@@ -11,6 +12,7 @@ export class UsersControllerLite {
 
   constructor(
     private readonly userServiceLite: UsersServiceLite,
+    private readonly authService: AuthService,
   ) {
   }
 
@@ -23,7 +25,7 @@ export class UsersControllerLite {
     @Body() sendAssetsDto: SendAssetsDto,
     @Req() req: Request,
   ) {
-    const sender = await this.userServiceLite.getUserFromToken(req);
+    const sender = await this.authService.getUserFromToken(req);
 
     return this.userServiceLite.sendAssets(sendAssetsDto, sender, orgId);
   }

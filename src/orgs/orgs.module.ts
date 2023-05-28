@@ -11,6 +11,7 @@ import { S3Module } from 'src/s3/s3.module';
 import { PaymentModule } from '../payment/payment.module';
 import { OrgsLiteController } from './orgs.controller.lite';
 import { OrgsLiteService } from './orgs.service.lite';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { OrgsLiteService } from './orgs.service.lite';
     OffersModule,
     S3Module,
     PaymentModule,
+    AuthModule,
   ],
   providers: [OrgsService, OrgsLiteService],
   exports: [OrgsService],

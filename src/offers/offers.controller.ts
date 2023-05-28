@@ -4,15 +4,15 @@ import { Request } from 'express';
 import { OfferStatusBodyDto } from './dto/offer-status.dto';
 import { SaleOffer } from './schema/sale-offer.schema';
 import { OffersService } from './offers.service';
-import { UsersService } from '../users/users.service';
 import { SaleOfferDto } from './dto/sale-offer.dto';
+import { AuthService } from '../auth/auth.service';
 
 @ApiTags('Offers')
 @Controller('offers')
 export class OffersController {
   constructor(
     private readonly offerService: OffersService,
-    private readonly userService: UsersService,
+    private readonly authService: AuthService,
   ) {}
 
   @ApiOperation({ summary: 'Create sale offer'})
@@ -23,7 +23,7 @@ export class OffersController {
   @Body() saleOfferDto: SaleOfferDto,
     @Req() req: Request,
   ) {
-    const user = await this.userService.getUserFromToken(req);
+    const user = await this.authService.getUserFromToken(req);
     if (user._id.toString() !== saleOfferDto.userId) {
       throw new UnauthorizedException('You are not allowed to sell assets of other users');
     }
@@ -38,7 +38,7 @@ export class OffersController {
   @Param('offerId') offerId: string,
     @Req() req: Request,
   ) {
-    await this.userService.getUserFromToken(req);
+    await this.authService.getUserFromToken(req);
     return this.offerService.getSaleOfferById(offerId, ['org', 'seller']);
   }
 
@@ -51,7 +51,7 @@ export class OffersController {
     @Body(new ValidationPipe()) body: OfferStatusBodyDto,
     @Req() req: Request,
   ) {
-    const user = await this.userService.getUserFromToken(req);
+    const user = await this.authService.getUserFromToken(req);
 
     return this.offerService.updateSaleOfferStatus(offerId, body, user._id.toString());
   }

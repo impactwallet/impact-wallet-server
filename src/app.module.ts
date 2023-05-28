@@ -28,7 +28,7 @@ import { ConfigurationModule } from './configuration/config.module';
     MembersModule,
     OffersModule,
     ContributionsModule,
-    ConfigurationModule
+    ConfigurationModule,
   ],
 })
 

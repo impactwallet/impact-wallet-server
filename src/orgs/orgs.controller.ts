@@ -11,7 +11,6 @@ import { Request, Response } from 'express';
 import { OrgUsernameFilter } from './dto/org-username.filter.dto';
 import { ApiMockHeader } from '../headers/mock';
 import { Offer } from '../offers/schema/offer.schema';
-import { UsersService } from '../users/users.service';
 import { OffersService } from '../offers/offers.service';
 import { isNil } from 'lodash';
 import { OfferDto } from '../offers/dto/offer.dto';
@@ -22,13 +21,14 @@ import { Payment } from '../payment/schema/payment.schema';
 import { ReceivePaymentDto } from '../payment/dto/receive-payment.dto';
 import { PaymentService } from '../payment/payment.service';
 import { SendUsdcDto } from '../users/dto/send-usdc.dto';
+import { AuthService } from '../auth/auth.service';
 
 @ApiTags('Orgs')
 @Controller('orgs')
 export class OrgsController {
   constructor(
     private readonly orgsService: OrgsService,
-    private readonly usersService: UsersService,
+    private readonly authService: AuthService,
     private readonly offersService: OffersService,
     private readonly paymentService: PaymentService,
   ) {
@@ -39,7 +39,7 @@ export class OrgsController {
   @ApiResponse({ status: 404, description: 'Organization does not exist' })
   @Get('username')
   async findOrgByUsername(@Query() query: OrgUsernameFilter, @Req() req: Request) {
-    await this.usersService.getUserFromToken(req);
+    await this.authService.getUserFromToken(req);
     return this.orgsService.findOrgByUsername(query);
   }
 
@@ -71,7 +71,7 @@ export class OrgsController {
   @ApiResponse({ status: 200, type: Org })
   @Get(':orgId')
   async getByOrgId(@Param('orgId') orgId: string, @Req() req: Request) {
-    await this.usersService.getUserFromToken(req);
+    await this.authService.getUserFromToken(req);
     return this.orgsService.getByOrgId(orgId);
   }
 
@@ -79,7 +79,7 @@ export class OrgsController {
   @ApiResponse({ status: 200, type: [Org] })
   @Get(':orgId/history')
   async getOrgHistory(@Param('orgId') orgId: string, @Req() req: Request) {
-    await this.usersService.getUserFromToken(req);
+    await this.authService.getUserFromToken(req);
     return this.orgsService.getOrgHistory(orgId);
   }
 
@@ -92,7 +92,7 @@ export class OrgsController {
       @Body() member: MemberDto,
       @Req() req: Request
   ): Promise<Member> {
-    await this.usersService.getUserFromToken(req);
+    await this.authService.getUserFromToken(req);
     return this.orgsService.addMemberToOrg(orgId, member);
   }
 
@@ -111,7 +111,7 @@ export class OrgsController {
     @Param('memberId') memberId: string,
     @Req() req: Request,
   ) {
-    await this.usersService.getUserFromToken(req);
+    await this.authService.getUserFromToken(req);
     return this.orgsService.getMemberEquity(orgId, memberId);
   }
 
@@ -124,7 +124,7 @@ export class OrgsController {
     @Body() offer: OfferDto,
     @Req() req: Request,
   ) {
-    await this.usersService.getUserFromToken(req);
+    await this.authService.getUserFromToken(req);
 
     const org = await this.orgsService.getByOrgId(orgId);
     if (isNil(org)) {
@@ -138,7 +138,7 @@ export class OrgsController {
   @ApiResponse({ status: 200, type: [Offer] })
   @Get(':orgId/offers')
   async getOrgOffers(@Param('orgId') orgId: string, @Query() filters: OfferFiltersDto, @Req() req: Request) {
-    await this.usersService.getUserFromToken(req);
+    await this.authService.getUserFromToken(req);
     return this.offersService.getOrgOffers(orgId, filters);
   }
 
@@ -150,7 +150,7 @@ export class OrgsController {
     @Param('offerId') offerId: string,
     @Req() req: Request,
   ) {
-    await this.usersService.getUserFromToken(req);
+    await this.authService.getUserFromToken(req);
     return this.offersService.getOrgOfferById(orgId, offerId);
   }
 
@@ -164,7 +164,7 @@ export class OrgsController {
     @Body(new ValidationPipe()) body: OfferStatusBodyDto,
     @Req() req: Request,
   ) {
-    const user = await this.usersService.getUserFromToken(req);
+    const user = await this.authService.getUserFromToken(req);
 
     const org = await this.orgsService.getByOrgId(orgId);
     if (isNil(org)) {
@@ -212,7 +212,7 @@ export class OrgsController {
   @Param('orgId') orgId: string,
     @Req() req: Request,
   ) {
-    await this.usersService.getUserFromToken(req);
+    await this.authService.getUserFromToken(req);
 
     return {
       balance: await this.orgsService.getOrgBalance(orgId),
@@ -228,7 +228,7 @@ export class OrgsController {
     @Param('orgId') orgId: string,
     @Req() req: Request
   ) {
-    await this.usersService.getUserFromToken(req);
+    await this.authService.getUserFromToken(req);
 
     return this.orgsService.sendUsdc(orgId, sendUsdcDto);
   }

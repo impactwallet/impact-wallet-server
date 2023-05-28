@@ -10,6 +10,7 @@ import { UsersModule } from '../users/users.module';
 import { ApiServiceModule } from '../api-service/api.module';
 import { OffersLiteService } from './offers.service.lite';
 import { OffersControllerLite } from './offers.controller.lite';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { OffersControllerLite } from './offers.controller.lite';
     PaymentModule,
     UsersModule,
     ApiServiceModule,
+    AuthModule,
   ],
   controllers: [OffersController, OffersControllerLite],
   providers: [OffersService, OffersLiteService],

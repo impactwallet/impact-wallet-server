@@ -14,6 +14,7 @@ import { Member } from '../members/schema/member.schema';
 import { SendAssetsDto } from 'src/users/dto/send-assets.dto';
 import { SendUsdcDto } from './dto/send-usdc.dto';
 import { TxnHistoryItemDto } from '../common/dto/txn-history-item.dto';
+import { AuthService } from '../auth/auth.service';
 
 @ApiTags('Users')
 @Controller('users')
@@ -21,6 +22,7 @@ export class UsersController {
 
   constructor(
     private readonly userService: UsersService,
+    private readonly authService: AuthService,
   ) {
   }
 
@@ -57,7 +59,7 @@ export class UsersController {
   @ApiResponse({ status: 200, type: User })
   @Get(':id')
   async getByUserId(@Param('id') id: string, @Req() req: Request) {
-    await this.userService.getUserFromToken(req);
+    await this.authService.getUserFromToken(req);
     return this.userService.getByUserId(id);
   }
 
@@ -76,7 +78,7 @@ export class UsersController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    await this.userService.getUserFromToken(req);
+    await this.authService.getUserFromToken(req);
 
     const data = await this.userService.getAvatar(fileName);
     res.writeHead(200, { 'content-type': 'image/*' });
@@ -90,7 +92,7 @@ export class UsersController {
   async getUserBalance(
   @Req() req: Request
   ) {
-    const user: User = await this.userService.getUserFromToken(req);
+    const user: User = await this.authService.getUserFromToken(req);
 
     return {
       balance: await this.userService.getUserBalance(user),
@@ -103,7 +105,7 @@ export class UsersController {
   async getUserUsdcHistory(
   @Req() req: Request
   ) {
-    const user: User = await this.userService.getUserFromToken(req);
+    const user: User = await this.authService.getUserFromToken(req);
 
     return this.userService.getUserUsdcHistory(user);
   }
@@ -116,7 +118,7 @@ export class UsersController {
   @Body() sendUsdcDto: SendUsdcDto,
     @Req() req: Request
   ) {
-    const user: UserDocument = await this.userService.getUserFromToken(req);
+    const user: UserDocument = await this.authService.getUserFromToken(req);
 
     return await this.userService.sendUsdc(user, sendUsdcDto);
   }
@@ -141,7 +143,7 @@ export class UsersController {
     @Body() sendAssetsDto: SendAssetsDto,
     @Req() req: Request,
   ) {
-    const sender = await this.userService.getUserFromToken(req);
+    const sender = await this.authService.getUserFromToken(req);
 
     return this.userService.sendAssets(sendAssetsDto, sender, orgId);
   }
@@ -153,7 +155,7 @@ export class UsersController {
   @Param('orgId') orgId: string,
     @Req() req: Request
   ) {
-    const user = await this.userService.getUserFromToken(req);
+    const user = await this.authService.getUserFromToken(req);
 
     return this.userService.getUserAssetHistory(user, orgId);
   }
