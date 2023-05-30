@@ -15,10 +15,12 @@ export class CandyPayService {
   });
 
   createSession(data: CreateCpSessionDto) {
+    const tokens: any = ['usdt'];
     return this.sdk.session.create({
       success_url: 'https://app.impactwallet.xyz',
       cancel_url: 'https://app.impactwallet.xyz',
       items: data.items,
+      tokens: tokens,
       custom_data: {
         name: data.receiver.name,
         image: `${process.env.SERVER_URL}${data.logo}`,
