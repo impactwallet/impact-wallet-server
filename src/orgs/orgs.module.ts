@@ -9,8 +9,9 @@ import { MembersModule } from 'src/members/members.module';
 import { S3Module } from 'src/s3/s3.module';
 import { PaymentModule } from '../payment/payment.module';
 import { OrgsLiteController } from './orgs.controller.lite';
-import { OrgsLiteService } from './orgs.service.lite';
+import { OrgsServiceLite } from './orgs.service.lite';
 import { AuthModule } from '../auth/auth.module';
+import { JwtModule } from '@nestjs/jwt';
 
 @Module({
   imports: [
@@ -21,9 +22,12 @@ import { AuthModule } from '../auth/auth.module';
     S3Module,
     PaymentModule,
     AuthModule,
+    JwtModule.register({
+      secret: process.env.PRIVATE_KEY || 'SECRET',
+    }),
   ],
-  providers: [OrgsService, OrgsLiteService],
-  exports: [OrgsService, OrgsLiteService],
+  providers: [OrgsService, OrgsServiceLite],
+  exports: [OrgsService, OrgsServiceLite],
   controllers: [OrgsController, OrgsLiteController],
 })
 export class OrgsModule { }

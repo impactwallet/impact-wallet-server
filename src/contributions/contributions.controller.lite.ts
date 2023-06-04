@@ -26,7 +26,7 @@ export class ContributionsControllerLite {
     @Body(new ValidationPipe()) body: StartContributionLiteDto,
     @Req() req: Request,
   ) {
-    const account = await this.authService.getUserFromToken(req);
+    const account = await this.authService.getAccountFromToken(req);
 
     return {
       txnHash: await this.contributionsService.recordContribution(orgId, body, account),

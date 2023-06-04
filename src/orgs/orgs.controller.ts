@@ -33,7 +33,7 @@ export class OrgsController {
   @ApiResponse({ status: 404, description: 'Organization does not exist' })
   @Get('username')
   async findOrgByUsername(@Query() query: OrgUsernameFilter, @Req() req: Request) {
-    await this.authService.getUserFromToken(req);
+    await this.authService.getAccountFromToken(req);
     return this.orgsService.findOrgByUsername(query);
   }
 
@@ -65,7 +65,7 @@ export class OrgsController {
   @ApiResponse({ status: 200, type: Org })
   @Get(':orgId')
   async getByOrgId(@Param('orgId') orgId: string, @Req() req: Request) {
-    await this.authService.getUserFromToken(req);
+    await this.authService.getAccountFromToken(req);
     return this.orgsService.getByOrgId(orgId);
   }
 
@@ -73,7 +73,7 @@ export class OrgsController {
   @ApiResponse({ status: 200, type: [Org] })
   @Get(':orgId/history')
   async getOrgHistory(@Param('orgId') orgId: string, @Req() req: Request) {
-    await this.authService.getUserFromToken(req);
+    await this.authService.getAccountFromToken(req);
     return this.orgsService.getOrgHistory(orgId);
   }
 
@@ -86,7 +86,7 @@ export class OrgsController {
       @Body() member: MemberDto,
       @Req() req: Request
   ): Promise<Member> {
-    await this.authService.getUserFromToken(req);
+    await this.authService.getAccountFromToken(req);
     return this.orgsService.addMemberToOrg(orgId, member);
   }
 
@@ -105,7 +105,7 @@ export class OrgsController {
     @Param('memberId') memberId: string,
     @Req() req: Request,
   ) {
-    await this.authService.getUserFromToken(req);
+    await this.authService.getAccountFromToken(req);
     return this.orgsService.getMemberEquity(orgId, memberId);
   }
 
@@ -147,7 +147,7 @@ export class OrgsController {
   @Param('orgId') orgId: string,
     @Req() req: Request,
   ) {
-    await this.authService.getUserFromToken(req);
+    await this.authService.getAccountFromToken(req);
 
     return {
       balance: await this.orgsService.getOrgBalance(orgId),
@@ -163,8 +163,24 @@ export class OrgsController {
     @Param('orgId') orgId: string,
     @Req() req: Request
   ) {
-    await this.authService.getUserFromToken(req);
+    await this.authService.getAccountFromToken(req);
 
     return this.orgsService.sendUsdc(orgId, sendUsdcDto);
+  }
+
+  @ApiOperation({ summary: 'Get org memberships' })
+  @ApiResponse({ status: 200, type: [Member] })
+  @Get(':orgId/memberships')
+  async getMemberships(@Param('orgId') orgId: string, @Req() req: Request) {
+    await this.authService.getAccountFromToken(req);
+    return this.orgsService.getMemberships(orgId);
+  }
+
+  @ApiOperation({ summary: 'Login as organisation' })
+  @ApiResponse({ status: 200 })
+  @Post(':orgId/login')
+  async loginAsOrg(@Param('orgId') orgId: string, @Req() req: Request) {
+    const account = await this.authService.getAccountFromToken(req);
+    return this.orgsService.loginAsOrg(orgId, account);
   }
 }

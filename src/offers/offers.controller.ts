@@ -30,7 +30,7 @@ export class OffersController {
   @Body() saleOfferDto: SaleOfferDto,
     @Req() req: Request,
   ) {
-    const account = await this.authService.getUserFromToken(req);
+    const account = await this.authService.getAccountFromToken(req);
     if (!areObjectIdsEqual(account.id, saleOfferDto.sellerId)) {
       throw new UnauthorizedException('You are not allowed to sell assets of other user');
     }
@@ -45,7 +45,7 @@ export class OffersController {
   @Param('offerId') offerId: string,
     @Req() req: Request,
   ) {
-    await this.authService.getUserFromToken(req);
+    await this.authService.getAccountFromToken(req);
     return this.offerService.getSaleOfferById(
       offerId,
       [
@@ -65,7 +65,7 @@ export class OffersController {
     @Body(new ValidationPipe()) body: OfferStatusBodyDto,
     @Req() req: Request,
   ) {
-    const account = await this.authService.getUserFromToken(req);
+    const account = await this.authService.getAccountFromToken(req);
 
     return this.offerService.updateSaleOfferStatus(offerId, body, account);
   }
@@ -80,7 +80,7 @@ export class OffersController {
     @Body() offer: OfferDto,
     @Req() req: Request,
   ) {
-    await this.authService.getUserFromToken(req);
+    await this.authService.getAccountFromToken(req);
 
     const org = await this.orgsService.getByOrgId(orgId);
     if (isNil(org)) {
@@ -95,7 +95,7 @@ export class OffersController {
   @ApiTags('Orgs')
   @Get('orgs/:orgId/offers')
   async getOrgOffers(@Param('orgId') orgId: string, @Query() filters: OfferFiltersDto, @Req() req: Request) {
-    await this.authService.getUserFromToken(req);
+    await this.authService.getAccountFromToken(req);
     return this.offerService.getOrgOffers(orgId, filters);
   }
 
@@ -108,7 +108,7 @@ export class OffersController {
     @Param('offerId') offerId: string,
     @Req() req: Request,
   ) {
-    await this.authService.getUserFromToken(req);
+    await this.authService.getAccountFromToken(req);
     return this.offerService.getOrgOfferById(orgId, offerId);
   }
 
@@ -123,7 +123,7 @@ export class OffersController {
     @Body(new ValidationPipe()) body: OfferStatusBodyDto,
     @Req() req: Request,
   ) {
-    const account = await this.authService.getUserFromToken(req);
+    const account = await this.authService.getAccountFromToken(req);
 
     const org = await this.orgsService.getByOrgId(orgId);
     if (isNil(org)) {

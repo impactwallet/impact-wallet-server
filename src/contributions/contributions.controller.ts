@@ -28,7 +28,7 @@ export class ContributionsController {
     @Query(new ValidationPipe()) filter: ContributionsFilterDto,
     @Req() req: Request,
   ) {
-    await this.authService.getUserFromToken(req);
+    await this.authService.getAccountFromToken(req);
 
     filter.userId = userId;
 
@@ -45,7 +45,7 @@ export class ContributionsController {
     @Body(new ValidationPipe()) body: StartContributionDto,
     @Req() req: Request,
   ) {
-    const account = await this.authService.getUserFromToken(req);
+    const account = await this.authService.getAccountFromToken(req);
 
     return this.contributionsService.startContribution(orgId, body, account);
   }
@@ -60,7 +60,7 @@ export class ContributionsController {
     @Body(new ValidationPipe()) body: StopContributionDto,
     @Req() req: Request,
   ) {
-    const account = await this.authService.getUserFromToken(req);
+    const account = await this.authService.getAccountFromToken(req);
 
     return this.contributionsService.stopContribution(orgId, contributionId, account, body);
   }

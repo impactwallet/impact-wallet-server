@@ -25,7 +25,7 @@ export class UsersControllerLite {
     @Body() sendAssetsDto: SendAssetsDto,
     @Req() req: Request,
   ) {
-    const account = await this.authService.getUserFromToken(req);
+    const account = await this.authService.getAccountFromToken(req);
 
     return this.userServiceLite.sendAssets(sendAssetsDto, account, orgId);
   }

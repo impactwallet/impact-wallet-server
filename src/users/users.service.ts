@@ -67,7 +67,7 @@ export class UsersService extends UsersServiceBase {
   }
 
   async getUsersByQuery(query: UsersFilter, req: Request): Promise<User[]> {
-    await this.authService.getUserFromToken(req);
+    await this.authService.getAccountFromToken(req);
 
     if (query.exactMatch) {
       return this.getUsersByQueryWithExactMatch(query);
@@ -116,13 +116,10 @@ export class UsersService extends UsersServiceBase {
     await session.endSession();
 
     const payload = {
-      _id: newUser._id,
-      name: newUser.name,
-      nickname: newUser.nickname,
-      wallet: newUser.wallet,
+      userId: newUser._id,
     };
     return {
-      //TODO return endpoint
+      //TODO: return endpoint
       secretLink: `https://app.impactwallet.xyz/restore/${secretLink}`,
       token: this.jwtService.sign(payload),
     };
@@ -131,10 +128,7 @@ export class UsersService extends UsersServiceBase {
   async restoreUser(secretLink: string): Promise<CreateUserResponseDto> {
     const user = await this.getBySecretLink(secretLink);
     const payload = {
-      _id: user._id,
-      name: user.name,
-      nickname: user.nickname,
-      wallet: user.wallet,
+      userId: user._id,
     };
     return {
       secretLink: `https://app.impactwallet.xyz/restore/${user.secretLink}`,
@@ -151,7 +145,7 @@ export class UsersService extends UsersServiceBase {
   }
 
   async getUserMemberships(user: string, req: Request) {
-    await this.authService.getUserFromToken(req);
+    await this.authService.getAccountFromToken(req);
     const filters = { user };
     return this.membersService.getMembers(filters, 'org');
   }
@@ -492,6 +486,17 @@ export class UsersService extends UsersServiceBase {
         }
       }
     }, null);
+  }
+
+  async generateToken(account: AccountModel) {
+    const user = await this.getByUserId(account.user._id.toString());
+
+    const payload = {
+      userId: user._id,
+    };
+    return {
+      token: this.jwtService.sign(payload),
+    };
   }
 
 }

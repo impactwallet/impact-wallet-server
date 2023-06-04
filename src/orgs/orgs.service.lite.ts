@@ -12,18 +12,18 @@ import { AuthService } from '../auth/auth.service';
 
 
 @Injectable()
-export class OrgsLiteService {
+export class OrgsServiceLite {
 
   constructor(
     @InjectModel(Org.name) public orgRepository: Model<OrgDocument>,
     private readonly authService: AuthService,
     private readonly orgsService: OrgsService,
-    private readonly memberService: MembersService
+    private readonly memberService: MembersService,
   ) { }
 
 
   async createOrgLite(orgsDto: CreateOrgDto, logo: any, mock: boolean, req: Request) {
-    const user = await this.authService.getUserFromToken(req);
+    const user = await this.authService.getAccountFromToken(req);
     orgsDto.member.equity = { amount: 100, type: EquityType.Immediately };
 
     const { org, member } = await this.orgsService.createOrganization(orgsDto, logo, mock);
@@ -34,6 +34,4 @@ export class OrgsLiteService {
       });
     return org;
   }
-
-
 }

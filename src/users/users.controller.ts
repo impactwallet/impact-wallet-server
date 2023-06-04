@@ -3,7 +3,7 @@ import { HttpCode, Req, Headers, Res } from '@nestjs/common/decorators';
 import { ApiConsumes, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CreateUserDto } from './dto/create-user.dto';
-import { User, UserDocument } from './schema/user.schema';
+import { User } from './schema/user.schema';
 import { UsersService } from './users.service';
 import { CreateUserResponseDto } from './dto/create-user.response.dto';
 import { UsersFilter } from './dto/users.filter.dto';
@@ -59,7 +59,7 @@ export class UsersController {
   @ApiResponse({ status: 200, type: User })
   @Get(':id')
   async getByUserId(@Param('id') id: string, @Req() req: Request) {
-    await this.authService.getUserFromToken(req);
+    await this.authService.getAccountFromToken(req);
     return this.userService.getByUserId(id);
   }
 
@@ -78,7 +78,7 @@ export class UsersController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    await this.authService.getUserFromToken(req);
+    await this.authService.getAccountFromToken(req);
 
     const data = await this.userService.getAvatar(fileName);
     res.writeHead(200, { 'content-type': 'image/*' });
@@ -92,7 +92,7 @@ export class UsersController {
   async getUserBalance(
   @Req() req: Request
   ) {
-    const account = await this.authService.getUserFromToken(req);
+    const account = await this.authService.getAccountFromToken(req);
 
     return {
       balance: await this.userService.getUserBalance(account),
@@ -105,7 +105,7 @@ export class UsersController {
   async getUserUsdcHistory(
   @Req() req: Request
   ) {
-    const account = await this.authService.getUserFromToken(req);
+    const account = await this.authService.getAccountFromToken(req);
 
     return this.userService.getUserUsdcHistory(account);
   }
@@ -118,7 +118,7 @@ export class UsersController {
   @Body() sendUsdcDto: SendUsdcDto,
     @Req() req: Request
   ) {
-    const account = await this.authService.getUserFromToken(req);
+    const account = await this.authService.getAccountFromToken(req);
 
     return await this.userService.sendUsdc(account, sendUsdcDto);
   }
@@ -143,7 +143,7 @@ export class UsersController {
     @Body() sendAssetsDto: SendAssetsDto,
     @Req() req: Request,
   ) {
-    const account = await this.authService.getUserFromToken(req);
+    const account = await this.authService.getAccountFromToken(req);
 
     return this.userService.sendAssets(sendAssetsDto, account, orgId);
   }
@@ -155,8 +155,16 @@ export class UsersController {
   @Param('orgId') orgId: string,
     @Req() req: Request
   ) {
-    const user = await this.authService.getUserFromToken(req);
+    const account = await this.authService.getAccountFromToken(req);
 
-    return this.userService.getUserAssetHistory(user, orgId);
+    return this.userService.getUserAssetHistory(account, orgId);
+  }
+
+  @ApiOperation({ summary: 'Login with token' })
+  @ApiResponse({ status: 200 })
+  @Post('/login')
+  async loginWithToken(@Req() req: Request) {
+    const account = await this.authService.getAccountFromToken(req);
+    return this.userService.generateToken(account);
   }
 }

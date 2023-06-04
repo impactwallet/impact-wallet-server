@@ -18,8 +18,16 @@ export class AccountModel {
     return get(this, 'org._id', this.user._id);
   }
 
+  get name() {
+    return get(this, 'org.name', this.user.name);
+  }
+
   get username() {
     return get(this, 'org.username', this.user.nickname);
+  }
+
+  get image() {
+    return get(this, 'org.logo', this.user.avatar);
   }
 
   get model() {
@@ -28,5 +36,17 @@ export class AccountModel {
 
   get password() {
     return this.model.findById(this.id, '+password');
+  }
+
+  toJSON(): any {
+    return {
+      id: this.id,
+      name: this.name,
+      username: this.username,
+      wallet: this.wallet,
+      isUser: this.isUser,
+      image: this.image,
+      user: this.user,
+    };
   }
 }

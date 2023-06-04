@@ -27,7 +27,7 @@ export class OffersControllerLite {
     @Body(new ValidationPipe()) body: OfferStatusBodyDto,
     @Req() req: Request,
   ) {
-    const account = await this.authService.getUserFromToken(req);
+    const account = await this.authService.getAccountFromToken(req);
 
     return this.offerServiceLite.updateSaleOfferStatus(offerId, body, account);
   }
@@ -42,7 +42,7 @@ export class OffersControllerLite {
     @Body() offer: OfferLiteDto,
     @Req() req: Request,
   ) {
-    await this.authService.getUserFromToken(req);
+    await this.authService.getAccountFromToken(req);
 
     const org = await this.orgService.getByOrgId(orgId);
     if (isNil(org)) {
@@ -63,7 +63,7 @@ export class OffersControllerLite {
     @Body(new ValidationPipe()) body: OfferStatusBodyDto,
     @Req() req: Request,
   ) {
-    const account = await this.authService.getUserFromToken(req);
+    const account = await this.authService.getAccountFromToken(req);
 
     const org = await this.orgService.getByOrgId(orgId);
     if (isNil(org)) {

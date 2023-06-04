@@ -12,6 +12,6 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Currently logged in user' })
   @Get('me')
   getUserFromToken(@Req() req: Request) {
-    return this.authService.getUserFromToken(req);
+    return this.authService.getAccountFromToken(req);
   }
 }

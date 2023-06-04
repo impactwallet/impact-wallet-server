@@ -16,7 +16,7 @@ export class AuthService {
     @InjectModel(Org.name) protected orgModel: Model<OrgDocument>,
   ) {}
 
-  async getUserFromToken(req: Request): Promise<AccountModel> {
+  async getAccountFromToken(req: Request): Promise<AccountModel> {
     const authHeader: string = req.headers['authorization'];
     if (!authHeader) throw new UnauthorizedException({ message: 'User not authorized' });
     const bearer = authHeader.split(' ')[0];
@@ -25,7 +25,7 @@ export class AuthService {
       throw new UnauthorizedException({ message: 'User not authorized' });
     }
     const payload = this.jwtService.verify(token);
-    const user = await this.userModel.findById(get(payload, '_id'));
+    const user = await this.userModel.findById(get(payload, 'userId'));
 
     if (isNil(user)) {
       throw new UnauthorizedException({ message: 'User not authorized' });
