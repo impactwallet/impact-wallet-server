@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { InjectModel } from '@nestjs/mongoose';
 import mongoose, { Model } from 'mongoose';
 import { ApiService } from 'src/api-service/api.service';
-import { defaultTo, get, isNil, set } from 'lodash';
+import { get, isNil, set } from 'lodash';
 import { SendAssetsDto } from './dto/send-assets.dto';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { Member, MemberDocument } from 'src/members/schema/member.schema';

@@ -1,7 +1,8 @@
 import { get, isNil } from 'lodash';
-import { OrgDocument } from '../../orgs/schema/org.schema';
-import { UserDocument } from '../../users/schema/user.schema';
+import { OrgDocument, OrgSchema } from '../../orgs/schema/org.schema';
+import { UserDocument, UserSchema } from '../../users/schema/user.schema';
 import { Model } from 'mongoose';
+import { connection } from '../../app.module';
 
 export class AccountModel {
   constructor(public user: UserDocument, public org?: OrgDocument) {}
@@ -30,12 +31,12 @@ export class AccountModel {
     return get(this, 'org.logo', this.user.avatar);
   }
 
-  get model() {
-    return this.isUser ? Model<UserDocument> : Model<OrgDocument>;
+  get model(): Model<any> {
+    return this.isUser ? connection.model('User', UserSchema) : connection.model('Org', OrgSchema);
   }
 
   get password() {
-    return this.model.findById(this.id, '+password');
+    return this.model.findById(this.id, '+password').exec().then((doc) => doc.password);
   }
 
   toJSON(): any {

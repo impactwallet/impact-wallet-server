@@ -10,7 +10,9 @@ import { AuthModule } from './auth/auth.module';
 import { ContributionsModule } from './contributions/contributions.module';
 import { ConfigModule } from '@nestjs/config';
 import { ConfigurationModule } from './configuration/config.module';
+import { Connection } from 'mongoose';
 
+export let connection: Connection;
 
 @Module({
   imports: [
@@ -20,9 +22,10 @@ import { ConfigurationModule } from './configuration/config.module';
     OrgsModule,
     ApiServiceModule,
     MongooseModule.forRoot(process.env.MONGODB_URI, {
-      connectionFactory: (connection) => {
-        connection.plugin(mongooseAutoPopulate);
-        return connection;
+      connectionFactory: (_connection) => {
+        connection = _connection;
+        _connection.plugin(mongooseAutoPopulate);
+        return _connection;
       },
     }),
     MembersModule,
