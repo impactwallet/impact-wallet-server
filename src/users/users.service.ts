@@ -1,6 +1,5 @@
 import { Injectable, NotFoundException, ConflictException, HttpException, BadRequestException } from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/mongoose';
-import { JwtService } from '@nestjs/jwt';
 import { v4 as uuid } from 'uuid';
 import mongoose, { Model } from 'mongoose';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -8,7 +7,7 @@ import { User, UserDocument } from './schema/user.schema';
 import { ApiService } from 'src/api-service/api.service';
 import { CreateUserResponseDto } from './dto/create-user.response.dto';
 import { UsersFilter } from './dto/users.filter.dto';
-import { get, isEmpty, isEqual, isNil, omitBy, toNumber } from 'lodash';
+import { defaultTo, get, isEmpty, isEqual, isNil, omitBy, toNumber } from 'lodash';
 import { SearchUserByNicknameDto } from './dto/search-user-by-nickname.dto';
 import { Request } from 'express';
 import { MembersService } from '../members/members.service';
@@ -29,6 +28,9 @@ import { Account } from '@solana/spl-token';
 import { Contribution, ContributionDocument } from '../contributions/schema/contribution.schema';
 import { areObjectIdsEqual } from '../utils/mongo';
 import { UsersServiceBase } from './users.service.base';
+import { AuthService } from '../auth/auth.service';
+import { JwtService } from '@nestjs/jwt';
+import { AccountModel } from '../auth/models/account.model';
 
 @Injectable()
 export class UsersService extends UsersServiceBase {
@@ -41,12 +43,13 @@ export class UsersService extends UsersServiceBase {
     @InjectModel(Contribution.name) private contributionRepository: Model<ContributionDocument>,
     @InjectModel(SaleOffer.name) private saleOfferRepository: Model<SaleOfferDocument>,
     @InjectConnection() private readonly connection: mongoose.Connection,
-    jwtService: JwtService,
     private apiService: ApiService,
     private membersService: MembersService,
-    private s3Service: S3Service
+    private jwtService: JwtService,
+    private s3Service: S3Service,
+    private authService: AuthService,
   ) {
-    super(userRepository, jwtService);
+    super(userRepository);
   }
 
   async getUsersByNicknamePrivate(name: string): Promise<User[]> {
@@ -64,7 +67,7 @@ export class UsersService extends UsersServiceBase {
   }
 
   async getUsersByQuery(query: UsersFilter, req: Request): Promise<User[]> {
-    await this.getUserFromToken(req);
+    await this.authService.getAccountFromToken(req);
 
     if (query.exactMatch) {
       return this.getUsersByQueryWithExactMatch(query);
@@ -113,13 +116,10 @@ export class UsersService extends UsersServiceBase {
     await session.endSession();
 
     const payload = {
-      _id: newUser._id,
-      name: newUser.name,
-      nickname: newUser.nickname,
-      wallet: newUser.wallet,
+      userId: newUser._id,
     };
     return {
-      //TODO return endpoint
+      //TODO: return endpoint
       secretLink: `https://app.impactwallet.xyz/restore/${secretLink}`,
       token: this.jwtService.sign(payload),
     };
@@ -128,10 +128,7 @@ export class UsersService extends UsersServiceBase {
   async restoreUser(secretLink: string): Promise<CreateUserResponseDto> {
     const user = await this.getBySecretLink(secretLink);
     const payload = {
-      _id: user._id,
-      name: user.name,
-      nickname: user.nickname,
-      wallet: user.wallet,
+      userId: user._id,
     };
     return {
       secretLink: `https://app.impactwallet.xyz/restore/${user.secretLink}`,
@@ -148,7 +145,7 @@ export class UsersService extends UsersServiceBase {
   }
 
   async getUserMemberships(user: string, req: Request) {
-    await this.getUserFromToken(req);
+    await this.authService.getAccountFromToken(req);
     const filters = { user };
     return this.membersService.getMembers(filters, 'org');
   }
@@ -157,33 +154,33 @@ export class UsersService extends UsersServiceBase {
     return this.s3Service.getFile(fileName);
   }
 
-  async getUserBalance(user: User) {
-    return this.apiService.getUSDCBalance(user.wallet);
+  async getUserBalance(account: AccountModel) {
+    return this.apiService.getUSDCBalance(account.wallet);
   }
 
-  async getUserUsdcHistory(user: User): Promise<TxnHistoryItemDto[]> {
-    const { associatedAddress, parsedTxns } = await this.apiService.getUSDCHistory(user.wallet);
-    return this._buildUsdcHistory(user, associatedAddress, parsedTxns);
+  async getUserUsdcHistory(account: AccountModel): Promise<TxnHistoryItemDto[]> {
+    const { associatedAddress, parsedTxns } = await this.apiService.getUSDCHistory(account.wallet);
+    return this._buildUsdcHistory(account, associatedAddress, parsedTxns);
   }
 
-  async getUserAssetHistory(user: UserDocument, orgId: string) {
+  async getUserAssetHistory(account: AccountModel, orgId: string) {
     const org = await this.orgRepository.findById(orgId);
     if (isNil(org)) {
       throw new NotFoundException('Organization not found');
     }
-    const { associatedAddress, parsedTxns } = await this.apiService.getTokenHistory(user.wallet, org.mint);
-    return this._buildAssetHistory(user, associatedAddress, parsedTxns);
+    const { associatedAddress, parsedTxns } = await this.apiService.getTokenHistory(account.wallet, org.mint);
+    return this._buildAssetHistory(account, associatedAddress, parsedTxns);
   }
 
-  async sendUsdc(sender: UserDocument, sendUsdcDto: SendUsdcDto) {
-    const balance: number = await this.apiService.getUSDCBalance(sender.wallet);
+  async sendUsdc(account: AccountModel, sendUsdcDto: SendUsdcDto) {
+    const balance: number = await this.apiService.getUSDCBalance(account.wallet);
     if (balance < sendUsdcDto.amount) {
       throw new BadRequestException('Not enough USDC to send');
     }
 
-    const senderPassword = (await this.getByUserId(sender._id.toString(), '+password')).password;
+    const senderPassword = await account.password;
 
-    const fromPk = await this.apiService.getPK(sender.wallet, senderPassword);
+    const fromPk = await this.apiService.getPK(account.wallet, senderPassword);
     const recipients = [
       {
         wallet: sendUsdcDto.recipient,
@@ -192,11 +189,11 @@ export class UsersService extends UsersServiceBase {
     ];
 
     const signature = await this.apiService.transferUSDC(fromPk, recipients);
-    this.apiService.sendNotification(`User ${sender.nickname} sent ${sendUsdcDto.amount} USDC to ${sendUsdcDto.recipient}\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
+    this.apiService.sendNotification(`User ${account.username} sent ${sendUsdcDto.amount} USDC to ${sendUsdcDto.recipient}\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
   }
 
 
-  async sendAssets(sendAssetsDto: SendAssetsDto, sender: UserDocument, orgId: string) {
+  async sendAssets(sendAssetsDto: SendAssetsDto, account: AccountModel, orgId: string) {
     const session = await this.connection.startSession();
 
     await session.withTransaction(async () => {
@@ -209,9 +206,12 @@ export class UsersService extends UsersServiceBase {
       } else {
         recipientAddress = sendAssetsDto.recipientAddress;
       }
-      const senderPassword = (await this.getByUserId(sender._id.toString(), '+password', session)).password;
+      const senderPassword = await account.password;
       const senderMember = await this.memberRepository.findOne({
-        user: sender._id,
+        $or: [
+          { user: account.id },
+          { orgUser: account.id },
+        ],
         org: orgObjectId,
       }).populate('org').session(session);
 
@@ -224,7 +224,7 @@ export class UsersService extends UsersServiceBase {
 
       const org = senderMember.org as OrgDocument;
 
-      const fromPk = await this.apiService.getPK(sender.wallet, senderPassword);
+      const fromPk = await this.apiService.getPK(account.wallet, senderPassword);
       const signature = await this.apiService.transfer(fromPk, org.mint, [{ wallet: recipientAddress, amount: sendAssetsDto.amount }]);
 
       if (!isNil(recipient)) {
@@ -255,7 +255,7 @@ export class UsersService extends UsersServiceBase {
         { $inc: { 'lamportsEarned': -sendAssetsDto.amount * LAMPORTS_PER_SOL } },
       ).session(session);
 
-      this.apiService.sendNotification(`User ${sender.nickname} sent ${sendAssetsDto.amount} impact shares of ${org.name} to user ${get(recipient, 'nickname', recipientAddress)}\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
+      this.apiService.sendNotification(`User ${account.username} sent ${sendAssetsDto.amount} impact shares of ${org.name} to user ${get(recipient, 'nickname', recipientAddress)}\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
     });
 
     await session.endSession();
@@ -308,7 +308,7 @@ export class UsersService extends UsersServiceBase {
   }
 
   async _buildAssetHistory(
-    user: UserDocument,
+    account: AccountModel,
     associatedAddress: PublicKey,
     parsedTxns: ParsedTransactionWithMeta[],
   ): Promise<TxnHistoryItemDto[]> {
@@ -318,7 +318,7 @@ export class UsersService extends UsersServiceBase {
         continue;
       }
       let historyItems: TxnHistoryItemDto[] = [];
-      const inAppEntity = await this._getEntityFromTxn(user, txn);
+      const inAppEntity = await this._getEntityFromTxn(account, txn);
       if (isNil(inAppEntity)) {
         continue;
       }
@@ -336,19 +336,19 @@ export class UsersService extends UsersServiceBase {
         contribution.split.forEach((split) => {
           const item: TxnHistoryItemDto = {};
           const contributionMember = contribution.member as MemberDocument;
-          const contributionUser = contributionMember.user as UserDocument;
+          const contributionUser = defaultTo(contributionMember.user as UserDocument, contributionMember.orgUser as OrgDocument);
           const member = split.member as MemberDocument;
           const memberUser = member.user as UserDocument;
           const equityAllocation = get(member, 'investorSettings.equityAllocation');
           item.amount = split.amount;
           item.img = memberUser.avatar;
           item.addressOrUsername = memberUser.nickname;
-          if (areObjectIdsEqual(member.user, user._id)) {
+          if (areObjectIdsEqual(member.user, account.id) || areObjectIdsEqual(member.orgUser, account.id)) {
             let description: string;
             if (member.role == Role.Investor) {
               description = `Received for ${equityAllocation}% of equity allocation`;
-              item.img = contributionUser.avatar;
-              item.addressOrUsername = contributionUser.nickname;
+              item.img = defaultTo((contributionUser as UserDocument).avatar, (contributionUser as OrgDocument).logo);
+              item.addressOrUsername = defaultTo((contributionUser as UserDocument).nickname, (contributionUser as OrgDocument).username);
               isInvestor = true;
             } else {
               description = 'Earned';
@@ -391,7 +391,7 @@ export class UsersService extends UsersServiceBase {
   }
 
   async _buildUsdcHistory(
-    user: User,
+    account: AccountModel,
     associatedAddress: PublicKey,
     parsedTxns: ParsedTransactionWithMeta[],
   ): Promise<TxnHistoryItemDto[]> {
@@ -405,7 +405,7 @@ export class UsersService extends UsersServiceBase {
         amount,
         description,
       };
-      const inAppEntity = await this._getEntityFromTxn(user, txn);
+      const inAppEntity = await this._getEntityFromTxn(account, txn);
       historyItem.addressOrUsername = get(inAppEntity, 'username');
       historyItem.img = get(inAppEntity, 'img');
       if (isNil(inAppEntity)) {
@@ -426,7 +426,7 @@ export class UsersService extends UsersServiceBase {
     return history;
   }
 
-  async _getEntityFromTxn(user: User, txn: ParsedTransactionWithMeta)
+  async _getEntityFromTxn(account: AccountModel, txn: ParsedTransactionWithMeta)
     : Promise<EntityFromTxnDto | null> {
     const payment = await this.paymentRepository.findOne({
       $or: [
@@ -469,7 +469,7 @@ export class UsersService extends UsersServiceBase {
         accInfo = await this.apiService.getAccountInfo(destination.toString());
         owner = get(accInfo, 'owner');
       }
-      if (isEqual(authority.toString(), user.wallet.toString())) {
+      if (isEqual(authority.toString(), account.wallet.toString())) {
         const receiver = await this.userRepository.findOne({ wallet: owner.toString() });
         if (!isNil(receiver)) {
           return { username: receiver.nickname, img: receiver.avatar };
@@ -477,7 +477,7 @@ export class UsersService extends UsersServiceBase {
           return { username: owner.toString() };
         }
       }
-      if (!isNil(owner) && isEqual(owner.toString(), user.wallet.toString())) {
+      if (!isNil(owner) && isEqual(owner.toString(), account.wallet.toString())) {
         const sender = await this.userRepository.findOne({ wallet: authority.toString() });
         if (!isNil(sender)) {
           return { username: sender.nickname, img: sender.avatar, from: sender };
@@ -486,6 +486,17 @@ export class UsersService extends UsersServiceBase {
         }
       }
     }, null);
+  }
+
+  async generateToken(account: AccountModel) {
+    const user = await this.getByUserId(account.user._id.toString());
+
+    const payload = {
+      userId: user._id,
+    };
+    return {
+      token: this.jwtService.sign(payload),
+    };
   }
 
 }

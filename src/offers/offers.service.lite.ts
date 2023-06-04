@@ -9,7 +9,7 @@ import { OrgDocument } from '../orgs/schema/org.schema';
 import { OfferStatusBodyDto, OfferStatusDto } from './dto/offer-status.dto';
 import { OfferStatus } from './enum/statuses.enum';
 import { OffersServiceBase } from './offers.service.base';
-import { isNil } from 'lodash';
+import { defaultTo, isNil } from 'lodash';
 import { EquityType } from '../members/enum/equity-type.enum';
 import { UserDocument } from '../users/schema/user.schema';
 import { ApiService } from '../api-service/api.service';
@@ -18,6 +18,8 @@ import { Role } from '../members/enum/roles.enum';
 import { PaymentService } from '../payment/payment.service';
 import { SaleOffer, SaleOfferDocument } from './schema/sale-offer.schema';
 import { PaymentDocument } from '../payment/schema/payment.schema';
+import { AccountModel } from '../auth/models/account.model';
+import { OrgsService } from '../orgs/orgs.service';
 
 @Injectable()
 export class OffersLiteService extends OffersServiceBase {
@@ -28,6 +30,7 @@ export class OffersLiteService extends OffersServiceBase {
     private readonly userService: UsersService,
     private readonly apiService: ApiService,
     private readonly paymentService: PaymentService,
+    private readonly orgService: OrgsService,
   ) {
     super(offerRepository, saleOfferRepository);
   }
@@ -42,19 +45,25 @@ export class OffersLiteService extends OffersServiceBase {
     }
   }
 
-  async updateOfferStatus(org: OrgDocument, offerId: string, body: OfferStatusBodyDto, userId: string) {
+  async updateOfferStatus(org: OrgDocument, offerId: string, body: OfferStatusBodyDto, account: AccountModel) {
     const offer = await this.getOrgOfferById(org._id.toString(), offerId);
 
     if (offer.status !== OfferStatus.Pending) {
       throw new ForbiddenException('Offer already accepted/declined');
     }
 
-    const user = await this.userService.getByUserId(userId, '+password');
+    const user = account.isUser
+      ? await this.userService.getByUserId(account.id.toString(), '+password')
+      : await this.orgService.getByOrgId(account.id.toString(), '+password');
   
     switch (body.status) {
     case OfferStatusDto.accepted:
       offer.status = OfferStatus.Approved;
-      offer.memberProspect.user = user._id.toString();
+      if (account.isUser) {
+        offer.memberProspect.user = user._id.toString();
+      } else {
+        offer.memberProspect.orgUser = user._id.toString();
+      }
       offer.memberProspect.org = org._id.toString();
 
       let newMember: MemberDocument;
@@ -89,10 +98,13 @@ export class OffersLiteService extends OffersServiceBase {
           org: new Types.ObjectId(org._id),
           equity: { $ne: null },
         })
-          .populate({ path: 'user', select: '+password' })
+          .populate([
+            { path: 'user', select: '+password' },
+            { path: 'orgUser', select: '+password' },
+          ])
           .cursor()
           .eachAsync(async (member) => {
-            const memberUser = member.user as UserDocument;
+            const memberUser = defaultTo(member.user as UserDocument, member.orgUser as OrgDocument);
             let amount: number;
             if (offer.memberProspect.role === Role.Investor) {
               amount = member.equity.amount * (offer.memberProspect.investorSettings.equityAllocation / 100);
@@ -111,7 +123,8 @@ export class OffersLiteService extends OffersServiceBase {
                 },
               },
             );
-            this.apiService.sendNotification(`${amount}% of equity transferred from ${memberUser.nickname} to ${user.nickname}:\n\n${this.apiService.buildExplorerLink('/tx/' + txnHash)}`);
+            const username = defaultTo((memberUser as UserDocument).nickname, (memberUser as OrgDocument).username);
+            this.apiService.sendNotification(`${amount}% of equity transferred from ${username} to ${account.username}:\n\n${this.apiService.buildExplorerLink('/tx/' + txnHash)}`);
           });
       }
 
@@ -129,13 +142,15 @@ export class OffersLiteService extends OffersServiceBase {
     return this.apiService.transfer(pk, mint, [{ wallet: destination.wallet, amount }]);
   }
 
-  async updateSaleOfferStatus(offerId: string, body: OfferStatusBodyDto, buyerId: string) {
+  async updateSaleOfferStatus(offerId: string, body: OfferStatusBodyDto, account: AccountModel) {
     const offer = await this.getSaleOfferById(offerId, ['org', 'seller']);
     if (offer.status !== OfferStatus.Pending) {
       throw new ForbiddenException('Offer already accepted/declined');
     }
 
-    const buyer = await this.userService.getByUserId(buyerId, '+password');
+    const buyer = account.isUser
+      ? await this.userService.getByUserId(account.id.toString(), '+password')
+      : await this.orgService.getByOrgId(account.id.toString(), '+password');
     const seller = offer.seller as UserDocument;
     const org = offer.org as OrgDocument;
     let payment: PaymentDocument;

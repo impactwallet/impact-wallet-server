@@ -1,7 +1,7 @@
-import { Controller, Get, Req } from "@nestjs/common";
-import { ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
-import { Request } from "express";
-import { AuthService } from "./auth.service";
+import { Controller, Get, Req } from '@nestjs/common';
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Request } from 'express';
+import { AuthService } from './auth.service';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -12,6 +12,6 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Currently logged in user' })
   @Get('me')
   getUserFromToken(@Req() req: Request) {
-    return this.authService.getUserFromToken(req);
+    return this.authService.getAccountFromToken(req);
   }
 }

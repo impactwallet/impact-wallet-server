@@ -108,8 +108,12 @@ export class Member {
     agreement: string;
 
   @ApiProperty({ example: 'ID or object' })
-  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true })
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
     user: string | UserDocument;
+
+  @ApiProperty({ example: 'ID or object' })
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Org' })
+    orgUser: string | OrgDocument;
 
   @ApiProperty({ example: 'ID or object' })
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Org', required: true })

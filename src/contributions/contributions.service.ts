@@ -6,7 +6,7 @@ import { Contribution, ContributionDocument, ContributionSplit } from './schema/
 import { StartContributionDto } from './dto/start-contribution.dto';
 import { MembersService } from '../members/members.service';
 import { areObjectIdsEqual } from '../utils/mongo';
-import { get, isEmpty, isNil } from 'lodash';
+import { defaultTo, get, isEmpty, isNil } from 'lodash';
 import { UserDocument } from '../users/schema/user.schema';
 import { MemberDocument } from '../members/schema/member.schema';
 import * as moment from 'moment';
@@ -17,6 +17,7 @@ import { ContributionsFilterDto } from './dto/contributions-filter.dto';
 import { Role } from '../members/enum/roles.enum';
 import { StopContributionDto } from './dto/stop-contribution.dto';
 import { OrgsService } from '../orgs/orgs.service';
+import { AccountModel } from '../auth/models/account.model';
 
 @Injectable()
 export class ContributionsService {
@@ -72,7 +73,7 @@ export class ContributionsService {
     return this.contributionModel.aggregate(pipelines);
   }
 
-  async startContribution(orgId: string, body: StartContributionDto, user: UserDocument) {
+  async startContribution(orgId: string, body: StartContributionDto, account: AccountModel) {
     const org = await this.orgsService.getByOrgId(orgId);
     if (isNil(org)) {
       throw new NotFoundException({ message: 'Organization not found' });
@@ -80,10 +81,10 @@ export class ContributionsService {
 
     const { memberId } = body;
 
-    const member = await this.membersService.getMemberById(memberId, { path: 'user' });
-    const memberUser: UserDocument = member.user as UserDocument;
+    const member = await this.membersService.getMemberById(memberId, [{ path: 'user' }, { path: 'org' }]);
+    const memberUser: UserDocument | OrgDocument = defaultTo(member.user as UserDocument, member.orgUser as OrgDocument);
 
-    if (!areObjectIdsEqual(memberUser._id, user._id)) {
+    if (!areObjectIdsEqual(memberUser._id, account.id)) {
       throw new UnauthorizedException('It is not allowed to start contribution for another user');
     }
 
@@ -117,7 +118,7 @@ export class ContributionsService {
   async stopContribution(
     orgId: string,
     contributionId: string,
-    user: UserDocument,
+    account: AccountModel,
     body: StopContributionDto,
   ): Promise<ContributionDocument> {
     const org = await this.orgsService.getByOrgId(orgId, '+password');
@@ -133,7 +134,7 @@ export class ContributionsService {
         org: new mongoose.Types.ObjectId(orgId),
       })
         .populate([
-          { path: 'member', populate: 'user' },
+          { path: 'member', populate: [{ path: 'user' }, { path: 'orgUser' }] },
           'org',
         ])
         .session(session);
@@ -152,9 +153,9 @@ export class ContributionsService {
       }
 
       const member: MemberDocument = contribution.member as MemberDocument;
-      const memberUser: UserDocument = member.user as UserDocument;
+      const memberUser: UserDocument | OrgDocument = defaultTo(member.user as UserDocument, member.orgUser as OrgDocument);
 
-      if (!areObjectIdsEqual(user._id, memberUser._id)) {
+      if (!areObjectIdsEqual(account.id, memberUser._id)) {
         throw new UnauthorizedException({
           message: 'It is not allowed to stop contribution for another user',
         });

@@ -52,6 +52,9 @@ export class MemberProspect {
 
   @Prop({ type: mongoose.Schema.Types.ObjectId })
     user: string;
+
+  @Prop({ type: mongoose.Schema.Types.ObjectId })
+    orgUser: string;
 }
 
 export const MemberProspectSchema = SchemaFactory.createForClass(MemberProspect);

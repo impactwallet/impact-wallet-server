@@ -9,6 +9,7 @@ import { OrgsModule } from '../orgs/orgs.module';
 import { UsersModule } from '../users/users.module';
 import { ContributionsServiceLite } from './contributions.service.lite';
 import { ContributionsControllerLite } from './contributions.controller.lite';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { ContributionsControllerLite } from './contributions.controller.lite';
     ApiServiceModule,
     OrgsModule,
     UsersModule,
+    AuthModule,
   ],
   providers: [ContributionsService, ContributionsServiceLite],
   controllers: [ContributionsController, ContributionsControllerLite],

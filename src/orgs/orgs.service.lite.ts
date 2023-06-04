@@ -3,27 +3,27 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Org, OrgDocument } from './schema/org.schema';
 import { Request } from 'express';
 import { Model } from 'mongoose';
-import { UsersService } from 'src/users/users.service';
 import { CreateOrgDto } from './dto/create-org.dto';
 import { OrgsService } from './orgs.service';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { MembersService } from '../members/members.service';
 import { EquityType } from '../members/enum/equity-type.enum';
+import { AuthService } from '../auth/auth.service';
 
 
 @Injectable()
-export class OrgsLiteService {
+export class OrgsServiceLite {
 
   constructor(
     @InjectModel(Org.name) public orgRepository: Model<OrgDocument>,
-    private readonly usersService: UsersService,
+    private readonly authService: AuthService,
     private readonly orgsService: OrgsService,
-    private readonly memberService: MembersService
+    private readonly memberService: MembersService,
   ) { }
 
 
   async createOrgLite(orgsDto: CreateOrgDto, logo: any, mock: boolean, req: Request) {
-    const user = await this.usersService.getUserFromToken(req);
+    const user = await this.authService.getAccountFromToken(req);
     orgsDto.member.equity = { amount: 100, type: EquityType.Immediately };
 
     const { org, member } = await this.orgsService.createOrganization(orgsDto, logo, mock);
@@ -34,6 +34,4 @@ export class OrgsLiteService {
       });
     return org;
   }
-
-
 }

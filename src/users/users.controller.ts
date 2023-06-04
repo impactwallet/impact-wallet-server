@@ -3,7 +3,7 @@ import { HttpCode, Req, Headers, Res } from '@nestjs/common/decorators';
 import { ApiConsumes, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CreateUserDto } from './dto/create-user.dto';
-import { User, UserDocument } from './schema/user.schema';
+import { User } from './schema/user.schema';
 import { UsersService } from './users.service';
 import { CreateUserResponseDto } from './dto/create-user.response.dto';
 import { UsersFilter } from './dto/users.filter.dto';
@@ -14,6 +14,7 @@ import { Member } from '../members/schema/member.schema';
 import { SendAssetsDto } from 'src/users/dto/send-assets.dto';
 import { SendUsdcDto } from './dto/send-usdc.dto';
 import { TxnHistoryItemDto } from '../common/dto/txn-history-item.dto';
+import { AuthService } from '../auth/auth.service';
 
 @ApiTags('Users')
 @Controller('users')
@@ -21,6 +22,7 @@ export class UsersController {
 
   constructor(
     private readonly userService: UsersService,
+    private readonly authService: AuthService,
   ) {
   }
 
@@ -57,7 +59,7 @@ export class UsersController {
   @ApiResponse({ status: 200, type: User })
   @Get(':id')
   async getByUserId(@Param('id') id: string, @Req() req: Request) {
-    await this.userService.getUserFromToken(req);
+    await this.authService.getAccountFromToken(req);
     return this.userService.getByUserId(id);
   }
 
@@ -76,7 +78,7 @@ export class UsersController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    await this.userService.getUserFromToken(req);
+    await this.authService.getAccountFromToken(req);
 
     const data = await this.userService.getAvatar(fileName);
     res.writeHead(200, { 'content-type': 'image/*' });
@@ -90,10 +92,10 @@ export class UsersController {
   async getUserBalance(
   @Req() req: Request
   ) {
-    const user: User = await this.userService.getUserFromToken(req);
+    const account = await this.authService.getAccountFromToken(req);
 
     return {
-      balance: await this.userService.getUserBalance(user),
+      balance: await this.userService.getUserBalance(account),
     };
   }
 
@@ -103,9 +105,9 @@ export class UsersController {
   async getUserUsdcHistory(
   @Req() req: Request
   ) {
-    const user: User = await this.userService.getUserFromToken(req);
+    const account = await this.authService.getAccountFromToken(req);
 
-    return this.userService.getUserUsdcHistory(user);
+    return this.userService.getUserUsdcHistory(account);
   }
 
   @ApiOperation({ summary: 'Send USDC' })
@@ -116,9 +118,9 @@ export class UsersController {
   @Body() sendUsdcDto: SendUsdcDto,
     @Req() req: Request
   ) {
-    const user: UserDocument = await this.userService.getUserFromToken(req);
+    const account = await this.authService.getAccountFromToken(req);
 
-    return await this.userService.sendUsdc(user, sendUsdcDto);
+    return await this.userService.sendUsdc(account, sendUsdcDto);
   }
 
   @ApiOperation({ summary: 'Restore user' })
@@ -141,9 +143,9 @@ export class UsersController {
     @Body() sendAssetsDto: SendAssetsDto,
     @Req() req: Request,
   ) {
-    const sender = await this.userService.getUserFromToken(req);
+    const account = await this.authService.getAccountFromToken(req);
 
-    return this.userService.sendAssets(sendAssetsDto, sender, orgId);
+    return this.userService.sendAssets(sendAssetsDto, account, orgId);
   }
 
   @ApiOperation({ summary: 'Get users asset transactions history' })
@@ -153,8 +155,16 @@ export class UsersController {
   @Param('orgId') orgId: string,
     @Req() req: Request
   ) {
-    const user = await this.userService.getUserFromToken(req);
+    const account = await this.authService.getAccountFromToken(req);
 
-    return this.userService.getUserAssetHistory(user, orgId);
+    return this.userService.getUserAssetHistory(account, orgId);
+  }
+
+  @ApiOperation({ summary: 'Login with token' })
+  @ApiResponse({ status: 200 })
+  @Post('/login')
+  async loginWithToken(@Req() req: Request) {
+    const account = await this.authService.getAccountFromToken(req);
+    return this.userService.generateToken(account);
   }
 }

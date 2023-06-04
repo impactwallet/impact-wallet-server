@@ -6,11 +6,12 @@ import { OrgsService } from './orgs.service';
 import { UsersModule } from 'src/users/users.module';
 import { ApiServiceModule } from 'src/api-service/api.module';
 import { MembersModule } from 'src/members/members.module';
-import { OffersModule } from '../offers/offers.module';
 import { S3Module } from 'src/s3/s3.module';
 import { PaymentModule } from '../payment/payment.module';
 import { OrgsLiteController } from './orgs.controller.lite';
-import { OrgsLiteService } from './orgs.service.lite';
+import { OrgsServiceLite } from './orgs.service.lite';
+import { AuthModule } from '../auth/auth.module';
+import { JwtModule } from '@nestjs/jwt';
 
 @Module({
   imports: [
@@ -18,12 +19,15 @@ import { OrgsLiteService } from './orgs.service.lite';
     UsersModule,
     MembersModule,
     ApiServiceModule,
-    OffersModule,
     S3Module,
     PaymentModule,
+    AuthModule,
+    JwtModule.register({
+      secret: process.env.PRIVATE_KEY || 'SECRET',
+    }),
   ],
-  providers: [OrgsService, OrgsLiteService],
-  exports: [OrgsService],
+  providers: [OrgsService, OrgsServiceLite],
+  exports: [OrgsService, OrgsServiceLite],
   controllers: [OrgsController, OrgsLiteController],
 })
 export class OrgsModule { }

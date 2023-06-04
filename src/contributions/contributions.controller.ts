@@ -6,17 +6,16 @@ import { Contribution } from './schema/contribution.schema';
 import { StartContributionDto } from './dto/start-contribution.dto';
 import { UsersService } from '../users/users.service';
 import { StopContributionDto } from './dto/stop-contribution.dto';
-import { InjectConnection } from '@nestjs/mongoose';
-import { Connection } from 'mongoose';
 import { ContributionsFilterDto } from './dto/contributions-filter.dto';
+import { AuthService } from '../auth/auth.service';
 
 @ApiTags('Contributions')
 @Controller()
 export class ContributionsController {
   constructor(
-    @InjectConnection() private readonly connection: Connection,
     private readonly contributionsService: ContributionsService,
     private readonly userService: UsersService,
+    private readonly authService: AuthService,
   ) {
   }
 
@@ -29,7 +28,7 @@ export class ContributionsController {
     @Query(new ValidationPipe()) filter: ContributionsFilterDto,
     @Req() req: Request,
   ) {
-    await this.userService.getUserFromToken(req);
+    await this.authService.getAccountFromToken(req);
 
     filter.userId = userId;
 
@@ -46,9 +45,9 @@ export class ContributionsController {
     @Body(new ValidationPipe()) body: StartContributionDto,
     @Req() req: Request,
   ) {
-    const user = await this.userService.getUserFromToken(req);
+    const account = await this.authService.getAccountFromToken(req);
 
-    return this.contributionsService.startContribution(orgId, body, user);
+    return this.contributionsService.startContribution(orgId, body, account);
   }
 
   @ApiTags('Orgs')
@@ -61,8 +60,8 @@ export class ContributionsController {
     @Body(new ValidationPipe()) body: StopContributionDto,
     @Req() req: Request,
   ) {
-    const user = await this.userService.getUserFromToken(req);
+    const account = await this.authService.getAccountFromToken(req);
 
-    return this.contributionsService.stopContribution(orgId, contributionId, user, body);
+    return this.contributionsService.stopContribution(orgId, contributionId, account, body);
   }
 }

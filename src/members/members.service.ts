@@ -22,7 +22,7 @@ export class MembersService {
     return this.memberRepository.find(query).populate(populate);
   }
 
-  async getMemberById(memberId: string, populate?: PopulateOptions) {
+  async getMemberById(memberId: string, populate?: PopulateOptions | PopulateOptions[]) {
     let query = this.memberRepository.findById(
       new mongoose.Types.ObjectId(memberId),
     );

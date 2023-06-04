@@ -4,7 +4,6 @@ import { get, identity, isEmpty, isNil, pickBy, truncate } from 'lodash';
 import { v4 as uuid } from 'uuid';
 import mongoose, { ClientSession, Model, PipelineStage, Types } from 'mongoose';
 import { ApiService } from 'src/api-service/api.service';
-import { UsersService } from 'src/users/users.service';
 import { CreateOrgDto } from './dto/create-org.dto';
 import { OrgsFilter } from './dto/orgs.filter.dto';
 import { Org, OrgDocument } from './schema/org.schema';
@@ -23,6 +22,9 @@ import { SendUsdcDto } from '../users/dto/send-usdc.dto';
 import { Role } from '../members/enum/roles.enum';
 import { OrgHistoryItemAction } from './enum/org-history-item-action.enum';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { AuthService } from '../auth/auth.service';
+import { AccountModel } from '../auth/models/account.model';
+import { JwtService } from '@nestjs/jwt';
 
 const MINT_STATUS_RETRIES = 5;
 
@@ -30,15 +32,17 @@ const MINT_STATUS_RETRIES = 5;
 export class OrgsService {
   constructor(
     @InjectModel(Org.name) public orgRepository: Model<OrgDocument>,
+    @InjectModel(Org.name) public membersRepository: Model<MemberDocument>,
     @InjectConnection() private readonly connection: mongoose.Connection,
     private memberService: MembersService,
-    private usersService: UsersService,
+    private authService: AuthService,
     private apiService: ApiService,
-    private s3Service: S3Service
+    private s3Service: S3Service,
+    private jwtService: JwtService,
   ) { }
 
   async createOrg(orgsDto: CreateOrgDto, logo: any, mock: boolean, req: Request) {
-    await this.usersService.getUserFromToken(req);
+    await this.authService.getAccountFromToken(req);
     const { org } = await this.createOrganization(orgsDto, logo, mock);
     if (!mock) this.createToken(org);
     return org;
@@ -124,7 +128,7 @@ export class OrgsService {
   }
 
   async getOrgsByQuery(query: OrgsFilter, req: Request) {
-    await this.usersService.getUserFromToken(req);
+    await this.authService.getAccountFromToken(req);
 
     return this.getOrgsWithFilter(query);
   }
@@ -275,7 +279,7 @@ export class OrgsService {
   }
 
   async getOrgMembers(orgId: string, req: Request) {
-    await this.usersService.getUserFromToken(req);
+    await this.authService.getAccountFromToken(req);
     const query = {
       org: new Types.ObjectId(orgId),
     };
@@ -367,6 +371,28 @@ export class OrgsService {
 
     const signature = await this.apiService.transferUSDC(fromPk, recipients);
     this.apiService.sendNotification(`Org ${org.username} sent ${sendUsdcDto.amount} USDC to ${sendUsdcDto.recipient}\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
+  }
+
+  async getMemberships(orgId: string) {
+    const filters = { orgUser: orgId };
+    return this.memberService.getMembers(filters, 'org');
+  }
+
+  async loginAsOrg(orgId: string, account: AccountModel) {
+    const org = await this.getByOrgId(orgId);
+    const member = await this.membersRepository.findOne({ org: org._id, user: account.user._id });
+
+    if (isNil(member)) {
+      throw new Error('Member not found');
+    }
+
+    const payload = {
+      userId: account.user._id,
+      orgId: org._id,
+    };
+    return {
+      token: this.jwtService.sign(payload),
+    };
   }
 
 }

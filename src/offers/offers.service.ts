@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, HttpException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { get, isNil } from 'lodash';
-import mongoose, { Model, Types } from 'mongoose';
+import mongoose, { Model, PopulateOptions, Types } from 'mongoose';
 import { Role } from '../members/enum/roles.enum';
 import { Member, MemberDocument } from '../members/schema/member.schema';
 import { OrgDocument } from '../orgs/schema/org.schema';
@@ -19,6 +19,8 @@ import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { ApiService } from '../api-service/api.service';
 import { UsersService } from '../users/users.service';
 import { OffersServiceBase } from './offers.service.base';
+import { AccountModel } from '../auth/models/account.model';
+import { OrgsService } from '../orgs/orgs.service';
 
 @Injectable()
 export class OffersService extends OffersServiceBase {
@@ -29,6 +31,7 @@ export class OffersService extends OffersServiceBase {
     private readonly paymentService: PaymentService,
     private readonly apiService: ApiService,
     private readonly userService: UsersService,
+    private readonly orgService: OrgsService,
   ) {
     super(offerRepository, saleOfferRepository);
   }
@@ -68,7 +71,7 @@ export class OffersService extends OffersServiceBase {
     return this.offerRepository.find(query);
   }
 
-  async updateOfferStatus(org: OrgDocument, offerId: string, body: OfferStatusBodyDto, userId: string) {
+  async updateOfferStatus(org: OrgDocument, offerId: string, body: OfferStatusBodyDto, account: AccountModel) {
     let payment: PaymentDocument;
     const offer = await this.getOrgOfferById(org._id.toString(), offerId);
 
@@ -76,12 +79,18 @@ export class OffersService extends OffersServiceBase {
       throw new ForbiddenException('Offer already accepted/declined');
     }
 
-    const user = await this.userService.getByUserId(userId, '+password');
+    const user = account.isUser
+      ? await this.userService.getByUserId(account.id.toString(), '+password')
+      : await this.orgService.getByOrgId(account.id.toString(), '+password');
   
     switch (body.status) {
     case OfferStatusDto.accepted:
       offer.status = OfferStatus.Approved;
-      offer.memberProspect.user = user._id.toString();
+      if (account.isUser) {
+        offer.memberProspect.user = user._id.toString();
+      } else {
+        offer.memberProspect.orgUser = user._id.toString();
+      }
       offer.memberProspect.org = org._id.toString();
 
       if (offer.memberProspect.role === Role.Investor) {
@@ -116,14 +125,22 @@ export class OffersService extends OffersServiceBase {
     return payment;
   }
 
-  async updateSaleOfferStatus(offerId: string, body: OfferStatusBodyDto, buyerId: string) {
-    const offer = await this.getSaleOfferById(offerId, ['org', 'seller']);
+  async updateSaleOfferStatus(offerId: string, body: OfferStatusBodyDto, account: AccountModel) {
+    const offer = await this.getSaleOfferById(
+      offerId, [
+        { path: 'org' },
+        { path: 'seller', model: 'User' },
+        { path: 'seller', model: 'Org' },
+      ],
+    );
     if (offer.status !== OfferStatus.Pending) {
       throw new ForbiddenException('Offer already accepted/declined');
     }
 
-    const buyer = await this.userService.getByUserId(buyerId, '+password');
-    const seller = offer.seller as UserDocument;
+    const buyer = account.isUser
+      ? await this.userService.getByUserId(account.id.toString(), '+password')
+      : await this.orgService.getByOrgId(account.id.toString(), '+password');
+    const seller = offer.seller as UserDocument | OrgDocument;
     const org = offer.org as OrgDocument;
     let payment: PaymentDocument;
 
@@ -132,7 +149,7 @@ export class OffersService extends OffersServiceBase {
       const member = await this.memberRepository.findOne({
         user: seller._id,
         org: org._id,
-      }).populate({ path: 'user', select: '+password' });
+      });
       const balance = await this.apiService.getUSDCBalance(buyer.wallet);
       const lamportsAmount = offer.tokensAmount * LAMPORTS_PER_SOL;
 
@@ -168,9 +185,12 @@ export class OffersService extends OffersServiceBase {
 
   async createSaleOffer(saleOfferDto: SaleOfferDto) {
     const orgObjectId = new mongoose.Types.ObjectId(saleOfferDto.orgId);
-    const userObjectId = new mongoose.Types.ObjectId(saleOfferDto.userId);
+    const userObjectId = new mongoose.Types.ObjectId(saleOfferDto.sellerId);
     const member = await this.memberRepository.findOne({
-      user: userObjectId,
+      $or: [
+        { user: userObjectId },
+        { orgUser: userObjectId },
+      ],
       org: orgObjectId,
     });
     if (isNil(member)) {
@@ -187,7 +207,7 @@ export class OffersService extends OffersServiceBase {
     return saleOffer;
   }
 
-  async getSaleOfferById(offerId: string, populate?: any) {
+  async getSaleOfferById(offerId: string, populate?: PopulateOptions | PopulateOptions[]) {
     const offer = await this.saleOfferRepository.findById(offerId).populate(populate);
     if (isNil(offer)) {
       throw new NotFoundException('Sale offer not found');

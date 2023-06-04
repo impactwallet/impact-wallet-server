@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { JwtModule } from '@nestjs/jwt';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ApiServiceModule } from 'src/api-service/api.module';
 import { S3Module } from 'src/s3/s3.module';
@@ -14,6 +13,8 @@ import { Contribution, ContributionSchema } from '../contributions/schema/contri
 import { SaleOffer, SaleOfferSchema } from '../offers/schema/sale-offer.schema';
 import { UsersServiceLite } from './users.service.lite';
 import { UsersControllerLite } from './users.controller.lite';
+import { AuthModule } from '../auth/auth.module';
+import { JwtModule } from '@nestjs/jwt';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { UsersControllerLite } from './users.controller.lite';
     ApiServiceModule,
     MembersModule,
     S3Module,
+    AuthModule,
   ],
   providers: [UsersService, UsersServiceLite],
   controllers: [UsersController, UsersControllerLite],
