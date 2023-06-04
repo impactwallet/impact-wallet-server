@@ -170,8 +170,17 @@ export class OrgsService {
               },
             },
             {
+              $lookup: {
+                from: 'orgs',
+                localField: 'orgUser',
+                foreignField: '_id',
+                as: 'orgUser',
+              },
+            },
+            {
               $addFields: {
                 user: { $arrayElemAt: ['$user', 0] },
+                orgUser: { $arrayElemAt: ['$orgUser', 0] },
                 action: OrgHistoryItemAction.Joined,
               },
             },
@@ -228,6 +237,8 @@ export class OrgsService {
         $project: {
           'user.nickname': 1,
           'user.avatar': 1,
+          'orgUser.username': 1,
+          'orgUser.logo': 1,
           createdAt: 1,
           stoppedAt: 1,
           action: 1,
@@ -283,7 +294,7 @@ export class OrgsService {
     const query = {
       org: new Types.ObjectId(orgId),
     };
-    return this.memberService.getMembers(query, 'user');
+    return this.memberService.getMembers(query, 'user orgUser');
   }
 
   updateMintedAmount(orgId: string | mongoose.Types.ObjectId, amount: number, session?: ClientSession) {
