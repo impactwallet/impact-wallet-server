@@ -158,11 +158,6 @@ export class UsersService extends UsersServiceBase {
     return this.apiService.getUSDCBalance(account.wallet);
   }
 
-  async getUserUsdcHistory(account: AccountModel): Promise<TxnHistoryItemDto[]> {
-    const { associatedAddress, parsedTxns } = await this.apiService.getUSDCHistory(account.wallet);
-    return this._buildUsdcHistory(account, associatedAddress, parsedTxns);
-  }
-
   async getUserAssetHistory(account: AccountModel, orgId: string) {
     const org = await this.orgRepository.findById(orgId);
     if (isNil(org)) {
@@ -386,42 +381,6 @@ export class UsersService extends UsersServiceBase {
         item.processedAt = txn.blockTime * 1000;
       });
       history.push(...historyItems);
-    }
-    return history;
-  }
-
-  async _buildUsdcHistory(
-    account: AccountModel,
-    associatedAddress: PublicKey,
-    parsedTxns: ParsedTransactionWithMeta[],
-  ): Promise<TxnHistoryItemDto[]> {
-    const history: TxnHistoryItemDto[] = [];
-    for (const txn of parsedTxns) {
-      if (!isNil(txn.meta.err)) {
-        continue;
-      }
-      const { amount, description } = this._getTxnAmount(txn, associatedAddress);
-      const historyItem: TxnHistoryItemDto = {
-        amount,
-        description,
-      };
-      const inAppEntity = await this._getEntityFromTxn(account, txn);
-      historyItem.addressOrUsername = get(inAppEntity, 'username');
-      historyItem.img = get(inAppEntity, 'img');
-      if (isNil(inAppEntity)) {
-        continue;
-      }
-      if (!isNil(inAppEntity.sale)) {
-        const org = inAppEntity.sale.org as OrgDocument;
-        const action = amount < 0 ? 'Paid for' : 'Received for selling';
-        historyItem.description = `${action} ${inAppEntity.sale.tokensAmount} Impact Shares of @${org.username}`;
-      } else if (!isNil(inAppEntity.org)) {
-        historyItem.description = 'Profit Share';
-      } else if (!isNil(inAppEntity.from)) {
-        historyItem.description = 'Received';
-      }
-      historyItem.processedAt = txn.blockTime * 1000;
-      history.push(historyItem);
     }
     return history;
   }

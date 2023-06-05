@@ -440,7 +440,7 @@ export class ApiService {
     parsedTxns: ParsedTransactionWithMeta[],
   }> {
     if (!this.isMainnet) {
-      return { associatedAddress: new PublicKey(''), parsedTxns: [] };
+      return { associatedAddress: PublicKey.unique(), parsedTxns: [] };
     }
     return this.getTokenHistory(wallet, this.usdcMint);
   }
