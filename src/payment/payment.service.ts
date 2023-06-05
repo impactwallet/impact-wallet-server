@@ -156,13 +156,17 @@ export class PaymentService {
       return;
     }
 
-    if (payment.type === PaymentType.Regular) {
-      const signature = await this._handleRegularPayment(org, body);
-      console.log('signature:', signature);
-    } else if (payment.type === PaymentType.Investment) {
-      await this.handleInvestmentPayment(org, payment, body);
-    } else if (payment.type === PaymentType.AssetsSell) {
-      await this.handleAssetsSale(payment);
+    try {
+      if (payment.type === PaymentType.Regular) {
+        await this._handleRegularPayment(org, body);
+      } else if (payment.type === PaymentType.Investment) {
+        await this.handleInvestmentPayment(org, payment, body);
+      } else if (payment.type === PaymentType.AssetsSell) {
+        await this.handleAssetsSale(payment);
+      }
+    } catch (err) {
+      console.log(err);
+      throw err;
     }
   }
 
@@ -212,18 +216,37 @@ export class PaymentService {
     const paymentAmount = body.payment_amount;
     const treasury = paymentAmount * (org.settings.treasury / 100);
     const amountToSplit = paymentAmount - treasury;
-    const holders = await this.apiService.getTokenHolders(org.mint);
-    const membersWithAmount = holders.map((holder: any) => {
-      return {
-        wallet: holder.owner,
-        amount: amountToSplit * (holder.amount / org.lamportsMinted),
-      };
+    const holders = await this.memberModel.find({
+      org: org._id,
+      lamportsEarned: { $gt: 0 },
+    }).populate([
+      { path: 'user' },
+      { path: 'orgUser', select: '+password' },
+    ]);
+    const membersWithAmount = [];
+    const orgMembers = [];
+    
+    holders.forEach((holder) => {
+      const amount = amountToSplit * (holder.lamportsEarned / org.lamportsMinted);
+      const wallet = defaultTo((holder.user as UserDocument)?.wallet, (holder.orgUser as OrgDocument)?.wallet);
+      membersWithAmount.push({ wallet, amount });
+      if (isNil(holder.user) && !isNil(holder.orgUser)) {
+        const orgUser = holder.orgUser as OrgDocument;
+        orgMembers.push({ orgUser, amount });
+      }
     });
 
     const orgPk = await this.apiService.getPK(org.wallet, org.password);
     const signature = await this.apiService.transferUSDC(orgPk, membersWithAmount);
     this.apiService.sendNotification(`USDC transfered to ${org.name} and split between members:\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
-    return signature;
+
+    const orgMembersPromises = orgMembers.map(
+      ({ orgUser, amount }) =>
+        this._handleRegularPayment(orgUser, { payment_amount: amount })
+          .catch((err) => console.log(`Error handling regular payment for ${orgUser.name}: ${err}`)),
+    );
+
+    await Promise.all(orgMembersPromises);
   }
 
   async handleAssetsSale(payment: PaymentDocument) {
