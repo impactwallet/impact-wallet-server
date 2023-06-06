@@ -1,3 +1,4 @@
+import { mapSeries, delay } from 'bluebird';
 import { CheckoutItemEntity, verifyWebhookSignature } from '@candypay/checkout-sdk';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
@@ -158,7 +159,8 @@ export class PaymentService {
 
     try {
       if (payment.type === PaymentType.Regular) {
-        await this._handleRegularPayment(org, body);
+        this._handleRegularPayment(org, body)
+          .catch(err => console.log(`Error handling regular payment for ${org.name}: ${err}`));
       } else if (payment.type === PaymentType.Investment) {
         await this.handleInvestmentPayment(org, payment, body);
       } else if (payment.type === PaymentType.AssetsSell) {
@@ -210,15 +212,15 @@ export class PaymentService {
   }
 
   async _handleRegularPayment(org: OrgDocument, body: any) {
-    if (!org.lamportsMinted) {
+    if (org.mintStatus !== 'success') {
       return;
     }
-    const paymentAmount = body.payment_amount;
+    const paymentAmount = body.payment_amount * LAMPORTS_PER_SOL;
     const treasury = paymentAmount * (org.settings.treasury / 100);
     const amountToSplit = paymentAmount - treasury;
     const holders = await this.memberModel.find({
       org: org._id,
-      lamportsEarned: { $gt: 0 },
+      equity: { $ne: null },
     }).populate([
       { path: 'user' },
       { path: 'orgUser', select: '+password' },
@@ -227,26 +229,35 @@ export class PaymentService {
     const orgMembers = [];
     
     holders.forEach((holder) => {
-      const amount = amountToSplit * (holder.lamportsEarned / org.lamportsMinted);
+      const equityAmount = holder.equity?.amount * LAMPORTS_PER_SOL;
+      const amount = amountToSplit * (equityAmount / org.lamportsMinted);
       const wallet = defaultTo((holder.user as UserDocument)?.wallet, (holder.orgUser as OrgDocument)?.wallet);
-      membersWithAmount.push({ wallet, amount });
+      membersWithAmount.push({ wallet, amount: amount / LAMPORTS_PER_SOL });
       if (isNil(holder.user) && !isNil(holder.orgUser)) {
         const orgUser = holder.orgUser as OrgDocument;
-        orgMembers.push({ orgUser, amount });
+        orgMembers.push({ orgUser, amount: amount / LAMPORTS_PER_SOL });
       }
     });
 
     const orgPk = await this.apiService.getPK(org.wallet, org.password);
     const signature = await this.apiService.transferUSDC(orgPk, membersWithAmount);
+    await this.apiService.confirmTxnWithRetry(
+      signature,
+      this.apiService.transferUSDC.bind(this.apiService, orgPk, membersWithAmount),
+    );
     this.apiService.sendNotification(`USDC transfered to ${org.name} and split between members:\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
 
-    const orgMembersPromises = orgMembers.map(
-      ({ orgUser, amount }) =>
-        this._handleRegularPayment(orgUser, { payment_amount: amount })
-          .catch((err) => console.log(`Error handling regular payment for ${orgUser.name}: ${err}`)),
+    await mapSeries(
+      orgMembers,
+      async ({ orgUser, amount }) => {
+        try {
+          await delay(2000);
+          await this._handleRegularPayment(orgUser, { payment_amount: amount });
+        } catch (err) {
+          console.log(`Error handling regular payment for ${orgUser.name}: ${err}`);
+        }
+      },
     );
-
-    await Promise.all(orgMembersPromises);
   }
 
   async handleAssetsSale(payment: PaymentDocument) {
