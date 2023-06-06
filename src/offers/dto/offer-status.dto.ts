@@ -10,4 +10,8 @@ export class OfferStatusBodyDto {
   @ApiProperty({ enum: Object.values(OfferStatusDto) })
   @IsNotEmpty()
     status: OfferStatusDto;
+
+    //TODO: add investment amount
+    
+
 }
