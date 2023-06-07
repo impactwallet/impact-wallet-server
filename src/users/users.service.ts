@@ -194,11 +194,14 @@ export class UsersService extends UsersServiceBase {
     await session.withTransaction(async () => {
       const orgObjectId = new mongoose.Types.ObjectId(orgId);
       let recipientAddress: string;
-      let recipient: UserDocument;
+      let recipient: UserDocument | OrgDocument;
       if (!isNil(sendAssetsDto.recipientId)) {
         recipient = await this.getByUserId(sendAssetsDto.recipientId, undefined, session);
         recipientAddress = recipient.wallet;
-      } else {
+      } else if (!isNil(sendAssetsDto.recipientOrgId)) {
+        recipient = await this.orgRepository.findById(sendAssetsDto.recipientOrgId, undefined, { session });
+        recipientAddress = recipient.wallet;
+      } {
         recipientAddress = sendAssetsDto.recipientAddress;
       }
       const senderPassword = await account.password;
@@ -223,16 +226,22 @@ export class UsersService extends UsersServiceBase {
       const signature = await this.apiService.transfer(fromPk, org.mint, [{ wallet: recipientAddress, amount: sendAssetsDto.amount }]);
 
       if (!isNil(recipient)) {
-        const recepientMember = await this.memberRepository.findOne({
-          user: recipient._id,
+        const memberQuery = {
           org: orgObjectId,
-        }).session(session);
+        };
+        if (!isNil(sendAssetsDto.recipientId)) {
+          memberQuery['user'] = recipient._id;
+        } else if (!isNil(sendAssetsDto.recipientOrgId)) {
+          memberQuery['orgUser'] = recipient._id;
+        }
+        const recepientMember = await this.memberRepository.findOne(memberQuery).session(session);
 
         if (isNil(recepientMember)) {
           const newMember = new this.memberRepository({
             role: Role.Member,
             occupation: 'Receiver',
-            user: recipient._id,
+            user: memberQuery['user'],
+            orgUser: memberQuery['orgUser'],
             org: orgObjectId,
             lamportsEarned: sendAssetsDto.amount * LAMPORTS_PER_SOL,
           });
@@ -250,7 +259,7 @@ export class UsersService extends UsersServiceBase {
         { $inc: { 'lamportsEarned': -sendAssetsDto.amount * LAMPORTS_PER_SOL } },
       ).session(session);
 
-      this.apiService.sendNotification(`User ${account.username} sent ${sendAssetsDto.amount} impact shares of ${org.name} to user ${get(recipient, 'nickname', recipientAddress)}\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
+      this.apiService.sendNotification(`User ${account.username} sent ${sendAssetsDto.amount}% of equity in ${org.name} to ${get(recipient, 'nickname', get(recipient, 'username', recipientAddress))}\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
     });
 
     await session.endSession();

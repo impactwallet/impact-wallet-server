@@ -5,6 +5,9 @@ export class SendAssetsDto {
   @ApiProperty({ description: 'ID recipient' })
     recipientId: string;
 
+  @ApiProperty({ description: 'Org ID recipient' })
+    recipientOrgId: string;
+
   @ApiProperty({ description: 'Recipient address' })
     recipientAddress: string;
 
