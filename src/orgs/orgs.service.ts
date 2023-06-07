@@ -45,7 +45,15 @@ export class OrgsService {
     await this.authService.getAccountFromToken(req);
     const { org } = await this.createOrganization(orgsDto, logo, mock);
     if (!mock) this.createToken(org);
-    return org;
+    return {
+      "_id": org._id,
+      "username": org.username,
+      "name": org.name,
+      "logo": org.logo,
+      "settings": org.settings,
+      "lamportsMinted": org.lamportsMinted,
+      "wallet": org.wallet,
+    };
   }
 
   async createToken(org: OrgDocument, initialMint?: { wallet: string, amount: number }) {

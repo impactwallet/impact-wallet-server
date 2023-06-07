@@ -5,7 +5,7 @@ import { Role } from '../../members/enum/roles.enum';
 import { Compensation, CompensationSchema, Equity, EquitySchema, InvestorSettingsSchema as MemberInvestorSettingsSchema, InvestorSettings as MemberInvestorSettings } from '../../members/schema/member.schema';
 import { Org } from '../../orgs/schema/org.schema';
 import { OfferStatus } from '../enum/statuses.enum';
-import { OfferType } from '../enum/type.enum';
+import { OfferType } from '../enum/offer-type.enum';
 
 export type OfferDocument = HydratedDocument<Offer>;
 export type MemberProspectDocument = HydratedDocument<MemberProspect>;
@@ -85,11 +85,11 @@ export class Offer {
   org: string | Org;
 
   @ApiProperty({ description: 'Member to create', type: [MemberProspect] })
-  @Prop({ type: MemberProspectSchema, required: true })
-  memberProspects: MemberProspectDocument[];
+  @Prop({ type: MemberProspectSchema, required: false })
+  memberProspects: MemberProspect[];
 
   @ApiProperty({ example: 'Investor', description: 'Offer type', enum: Object.values(OfferType) })
-  @Prop({ enum: Object.values(OfferStatus), default: OfferStatus.Pending })
+  @Prop({ enum: Object.values(OfferType), default: OfferType.Regular })
   type: OfferType;
 
   @ApiProperty({ type: InvestorSettings, description: 'Investor setting', required: false })

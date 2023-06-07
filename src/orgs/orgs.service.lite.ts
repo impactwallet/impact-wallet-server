@@ -32,6 +32,14 @@ export class OrgsServiceLite {
       .then(() => {
         this.memberService.updateContributed(member._id, 0, initialMint.amount).exec();
       });
-    return org;
+    return {
+      "_id": org._id,
+      "username": org.username,
+      "name": org.name,
+      "logo": org.logo,
+      "settings": org.settings,
+      "lamportsMinted": org.lamportsMinted,
+      "wallet": org.wallet,
+    };
   }
 }

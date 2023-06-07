@@ -11,7 +11,7 @@ export class OfferStatusBodyDto {
   @IsNotEmpty()
     status: OfferStatusDto;
 
-    //TODO: add investment amount
-    
+  @ApiProperty({ example: 100, description: 'Amount', type: Number, required: false })
+  amount: number;
 
 }

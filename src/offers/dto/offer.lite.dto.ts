@@ -1,6 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { MemberProspectLiteDto } from './member-prospect.lite.dto';
-import { OfferType } from '../enum/type.enum';
+import { OfferType } from '../enum/offer-type.enum';
 
 export class InvestorSettings {
   @ApiProperty({ example: 100, description: 'Amount', type: Number })
@@ -16,9 +15,6 @@ export class OfferLiteDto {
   @ApiProperty({ example: 'Investor', description: 'Offer type', enum: Object.values(OfferType) })
   type: OfferType;
   
-  @ApiProperty({ type: MemberProspectLiteDto, description: 'Member to create' })
-  memberProspect: MemberProspectLiteDto;
-
   @ApiProperty({ description: 'Future investor settings' })
   investorSettings: InvestorSettings;
 }

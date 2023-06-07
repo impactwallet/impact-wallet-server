@@ -28,7 +28,7 @@ export class OrgsLiteController {
       @UploadedFile() logo: any,
       @Headers('mock') mock: string,
       @Req() req: Request,
-  ): Promise<Org> {
+  ) {
     return this.orgsLiteService.createOrgLite(createOrgDto, logo, mock === 'true', req);
   }
 

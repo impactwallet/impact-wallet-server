@@ -50,7 +50,7 @@ export class OrgsController {
       @UploadedFile() logo: any,
       @Headers('mock') mock: string,
       @Req() req: Request,
-  ): Promise<Org> {
+  ) {
     return this.orgsService.createOrg(createOrgDto, logo, mock === 'true', req);
   }
 
