@@ -86,13 +86,20 @@ export class OffersLiteService extends OffersServiceBase {
       } else {
 
         memberProspect.role = Role.Investor;
+        memberProspect.impactRatio = 0;
+        memberProspect.isAutoContributing = false
+        memberProspect.agreement = '';
         memberProspect.investorSettings = new InvestorSettings();
         const equity = +(body.amount * offer.investorSettings.equity / offer.investorSettings.amount).toFixed(2);
-        memberProspect.investorSettings .investmentAmount = body.amount;
-        memberProspect.investorSettings .equityAllocation = equity;
+        memberProspect.investorSettings.investmentAmount = body.amount;
+        memberProspect.investorSettings.equityAllocation = equity;
         memberProspect.equity = new Equity();
         memberProspect.equity.amount = body.amount;
         memberProspect.equity.type = EquityType.Immediately;
+        //TODO ?????
+        offer.memberProspects = [memberProspect];
+        await offer.save();
+        
       }
 
 
@@ -100,7 +107,13 @@ export class OffersLiteService extends OffersServiceBase {
 
     switch (body.status) {
       case OfferStatusDto.accepted:
-        offer.status = OfferStatus.Approved;
+        let investmentAmount = 0;
+        offer.memberProspects.forEach((mp) => {
+          investmentAmount += mp.equity.amount
+        });
+        if (investmentAmount = offer.investorSettings.amount) {
+          offer.status = OfferStatus.Approved;
+        }
         if (account.isUser) {
           memberProspect.user = user._id.toString();
         } else {
