@@ -6,7 +6,7 @@ import { get, isNil, set } from 'lodash';
 import { SendAssetsDto } from './dto/send-assets.dto';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { Member, MemberDocument } from 'src/members/schema/member.schema';
-import { OrgDocument } from 'src/orgs/schema/org.schema';
+import { Org, OrgDocument } from 'src/orgs/schema/org.schema';
 import { Role } from '../members/enum/roles.enum';
 import { User, UserDocument } from './schema/user.schema';
 import { UsersServiceBase } from './users.service.base';
@@ -19,6 +19,7 @@ export class UsersServiceLite extends UsersServiceBase {
   constructor(
   @InjectModel(User.name) userRepository: Model<UserDocument>,
     @InjectModel(Member.name) private memberRepository: Model<MemberDocument>,
+    @InjectModel(Org.name) private orgRepository: Model<OrgDocument>,
     private apiService: ApiService,
   ) {
     super(userRepository);
@@ -27,9 +28,12 @@ export class UsersServiceLite extends UsersServiceBase {
   async sendAssets(sendAssetsDto: SendAssetsDto, account: AccountModel, orgId: string) {
     const orgObjectId = new mongoose.Types.ObjectId(orgId);
     let recipientAddress: string;
-    let recipient: UserDocument;
+    let recipient: UserDocument | OrgDocument;
     if (!isNil(sendAssetsDto.recipientId)) {
       recipient = await this.getByUserId(sendAssetsDto.recipientId);
+      recipientAddress = recipient.wallet;
+    } else if (!isNil(sendAssetsDto.recipientOrgId)) {
+      recipient = await this.orgRepository.findById(sendAssetsDto.recipientOrgId);
       recipientAddress = recipient.wallet;
     } else {
       recipientAddress = sendAssetsDto.recipientAddress;
@@ -56,16 +60,22 @@ export class UsersServiceLite extends UsersServiceBase {
     signature = await this.apiService.confirmTxnWithRetry(signature, transferFn);
 
     if (!isNil(recipient)) {
-      const recepientMember = await this.memberRepository.findOne({
-        user: recipient._id,
+      const memberQuery = {
         org: orgObjectId,
-      });
+      };
+      if (!isNil(sendAssetsDto.recipientId)) {
+        memberQuery['user'] = recipient._id;
+      } else if (!isNil(sendAssetsDto.recipientOrgId)) {
+        memberQuery['orgUser'] = recipient._id;
+      }
+      const recepientMember = await this.memberRepository.findOne(memberQuery);
 
       if (isNil(recepientMember)) {
         const newMember = new this.memberRepository({
           role: Role.Member,
           occupation: 'Receiver',
-          user: recipient._id,
+          user: memberQuery['user'],
+          orgUser: memberQuery['orgUser'],
           org: orgObjectId,
           lamportsEarned: sendAssetsDto.amount * LAMPORTS_PER_SOL,
           equity: {
@@ -89,7 +99,7 @@ export class UsersServiceLite extends UsersServiceBase {
       } },
     );
 
-    this.apiService.sendNotification(`User ${account.username} sent ${sendAssetsDto.amount} impact shares of ${org.name} to user ${get(recipient, 'nickname', recipientAddress)}\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
+    this.apiService.sendNotification(`User ${account.username} sent ${sendAssetsDto.amount}% of equity in ${org.name} to ${get(recipient, 'nickname', get(recipient, 'username', recipientAddress))}\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
   }
 
   async transfer(source: any, sourcePassword: string, recipientAddress: string, mint: string, amount: number) {
