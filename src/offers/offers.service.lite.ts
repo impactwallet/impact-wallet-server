@@ -96,8 +96,8 @@ export class OffersLiteService extends OffersServiceBase {
         memberProspect.equity = new Equity();
         memberProspect.equity.amount = body.amount;
         memberProspect.equity.type = EquityType.Immediately;
-        //TODO ?????
-        offer.memberProspects = [memberProspect];
+        offer.memberProspects = new Array<MemberProspect>();
+        offer.memberProspects.push(memberProspect);
         await offer.save();
         
       }

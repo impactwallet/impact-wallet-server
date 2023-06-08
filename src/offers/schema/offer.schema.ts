@@ -85,7 +85,7 @@ export class Offer {
   org: string | Org;
 
   @ApiProperty({ description: 'Member to create', type: [MemberProspect] })
-  @Prop({ type: MemberProspectSchema, required: false })
+  @Prop({ type: [MemberProspectSchema], required: false })
   memberProspects: MemberProspect[];
 
   @ApiProperty({ example: 'Investor', description: 'Offer type', enum: Object.values(OfferType) })
