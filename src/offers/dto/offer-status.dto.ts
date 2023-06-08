@@ -12,6 +12,6 @@ export class OfferStatusBodyDto {
     status: OfferStatusDto;
 
   @ApiProperty({ example: 100, description: 'Amount', type: Number, required: false })
-  amount: number;
+    amount: number;
 
 }
