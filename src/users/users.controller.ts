@@ -99,17 +99,6 @@ export class UsersController {
     };
   }
 
-  @ApiOperation({ summary: 'Get users USDC transactions history' })
-  @ApiResponse({ status: 200, type: TxnHistoryItemDto })
-  @Get('usdc/history')
-  async getUserUsdcHistory(
-  @Req() req: Request
-  ) {
-    const account = await this.authService.getAccountFromToken(req);
-
-    return this.userService.getUserUsdcHistory(account);
-  }
-
   @ApiOperation({ summary: 'Send USDC' })
   @ApiResponse({ status: 200 })
   @Post('usdc/send')

@@ -262,8 +262,10 @@ export class OrgsService {
   private getOrgsWithFilter(queryParams: OrgsFilter) {
 
     const dbQuery = {};
-    if (queryParams.name) {
-      dbQuery['name'] = new RegExp(queryParams.name, 'i');
+    if (queryParams.username) {
+      dbQuery['username'] = queryParams.isExactMatch
+        ? queryParams.username
+        : new RegExp(queryParams.username, 'i');
     }
 
     return this.orgRepository.find(dbQuery);

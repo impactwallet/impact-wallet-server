@@ -135,4 +135,4 @@ export class Member {
 
 export const MemberSchema = SchemaFactory.createForClass(Member);
 
-MemberSchema.index({ user: 1, org: 1 }, { unique: true });
+MemberSchema.index({ user: 1, org: 1, orgUser: 1 }, { unique: true });

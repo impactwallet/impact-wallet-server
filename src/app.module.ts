@@ -11,6 +11,7 @@ import { ContributionsModule } from './contributions/contributions.module';
 import { ConfigModule } from '@nestjs/config';
 import { ConfigurationModule } from './configuration/config.module';
 import { Connection } from 'mongoose';
+import { AccountModule } from './account/account.module';
 
 export let connection: Connection;
 
@@ -32,6 +33,7 @@ export let connection: Connection;
     OffersModule,
     ContributionsModule,
     ConfigurationModule,
+    AccountModule,
   ],
 })
 
