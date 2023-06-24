@@ -47,9 +47,9 @@ export class OrgsController {
   @ApiMockHeader('If true wallet and token creations are skipped')
   createOrg(
     @Body() createOrgDto: CreateOrgDto,
-      @UploadedFile() logo: any,
-      @Headers('mock') mock: string,
-      @Req() req: Request,
+    @UploadedFile() logo: any,
+    @Headers('mock') mock: string,
+    @Req() req: Request,
   ) {
     return this.orgsService.createOrg(createOrgDto, logo, mock === 'true', req);
   }
@@ -83,8 +83,8 @@ export class OrgsController {
   @HttpCode(HttpStatus.CREATED)
   async addMemberToOrg(
     @Param('orgId') orgId: string,
-      @Body() member: MemberDto,
-      @Req() req: Request
+    @Body() member: MemberDto,
+    @Req() req: Request
   ): Promise<Member> {
     await this.authService.getAccountFromToken(req);
     return this.orgsService.addMemberToOrg(orgId, member);
@@ -101,7 +101,7 @@ export class OrgsController {
   @ApiResponse({ status: 200, type: MemberEquityDto })
   @Get(':orgId/members/:memberId/equity')
   async getMemberEquity(
-  @Param('orgId') orgId: string,
+    @Param('orgId') orgId: string,
     @Param('memberId') memberId: string,
     @Req() req: Request,
   ) {
@@ -113,7 +113,7 @@ export class OrgsController {
   @ApiResponse({ status: 200 })
   @Get('/logo/:fileName')
   async getOrgLogo(
-  @Param('fileName') fileName: string,
+    @Param('fileName') fileName: string,
     @Res() res: Response,
   ) {
     const data = await this.orgsService.getLogo(fileName);
@@ -128,7 +128,7 @@ export class OrgsController {
   @Post(':orgId/payments/receive')
   @HttpCode(HttpStatus.CREATED)
   async receivePayment(
-  @Param('orgId') orgId: string,
+    @Param('orgId') orgId: string,
     @Body(new ValidationPipe()) body: ReceivePaymentDto,
   ) {
     // TODO: implement api key logic
@@ -144,7 +144,7 @@ export class OrgsController {
   @ApiResponse({ status: 200, type: Number })
   @Get(':orgId/usdc/balance')
   async getOrgBalance(
-  @Param('orgId') orgId: string,
+    @Param('orgId') orgId: string,
     @Req() req: Request,
   ) {
     await this.authService.getAccountFromToken(req);
@@ -159,7 +159,7 @@ export class OrgsController {
   @Post(':orgId/usdc/send')
   @HttpCode(HttpStatus.OK)
   async sendUsdc(
-  @Body() sendUsdcDto: SendUsdcDto,
+    @Body() sendUsdcDto: SendUsdcDto,
     @Param('orgId') orgId: string,
     @Req() req: Request
   ) {

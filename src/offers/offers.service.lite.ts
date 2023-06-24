@@ -41,6 +41,7 @@ export class OffersLiteService extends OffersServiceBase {
   async createLiteOffer(orgId: string, offer: OfferLiteDto) {
     offer.org = orgId;
     const newOffer = new this.offerRepository(offer);
+    
     if (offer.type === OfferType.Investor) {
       newOffer.memberProspects = [];
     } else {
@@ -49,7 +50,7 @@ export class OffersLiteService extends OffersServiceBase {
     try {
       return await newOffer.save();
     } catch (error) {
-      throw new HttpException(error, 400);
+      throw new BadRequestException({ message: error.message });
     }
   }
 
