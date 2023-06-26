@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, HttpException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Member, MemberDocument } from '../members/schema/member.schema';
@@ -9,7 +9,7 @@ import { OrgDocument } from '../orgs/schema/org.schema';
 import { OfferStatusBodyDto, OfferStatusDto } from './dto/offer-status.dto';
 import { OfferStatus } from './enum/statuses.enum';
 import { OffersServiceBase } from './offers.service.base';
-import { defaultTo, first, flatten, isNil } from 'lodash';
+import { defaultTo, filter, first, flatten, identity, isNil } from 'lodash';
 import { EquityType } from '../members/enum/equity-type.enum';
 import { UserDocument } from '../users/schema/user.schema';
 import { ApiService } from '../api-service/api.service';
@@ -78,14 +78,13 @@ export class OffersLiteService extends OffersServiceBase {
       memberProspect.org = org._id.toString();
 
       offer.status = OfferStatus.Approved;
-      const newMember = new this.memberRepository(memberProspect);
+      const newMember = new this.memberRepository(memberProspect.toObject());
       if (!isNil(newMember.equity) && newMember.equity.type === EquityType.Immediately) {
         newMember.lamportsEarned = newMember.equity.amount * LAMPORTS_PER_SOL;
       }
       await newMember.save();
 
-      const skipMembers = flatten(offer.memberProspects.map((mp) => [mp.user.toString(), mp.orgUser.toString()]));
-      this.collectEquity(org, newMember, skipMembers, account);
+      this.collectEquity(org, newMember, [], account);
 
       break;
     case OfferStatusDto.declined:
@@ -138,14 +137,13 @@ export class OffersLiteService extends OffersServiceBase {
       memberProspect[memberField] = account.id.toString();
       memberProspect.org = org._id.toString();
 
-      const investedAmount = offer.memberProspects.reduce((acc, mp) => acc + mp.investorSettings.investmentAmount, 0) + body.amount;
-      if (investedAmount >= offer.investorSettings.amount) {
+      if (investedAmount + body.amount >= offer.investorSettings.amount) {
         offer.status = OfferStatus.Approved;
       }
       const balance = await this.apiService.getUSDCBalance(account.wallet);
       const paymentInfo = {
         info: `Investing $${memberProspect.investorSettings.investmentAmount} for ${memberProspect.investorSettings.equityAllocation}% of equity allocation`,
-        amount: memberProspect.investorSettings.investmentAmount,
+        amount: body.amount,
       };
       if (balance < paymentInfo.amount) {
         throw new BadRequestException({ message: 'Insufficient funds' });
@@ -158,7 +156,7 @@ export class OffersLiteService extends OffersServiceBase {
       await payment.save();
       const newMember = await this.paymentService.handleInvestmentPayment(org, payment, { signature: txnHash });
 
-      const skipMembers = flatten(offer.memberProspects.map((mp) => [mp.user.toString(), mp.orgUser.toString()]));
+      const skipMembers = filter(flatten(offer.memberProspects.map((mp) => [mp.user, mp.orgUser])), identity);
       this.collectEquity(org, newMember, skipMembers, account);
 
       break;

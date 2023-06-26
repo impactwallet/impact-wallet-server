@@ -86,7 +86,7 @@ export class Offer {
 
   @ApiProperty({ description: 'Member to create', type: [MemberProspect] })
   @Prop({ type: [MemberProspectSchema], required: false })
-    memberProspects: MemberProspect[];
+    memberProspects: MemberProspectDocument[];
 
   @ApiProperty({ example: 'Investor', description: 'Offer type', enum: Object.values(OfferType) })
   @Prop({ enum: Object.values(OfferType), default: OfferType.Regular })

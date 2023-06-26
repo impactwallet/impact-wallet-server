@@ -328,7 +328,7 @@ export class PaymentService {
         $inc: {
           lamportsEarned: -lamportsAmount,
           'equity.amount': -payment.sale.tokensAmount,
-        }
+        },
       },
     );
 
