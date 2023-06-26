@@ -203,7 +203,7 @@ export class PaymentService {
         { new: true, upsert: true },
       );
     }
-    
+
     const username = defaultTo((memberUser as UserDocument).nickname, (memberUser as OrgDocument).username);
     this.apiService.sendNotification(`${username} just invested ${payment.amount} into ${org.name}:\n\n${body.signature}\n\n${this.apiService.buildExplorerLink('/tx/' + body.signature)}`);
 
@@ -275,12 +275,17 @@ export class PaymentService {
       'sale.org',
       {
         path: 'sale',
-        populate: [
-          { path: 'buyer', model: 'User' },
-          { path: 'buyer', model: 'Org' },
-        ],
+        populate: { path: 'buyer', model: 'User' },
       },
     ]);
+    if (isNil(payment.sale.buyer)) {
+      await payment.populate([
+        {
+          path: 'sale',
+          populate: { path: 'buyer', model: 'Org' },
+        },
+      ]);
+    }
     const org = payment.sale.org as OrgDocument;
     const buyer = payment.sale.buyer as UserDocument | OrgDocument;
     const lamportsAmount = payment.sale.tokensAmount * LAMPORTS_PER_SOL;
@@ -323,10 +328,12 @@ export class PaymentService {
 
     await this.memberModel.findOneAndUpdate(
       { _id: member._id },
-      { $inc: {
-        lamportsEarned: -lamportsAmount,
-        'equity.amount': -payment.sale.tokensAmount,
-      } },
+      {
+        $inc: {
+          lamportsEarned: -lamportsAmount,
+          'equity.amount': -payment.sale.tokensAmount,
+        },
+      },
     );
 
     const buyerUsername = defaultTo((buyer as UserDocument).nickname, (buyer as OrgDocument).username);
@@ -336,7 +343,7 @@ export class PaymentService {
 
   async transfer(source: any, destination: any, mint: string, amount: number) {
     const fromPk = await this.apiService.getPK(source.wallet, source.password);
-    return this.apiService.transfer(fromPk, mint, [{wallet: destination.wallet, amount: amount }]);
+    return this.apiService.transfer(fromPk, mint, [{ wallet: destination.wallet, amount: amount }]);
   }
 
 }

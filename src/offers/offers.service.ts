@@ -82,27 +82,27 @@ export class OffersService extends OffersServiceBase {
     const user = account.isUser
       ? await this.userService.getByUserId(account.id.toString(), '+password')
       : await this.orgService.getByOrgId(account.id.toString(), '+password');
-  
+
     switch (body.status) {
     case OfferStatusDto.accepted:
       offer.status = OfferStatus.Approved;
       if (account.isUser) {
-        offer.memberProspect.user = user._id.toString();
+        offer.memberProspects[0].user = user._id.toString();
       } else {
-        offer.memberProspect.orgUser = user._id.toString();
+        offer.memberProspects[0].orgUser = user._id.toString();
       }
-      offer.memberProspect.org = org._id.toString();
+      offer.memberProspects[0].org = org._id.toString();
 
-      if (offer.memberProspect.role === Role.Investor) {
+      if (offer.memberProspects[0].role === Role.Investor) {
         const balance = await this.apiService.getUSDCBalance(user.wallet);
         const paymentInfo = {
-          info: `Investing $${offer.memberProspect.investorSettings.investmentAmount} for ${offer.memberProspect.investorSettings.equityAllocation}% of equity allocation`,
-          amount: offer.memberProspect.investorSettings.investmentAmount,
+          info: `Investing $${offer.memberProspects[0].investorSettings.investmentAmount} for ${offer.memberProspects[0].investorSettings.equityAllocation}% of equity allocation`,
+          amount: offer.memberProspects[0].investorSettings.investmentAmount,
         };
         if (balance < paymentInfo.amount) {
           throw new BadRequestException({ message: 'Insufficient funds' });
         }
-        payment = await this.paymentService.receiveInvestmentInApp(offer.memberProspect, org, paymentInfo);
+        payment = await this.paymentService.receiveInvestmentInApp(offer.memberProspects[0], org, paymentInfo);
         const pk = await this.apiService.getPK(user.wallet, user.password);
         const txnHash = await this.apiService.transferUSDC(pk, [{ wallet: org.wallet, amount: payment.amount }]);
 
@@ -110,7 +110,7 @@ export class OffersService extends OffersServiceBase {
         await payment.save();
         await this.paymentService.handleInvestmentPayment(org, payment, { signature: txnHash });
       } else {
-        const newMember = new this.memberRepository(offer.memberProspect.toObject());
+        const newMember = new this.memberRepository(offer.memberProspects[0]);
 
         await newMember.save();
       }
@@ -119,7 +119,7 @@ export class OffersService extends OffersServiceBase {
       offer.status = OfferStatus.Declined;
       break;
     }
-  
+
     await offer.save();
 
     return payment;
@@ -183,13 +183,12 @@ export class OffersService extends OffersServiceBase {
     return payment;
   }
 
-  async createSaleOffer(saleOfferDto: SaleOfferDto) {
+  async createSaleOffer(saleOfferDto: SaleOfferDto, account: AccountModel) {
     const orgObjectId = new mongoose.Types.ObjectId(saleOfferDto.orgId);
-    const userObjectId = new mongoose.Types.ObjectId(saleOfferDto.sellerId);
     const member = await this.memberRepository.findOne({
       $or: [
-        { user: userObjectId },
-        { orgUser: userObjectId },
+        { user: account.id },
+        { orgUser: account.id },
       ],
       org: orgObjectId,
     });
@@ -200,18 +199,10 @@ export class OffersService extends OffersServiceBase {
       throw new BadRequestException('Not enough tokens to sell');
     }
     const saleOffer = new this.saleOfferRepository(saleOfferDto);
-    saleOffer.seller = userObjectId;
+    saleOffer.seller = account.id;
     saleOffer.org = orgObjectId;
     await saleOffer.save();
     await saleOffer.populate('org');
     return saleOffer;
-  }
-
-  async getSaleOfferById(offerId: string, populate?: PopulateOptions | PopulateOptions[]) {
-    const offer = await this.saleOfferRepository.findById(offerId).populate(populate);
-    if (isNil(offer)) {
-      throw new NotFoundException('Sale offer not found');
-    }
-    return offer;
   }
 }

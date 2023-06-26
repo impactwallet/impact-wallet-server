@@ -10,4 +10,8 @@ export class OfferStatusBodyDto {
   @ApiProperty({ enum: Object.values(OfferStatusDto) })
   @IsNotEmpty()
     status: OfferStatusDto;
+
+  @ApiProperty({ example: 100, description: 'Amount', type: Number, required: false })
+    amount: number;
+
 }
