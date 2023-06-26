@@ -276,12 +276,17 @@ export class PaymentService {
       'sale.org',
       {
         path: 'sale',
-        populate: [
-          { path: 'buyer', model: 'User' },
-          { path: 'buyer', model: 'Org' },
-        ],
+        populate: { path: 'buyer', model: 'User' },
       },
     ]);
+    if (isNil(payment.sale.buyer)) {
+      await payment.populate([
+        {
+          path: 'sale',
+          populate: { path: 'buyer', model: 'Org' },
+        },
+      ]);
+    }
     const org = payment.sale.org as OrgDocument;
     const buyer = payment.sale.buyer as UserDocument | OrgDocument;
     const lamportsAmount = payment.sale.tokensAmount * LAMPORTS_PER_SOL;

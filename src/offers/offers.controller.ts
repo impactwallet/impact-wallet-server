@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, NotFoundException, Param, Patch, Post, Query, Req, UnauthorizedException, ValidationPipe } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, NotFoundException, Param, Patch, Post, Query, Req, ValidationPipe } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 import { OfferStatusBodyDto } from './dto/offer-status.dto';
@@ -11,7 +11,6 @@ import { Offer } from './schema/offer.schema';
 import { OrgsService } from '../orgs/orgs.service';
 import { isNil } from 'lodash';
 import { OfferFiltersDto } from './dto/offer-filters.dto';
-import { areObjectIdsEqual } from '../utils/mongo';
 
 @ApiTags('Offers')
 @Controller()
@@ -31,11 +30,8 @@ export class OffersController {
     @Req() req: Request,
   ) {
     const account = await this.authService.getAccountFromToken(req);
-    if (!areObjectIdsEqual(account.id, saleOfferDto.sellerId)) {
-      throw new UnauthorizedException('You are not allowed to sell assets of other user');
-    }
 
-    return this.offerService.createSaleOffer(saleOfferDto);
+    return this.offerService.createSaleOffer(saleOfferDto, account);
   }
   
   @ApiOperation({ summary: 'Get sale offer by ID' })
@@ -48,11 +44,7 @@ export class OffersController {
     await this.authService.getAccountFromToken(req);
     return this.offerService.getSaleOfferById(
       offerId,
-      [
-        { path: 'org' },
-        { path: 'seller', model: 'User' },
-        { path: 'seller', model: 'Org' },
-      ],
+      ['org', 'seller'],
     );
   }
 
