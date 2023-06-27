@@ -219,16 +219,22 @@ export class OffersLiteService extends OffersServiceBase {
     const buyer = account.isUser
       ? await this.userService.getByUserId(account.id.toString(), '+password')
       : await this.orgService.getByOrgId(account.id.toString(), '+password');
-    const seller = offer.seller as UserDocument;
+    const seller = offer.seller as UserDocument | OrgDocument;
     const org = offer.org as OrgDocument;
     let payment: PaymentDocument;
 
     switch (body.status) {
     case OfferStatusDto.accepted:
       const member = await this.memberRepository.findOne({
-        user: seller._id,
         org: org._id,
-      }).populate({ path: 'user', select: '+password' });
+        $or: [
+          { user: seller._id },
+          { orgUser: seller._id },
+        ],
+      }).populate([
+        { path: 'user', select: '+password' },
+        { path: 'orgUser', select: '+password' },
+      ]);
       const balance = await this.apiService.getUSDCBalance(buyer.wallet);
       const lamportsAmount = offer.tokensAmount * LAMPORTS_PER_SOL;
 
