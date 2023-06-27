@@ -368,11 +368,11 @@ export class UsersService extends UsersServiceBase {
         });
       } else if (!isNil(inAppEntity.sale)) {
         const { amount } = this._getTxnAmount(txn, associatedAddress);
-        const user = (amount < 0 ? inAppEntity.sale.buyer : inAppEntity.sale.seller) as UserDocument;
+        const user = (amount < 0 ? inAppEntity.sale.buyer : inAppEntity.sale.seller) as UserDocument | OrgDocument;
         const historyItem: TxnHistoryItemDto = {
           amount,
-          addressOrUsername: user.nickname,
-          img: user.avatar,
+          addressOrUsername: get(user, 'nickname', get(user, 'username', '')),
+          img: get(user, 'avatar', get(user, 'logo', '')),
           description: `${amount < 0 ? 'Sold' : 'Bought'} for $${inAppEntity.sale.price}`,
         };
         historyItems.push(historyItem);

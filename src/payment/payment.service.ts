@@ -8,13 +8,13 @@ import { ApiService } from '../api-service/api.service';
 import { CandyPayService } from '../api-service/candypay.service';
 import { Member, MemberDocument } from '../members/schema/member.schema';
 import { MemberProspect } from '../offers/schema/offer.schema';
-import { OrgDocument } from '../orgs/schema/org.schema';
+import { Org, OrgDocument } from '../orgs/schema/org.schema';
 import { UserDocument } from '../users/schema/user.schema';
 import { ReceiveInvestmentDto } from './dto/receive-investment.dto';
 import { ReceivePaymentDto } from './dto/receive-payment.dto';
 import { PaymentType } from './enum/payment-type.enum';
 import { Payment, PaymentDocument } from './schema/payment.schema';
-import { SaleOffer, SaleOfferDocument } from '../offers/schema/sale-offer.schema';
+import { SaleOffer, SaleOfferDocument, SaleOfferModel } from '../offers/schema/sale-offer.schema';
 import { SellAssetsDto } from './dto/sale-assets.dto';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { Role } from '../members/enum/roles.enum';
@@ -26,7 +26,8 @@ export class PaymentService {
   constructor(
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
     @InjectModel(Member.name) private memberModel: Model<MemberDocument>,
-    @InjectModel(SaleOffer.name) private saleOfferModel: Model<SaleOfferDocument>,
+    @InjectModel(SaleOffer.name) private saleOfferModel: SaleOfferModel,
+    @InjectModel(Org.name) private orgModel: Model<OrgDocument>,
     @InjectConnection() private readonly connection: mongoose.Connection,
     private candypayService: CandyPayService,
     private apiService: ApiService,
@@ -271,23 +272,11 @@ export class PaymentService {
       { path: 'orgUser', select: '+password' },
     ]);
     const memberUser = defaultTo(member.user as UserDocument, member.orgUser as OrgDocument);
-    await payment.populate([
-      'sale.org',
-      {
-        path: 'sale',
-        populate: { path: 'buyer', model: 'User' },
-      },
-    ]);
-    if (isNil(payment.sale.buyer)) {
-      await payment.populate([
-        {
-          path: 'sale',
-          populate: { path: 'buyer', model: 'Org' },
-        },
-      ]);
-    }
+    await payment.populate('sale.org');
+    await this.saleOfferModel.populateBuyer(payment);
     const org = payment.sale.org as OrgDocument;
     const buyer = payment.sale.buyer as UserDocument | OrgDocument;
+    const buyerMemberField = buyer instanceof this.orgModel ? 'orgUser' : 'user';
     const lamportsAmount = payment.sale.tokensAmount * LAMPORTS_PER_SOL;
 
     const transferFn = this.transfer.bind(this, memberUser, buyer, org.mint, payment.sale.tokensAmount);
@@ -300,15 +289,15 @@ export class PaymentService {
     );
 
     const buyerMember = await this.memberModel.findOne({
-      user: buyer._id,
       org: org._id,
+      [buyerMemberField]: buyer._id,
     });
 
     if (isNil(buyerMember)) {
       const newMember = new this.memberModel({
         role: Role.Member,
         occupation: 'Buyer',
-        user: buyer._id,
+        [buyerMemberField]: buyer._id,
         org: org._id,
         lamportsEarned: lamportsAmount,
         equity: {

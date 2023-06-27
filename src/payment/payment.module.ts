@@ -6,6 +6,7 @@ import { PaymentController } from './payment.controller';
 import { PaymentService } from './payment.service';
 import { Payment, PaymentSchema } from './schema/payment.schema';
 import { SaleOffer, SaleOfferSchema } from '../offers/schema/sale-offer.schema';
+import { Org, OrgSchema } from '../orgs/schema/org.schema';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { SaleOffer, SaleOfferSchema } from '../offers/schema/sale-offer.schema';
       { name: Payment.name, schema: PaymentSchema },
       { name: Member.name, schema: MemberSchema },
       { name: SaleOffer.name, schema: SaleOfferSchema },
+      { name: Org.name, schema: OrgSchema },
     ]),
     ApiServiceModule,
   ],
