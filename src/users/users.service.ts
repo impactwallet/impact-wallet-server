@@ -22,7 +22,7 @@ import { SendUsdcDto } from './dto/send-usdc.dto';
 import { TxnHistoryItemDto } from '../common/dto/txn-history-item.dto';
 import { Payment, PaymentDocument } from '../payment/schema/payment.schema';
 import { PaymentType } from '../payment/enum/payment-type.enum';
-import { SaleOffer, SaleOfferDocument } from '../offers/schema/sale-offer.schema';
+import { SaleOffer, SaleOfferDocument, SaleOfferModel } from '../offers/schema/sale-offer.schema';
 import { EntityFromTxnDto } from '../common/dto/entity-from-txn.dto';
 import { Account } from '@solana/spl-token';
 import { Contribution, ContributionDocument } from '../contributions/schema/contribution.schema';
@@ -41,7 +41,7 @@ export class UsersService extends UsersServiceBase {
     @InjectModel(Org.name) private orgRepository: Model<OrgDocument>,
     @InjectModel(Payment.name) private paymentRepository: Model<PaymentDocument>,
     @InjectModel(Contribution.name) private contributionRepository: Model<ContributionDocument>,
-    @InjectModel(SaleOffer.name) private saleOfferRepository: Model<SaleOfferDocument>,
+    @InjectModel(SaleOffer.name) private saleOfferRepository: SaleOfferModel,
     @InjectConnection() private readonly connection: mongoose.Connection,
     private apiService: ApiService,
     private membersService: MembersService,
@@ -401,20 +401,25 @@ export class UsersService extends UsersServiceBase {
         { 'cpResult.signature': { $in: txn.transaction.signatures } },
         { txnHash: { $in: txn.transaction.signatures } },
       ],
-    }).populate(['sale.buyer', 'sale.org', 'sale.seller']);
+    }).populate(['sale.org']);
     let sale: SaleOfferDocument;
     if (!isNil(payment) && payment.type === PaymentType.AssetsSell) {
+      await this.saleOfferRepository.populateSeller(payment);
+      await this.saleOfferRepository.populateBuyer(payment);
       sale = payment.sale;
     } else {
       sale = await this.saleOfferRepository
-        .findOne({ txnHash: { $in: txn.transaction.signatures } })
-        .populate(['buyer', 'seller']);
+        .findOne({ txnHash: { $in: txn.transaction.signatures } });
+      if (!isNil(sale)) {
+        await sale.populateSeller();
+        await sale.populateBuyer();
+      }
     }
     if (!isNil(sale)) {
-      const buyer = sale.buyer as UserDocument;
+      const buyer = sale.buyer as UserDocument | OrgDocument;
       return {
-        username: buyer.nickname,
-        img: buyer.avatar,
+        username: get(buyer, 'nickname', get(buyer, 'username')),
+        img: get(buyer, 'avatar', get(buyer, 'logo')),
         sale,
       };
     }

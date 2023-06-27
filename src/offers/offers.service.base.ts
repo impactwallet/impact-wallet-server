@@ -24,16 +24,6 @@ export class OffersServiceBase {
 
   async getSaleOfferById(offerId: string, populate?: any) {
     const offer = await this.saleOfferRepository.findById(offerId).populate(populate);
-    if (!isNil(populate) && (
-      populate === 'seller' ||
-      populate.includes('seller') ||
-      !isNil(find(populate, ['path', 'seller']))
-    )) {
-      await offer.populate({ path: 'seller', model: 'User' });
-      if (isNil(offer.seller)) {
-        await offer.populate({ path: 'seller', model: 'Org' });
-      }
-    }
     if (isNil(offer)) {
       throw new NotFoundException('Sale offer not found');
     }

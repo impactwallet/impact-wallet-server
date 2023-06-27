@@ -210,7 +210,8 @@ export class OffersLiteService extends OffersServiceBase {
   }
 
   async updateSaleOfferStatus(offerId: string, body: OfferStatusBodyDto, account: AccountModel) {
-    const offer = await this.getSaleOfferById(offerId, ['org', 'seller']);
+    const offer = await this.getSaleOfferById(offerId, ['org']);
+    await offer.populateSeller();
     if (offer.status !== OfferStatus.Pending) {
       throw new ForbiddenException('Offer already accepted/declined');
     }

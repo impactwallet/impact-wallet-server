@@ -42,10 +42,9 @@ export class OffersController {
     @Req() req: Request,
   ) {
     await this.authService.getAccountFromToken(req);
-    return this.offerService.getSaleOfferById(
-      offerId,
-      ['org', 'seller'],
-    );
+    const offer = await this.offerService.getSaleOfferById(offerId, ['org']);
+    await offer.populateSeller();
+    return offer;
   }
 
   @ApiOperation({ summary: 'Accept/decline sale offer' })

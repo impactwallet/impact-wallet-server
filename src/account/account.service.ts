@@ -8,7 +8,7 @@ import { Org, OrgDocument } from '../orgs/schema/org.schema';
 import { EntityFromTxnDto } from '../common/dto/entity-from-txn.dto';
 import { Model } from 'mongoose';
 import { Payment, PaymentDocument } from '../payment/schema/payment.schema';
-import { SaleOffer, SaleOfferDocument } from '../offers/schema/sale-offer.schema';
+import { SaleOffer, SaleOfferDocument, SaleOfferModel } from '../offers/schema/sale-offer.schema';
 import { PaymentType } from '../payment/enum/payment-type.enum';
 import { User, UserDocument } from '../users/schema/user.schema';
 import { Account } from '@solana/spl-token';
@@ -21,7 +21,7 @@ export class AccountService {
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @InjectModel(Org.name) private readonly orgModel: Model<OrgDocument>,
     @InjectModel(Payment.name) private readonly paymentModel: Model<PaymentDocument>,
-    @InjectModel(SaleOffer.name) private readonly saleOfferModel: Model<SaleOfferDocument>,
+    @InjectModel(SaleOffer.name) private readonly saleOfferModel: SaleOfferModel,
   ) {}
 
   async getUsdcHistory(account: AccountModel): Promise<TxnHistoryItemDto[]> {
@@ -96,20 +96,25 @@ export class AccountService {
         { 'cpResult.signature': { $in: txn.transaction.signatures } },
         { txnHash: { $in: txn.transaction.signatures } },
       ],
-    }).populate(['sale.buyer', 'sale.org', 'sale.seller']);
+    }).populate(['sale.org']);
     let sale: SaleOfferDocument;
     if (!isNil(payment) && payment.type === PaymentType.AssetsSell) {
+      await this.saleOfferModel.populateSeller(payment);
+      await this.saleOfferModel.populateBuyer(payment);
       sale = payment.sale;
     } else {
       sale = await this.saleOfferModel
-        .findOne({ txnHash: { $in: txn.transaction.signatures } })
-        .populate(['buyer', 'seller']);
+        .findOne({ txnHash: { $in: txn.transaction.signatures } });
+      if (!isNil(sale)) {
+        await sale.populateBuyer();
+        await sale.populateSeller();
+      }
     }
     if (!isNil(sale)) {
-      const buyer = sale.buyer as UserDocument;
+      const buyer = sale.buyer as UserDocument | OrgDocument;
       return {
-        username: buyer.nickname,
-        img: buyer.avatar,
+        username: get(buyer, 'username', get(buyer, 'nickname', '')),
+        img: get(buyer, 'logo', get(buyer, 'avatar', '')),
         sale,
       };
     }
