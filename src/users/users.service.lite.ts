@@ -50,7 +50,7 @@ export class UsersServiceLite extends UsersServiceBase {
     if (isNil(senderMember)) {
       throw new NotFoundException('Sender member not found');
     }
-    if (senderMember.lamportsEarned < sendAssetsDto.amount * LAMPORTS_PER_SOL) {
+    if (isNil(senderMember.equity) || senderMember.equity.amount < sendAssetsDto.amount) {
       throw new BadRequestException('Not enough tokens to send');
     }
 

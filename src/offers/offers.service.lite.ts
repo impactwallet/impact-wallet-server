@@ -9,7 +9,7 @@ import { OrgDocument } from '../orgs/schema/org.schema';
 import { OfferStatusBodyDto, OfferStatusDto } from './dto/offer-status.dto';
 import { OfferStatus } from './enum/statuses.enum';
 import { OffersServiceBase } from './offers.service.base';
-import { defaultTo, filter, first, flatten, identity, isNil } from 'lodash';
+import { cloneDeep, defaultTo, filter, first, flatten, identity, isNil } from 'lodash';
 import { EquityType } from '../members/enum/equity-type.enum';
 import { UserDocument } from '../users/schema/user.schema';
 import { ApiService } from '../api-service/api.service';
@@ -81,10 +81,9 @@ export class OffersLiteService extends OffersServiceBase {
       const newMember = new this.memberRepository(memberProspect.toObject());
       if (!isNil(newMember.equity) && newMember.equity.type === EquityType.Immediately) {
         newMember.lamportsEarned = newMember.equity.amount * LAMPORTS_PER_SOL;
+        this.collectEquity(org, newMember, newMember.equity.amount, [], account);
       }
       await newMember.save();
-
-      this.collectEquity(org, newMember, [], account);
 
       break;
     case OfferStatusDto.declined:
@@ -98,7 +97,8 @@ export class OffersLiteService extends OffersServiceBase {
   async updateInvestOfferStatus(org: OrgDocument, offer: OfferDocument, body: OfferStatusBodyDto, account: AccountModel) {
     const memberField = account.isUser ? 'user' : 'orgUser';
 
-    const investedAmount = offer.memberProspects.reduce((acc, mp) => acc + mp.investorSettings.investmentAmount, 0);
+    const investedMembers = offer.memberProspects.map((mp) => cloneDeep(mp.toObject()));
+    const investedAmount = investedMembers.reduce((acc, mp) => acc + mp.investorSettings.investmentAmount, 0);
     if (offer.investorSettings.amount < investedAmount + body.amount) {
       throw new BadRequestException({
         message: `Сannot invest more than: ${(offer.investorSettings.amount - investedAmount)}`,
@@ -142,7 +142,7 @@ export class OffersLiteService extends OffersServiceBase {
       }
       const balance = await this.apiService.getUSDCBalance(account.wallet);
       const paymentInfo = {
-        info: `Investing $${memberProspect.investorSettings.investmentAmount} for ${memberProspect.investorSettings.equityAllocation}% of equity allocation`,
+        info: `Investing $${body.amount} for ${equityAllocation}% of equity allocation`,
         amount: body.amount,
       };
       if (balance < paymentInfo.amount) {
@@ -150,14 +150,15 @@ export class OffersLiteService extends OffersServiceBase {
       }
       const payment = await this.paymentService.receiveInvestmentInApp(memberProspect, org, paymentInfo);
       const pk = await this.apiService.getPK(account.wallet, (await account.password));
-      const txnHash = await this.apiService.transferUSDC(pk, [{ wallet: org.wallet, amount: payment.amount }]);
+      const transferFn = this.apiService.transferUSDC.bind(this.apiService, pk, [{ wallet: org.wallet, amount: payment.amount }]);
+      let txnHash = await transferFn();
+      txnHash = await this.apiService.confirmTxnWithRetry(txnHash, transferFn);
 
       payment.txnHash = txnHash;
       await payment.save();
       const newMember = await this.paymentService.handleInvestmentPayment(org, payment, { signature: txnHash });
 
-      const skipMembers = filter(flatten(offer.memberProspects.map((mp) => [mp.user, mp.orgUser])), identity);
-      this.collectEquity(org, newMember, skipMembers, account);
+      this.collectEquity(org, newMember, equityAllocation, investedMembers, account);
 
       break;
     case OfferStatusDto.declined:
@@ -168,14 +169,22 @@ export class OffersLiteService extends OffersServiceBase {
     return offer.save();
   }
 
-  collectEquity(org: OrgDocument, newMember: MemberDocument, skipMembers: string[], account: AccountModel) {
+  collectEquity(
+    org: OrgDocument,
+    newMember: MemberDocument,
+    equityAllocation: number,
+    skipMembers: MemberProspect[],
+    account: AccountModel,
+  ) {
     if (isNil(newMember.equity) || newMember.equity.type !== EquityType.Immediately) {
       return;
     }
+    const skipMembersIds = filter(flatten(skipMembers.map((mp) => [mp.user, mp.orgUser])), identity);
+    const skipAmount = skipMembers.reduce((acc, mp) => acc + mp.equity.amount, 0);
     this.memberRepository.find({
       _id: { $ne: new Types.ObjectId(newMember._id) },
-      user: { $nin: skipMembers },
-      orgUser: { $nin: skipMembers },
+      user: { $nin: skipMembersIds },
+      orgUser: { $nin: skipMembersIds },
       org: new Types.ObjectId(org._id),
       equity: { $ne: null },
     })
@@ -186,7 +195,12 @@ export class OffersLiteService extends OffersServiceBase {
       .cursor()
       .eachAsync(async (member) => {
         const memberUser = defaultTo(member.user as UserDocument, member.orgUser as OrgDocument);
-        const amount = member.equity.amount * (newMember.equity.amount / 100);
+        const memberEquityAmountL = member.equity.amount * LAMPORTS_PER_SOL;
+        const equityAllocationL = equityAllocation * LAMPORTS_PER_SOL;
+        const totalEquityAmountL = 100 * LAMPORTS_PER_SOL;
+        const skipAmountL = skipAmount * LAMPORTS_PER_SOL;
+        const amountL = memberEquityAmountL * (equityAllocationL / (totalEquityAmountL - skipAmountL));
+        const amount = amountL / LAMPORTS_PER_SOL;
         const transferFn = this.transfer.bind(this, memberUser, account, org.mint, amount);
         let txnHash = await transferFn();
         txnHash = await this.apiService.confirmTxnWithRetry(txnHash, transferFn);

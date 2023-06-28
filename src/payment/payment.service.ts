@@ -192,12 +192,10 @@ export class PaymentService {
       member = await this.memberModel.findOneAndUpdate(
         { _id: member._id },
         {
-          $inc: {
+          $set: {
             'equity.amount': payment.investor.investorSettings.equityAllocation,
             'investorSettings.investmentAmount': payment.investor.investorSettings.investmentAmount,
             'investorSettings.equityAllocation': payment.investor.investorSettings.equityAllocation,
-          },
-          $set: {
             'equity.type': EquityType.Immediately,
           },
         },
