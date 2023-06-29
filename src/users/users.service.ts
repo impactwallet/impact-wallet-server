@@ -146,7 +146,13 @@ export class UsersService extends UsersServiceBase {
 
   async getUserMemberships(user: string, req: Request) {
     await this.authService.getAccountFromToken(req);
-    const filters = { user };
+    const filters = {
+      user,
+      $or: [
+        { 'equity.amount': { $gt: 0 } },
+        { equity: null },
+      ],
+    };
     return this.membersService.getMembers(filters, 'org');
   }
 

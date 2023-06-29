@@ -46,13 +46,13 @@ export class OrgsService {
     const { org } = await this.createOrganization(orgsDto, logo, mock);
     if (!mock) this.createToken(org);
     return {
-      "_id": org._id,
-      "username": org.username,
-      "name": org.name,
-      "logo": org.logo,
-      "settings": org.settings,
-      "lamportsMinted": org.lamportsMinted,
-      "wallet": org.wallet,
+      '_id': org._id,
+      'username': org.username,
+      'name': org.name,
+      'logo': org.logo,
+      'settings': org.settings,
+      'lamportsMinted': org.lamportsMinted,
+      'wallet': org.wallet,
     };
   }
 
@@ -303,6 +303,10 @@ export class OrgsService {
     await this.authService.getAccountFromToken(req);
     const query = {
       org: new Types.ObjectId(orgId),
+      $or: [
+        { 'equity.amount': { $gt: 0 } },
+        { equity: null },
+      ],
     };
     return this.memberService.getMembers(query, 'user orgUser');
   }
@@ -395,7 +399,13 @@ export class OrgsService {
   }
 
   async getMemberships(orgId: string) {
-    const filters = { orgUser: orgId };
+    const filters = {
+      orgUser: orgId,
+      $or: [
+        { 'equity.amount': { $gt: 0 } },
+        { equity: null },
+      ],
+    };
     return this.memberService.getMembers(filters, 'org');
   }
 

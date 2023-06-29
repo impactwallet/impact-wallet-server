@@ -5,5 +5,6 @@ export class MembersFilterDto {
   role?: Role;
   user?: string | Types.ObjectId;
   org?: string | Types.ObjectId;
+  equity?: any;
   [key: string]: any;
 }
