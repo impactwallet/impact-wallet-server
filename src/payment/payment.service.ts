@@ -216,9 +216,12 @@ export class PaymentService {
     const paymentAmount = body.payment_amount * LAMPORTS_PER_SOL;
     const treasury = paymentAmount * (org.settings.treasury / 100);
     const amountToSplit = paymentAmount - treasury;
+    if (amountToSplit <= 0) {
+      return;
+    }
     const holders = await this.memberModel.find({
       org: org._id,
-      equity: { $ne: null },
+      'equity.amount': { $gt: 0 },
     }).populate([
       { path: 'user' },
       { path: 'orgUser', select: '+password' },
