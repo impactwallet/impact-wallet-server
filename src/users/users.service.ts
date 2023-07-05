@@ -120,7 +120,7 @@ export class UsersService extends UsersServiceBase {
     };
     return {
       //TODO: return endpoint
-      secretLink: `https://app.impactwallet.xyz/restore/${secretLink}`,
+      secretLink: `https://app.equitywallet.org/restore/${secretLink}`,
       token: this.jwtService.sign(payload),
     };
   }
@@ -131,7 +131,7 @@ export class UsersService extends UsersServiceBase {
       userId: user._id,
     };
     return {
-      secretLink: `https://app.impactwallet.xyz/restore/${user.secretLink}`,
+      secretLink: `https://app.equitywallet.org/restore/${user.secretLink}`,
       token: this.jwtService.sign(payload),
     };
   }

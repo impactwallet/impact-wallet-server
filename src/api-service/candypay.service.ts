@@ -17,8 +17,8 @@ export class CandyPayService {
   createSession(data: CreateCpSessionDto) {
     const tokens: any = ['usdt'];
     return this.sdk.session.create({
-      success_url: 'https://app.impactwallet.xyz',
-      cancel_url: 'https://app.impactwallet.xyz',
+      success_url: 'https://app.equitywallet.org',
+      cancel_url: 'https://app.equitywallet.org',
       items: data.items,
       tokens: tokens,
       custom_data: {

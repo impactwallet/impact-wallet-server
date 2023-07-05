@@ -6,7 +6,7 @@ async function start() {
   const PORT = process.env.PORT || 9898;
   const app = await NestFactory.create(AppModule, { cors: true });
   const config = new DocumentBuilder()
-    .setTitle('Impact Wallet')
+    .setTitle('Equity Wallet')
     .setDescription('Documentation REST API')
     .setVersion('1.0.0')
     .build();
