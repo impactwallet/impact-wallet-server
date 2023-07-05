@@ -28,20 +28,20 @@ export class OrgsServiceLite {
     orgsDto.member.equity = { amount: 100, type: EquityType.Immediately };
     orgsDto.member[userField] = account.id.toString();
 
-    const { org, member } = await this.orgsService.createOrganization(orgsDto, logo, mock);
+    const { org } = await this.orgsService.createOrganization(orgsDto, logo, mock);
     const initialMint = { wallet: account.wallet, amount: 100 * LAMPORTS_PER_SOL };
     this.orgsService.createToken(org, initialMint)
-      .then(() => {
-        this.memberService.updateContributed(member._id, 0, initialMint.amount).exec();
+      .catch((err) => {
+        console.log('Error creating token', err);
       });
     return {
-      "_id": org._id,
-      "username": org.username,
-      "name": org.name,
-      "logo": org.logo,
-      "settings": org.settings,
-      "lamportsMinted": org.lamportsMinted,
-      "wallet": org.wallet,
+      '_id': org._id,
+      'username': org.username,
+      'name': org.name,
+      'logo': org.logo,
+      'settings': org.settings,
+      'lamportsMinted': org.lamportsMinted,
+      'wallet': org.wallet,
     };
   }
 }

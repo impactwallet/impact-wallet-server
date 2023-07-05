@@ -57,10 +57,8 @@ export class OrgsService {
   }
 
   async createToken(org: OrgDocument, initialMint?: { wallet: string, amount: number }) {
-
-    await new Promise((resolve) => setTimeout(resolve, 5000));
+    let mintInfo = { mint: null, mintError: null, mintStatus: MintStatus.inProgress };
     try {
-      let mintInfo = { mint: null, mintError: null, mintStatus: MintStatus.inProgress };
       await this.updateMint(org._id, mintInfo);
       const { file } = await this.getLogo(org.logo.split('/')[3]);
       const createTokenFn = this.apiService.createFungibleTokensForOrganization.bind(this.apiService, org, Buffer.from(file));
@@ -68,23 +66,30 @@ export class OrgsService {
       await this.apiService.confirmTxnWithRetry(txnHash, createTokenFn);
       this.apiService.sendNotification(`New ${org.username.toUpperCase().substring(0, 10)} token created:\n\n${mint}\n\n${this.apiService.buildExplorerLink('/address/' + mint)}`);
 
-      mintInfo = { mint, mintError: null, mintStatus: MintStatus.success };
-      await this.updateMint(org._id, mintInfo, null);
       org.mint = mint;
+
+      if (isNil(initialMint)) {
+        mintInfo = { mint, mintError: null, mintStatus: MintStatus.success };
+        await this.updateMint(org._id, mintInfo, null);
+        return;
+      }
     } catch (err) {
       const mintInfo = { mint: null, mintError: get(err, 'message', err), mintStatus: MintStatus.error };
-      this.updateMint(org._id, mintInfo).exec();
+      await this.updateMint(org._id, mintInfo);
+      throw err;
     }
 
-    if (!isNil(initialMint)) {
-      const mintTokenFn = this.mintToken.bind(this, org, [initialMint]);
-      let txnHash = await mintTokenFn();
-      txnHash = await this.apiService.confirmTxnWithRetry(txnHash, mintTokenFn);
-      await this.updateMintedAmount(org._id, initialMint.amount);
-      this.apiService.sendNotification(
-        `${initialMint.amount / LAMPORTS_PER_SOL} ${org.username.toUpperCase().substring(0, 10)} minted to ${initialMint.wallet}:\n\n${this.apiService.buildExplorerLink('/tx/' + txnHash)}`
-      );
-    }
+    const mintTokenFn = this.mintToken.bind(this, org, [initialMint]);
+    let txnHash = await mintTokenFn();
+    txnHash = await this.apiService.confirmTxnWithRetry(txnHash, mintTokenFn);
+    await this.updateMintedAmount(org._id, initialMint.amount);
+
+    mintInfo = { mint: org.mint, mintError: null, mintStatus: MintStatus.success };
+    await this.updateMint(org._id, mintInfo, null);
+
+    this.apiService.sendNotification(
+      `${initialMint.amount / LAMPORTS_PER_SOL} ${org.username.toUpperCase().substring(0, 10)} minted to ${initialMint.wallet}:\n\n${this.apiService.buildExplorerLink('/tx/' + txnHash)}`
+    );
   }
 
   async mintToken(org: OrgDocument, receivers: [{ wallet: string, amount: number }]) {
