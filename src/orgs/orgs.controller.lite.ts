@@ -23,12 +23,9 @@ export class OrgsLiteController {
   @ApiConsumes('form-data')
   @UseInterceptors(FileInterceptor('logo'))
   @ApiMockHeader('If true wallet and token creations are skipped')
-  createOrg(
-    @Body() createOrgDto: CreateOrgDto,
-      @UploadedFile() logo: any,
-      @Headers('mock') mock: string,
-      @Req() req: Request,
-  ) {
+  createOrg(@Body() createOrgDto: CreateOrgDto,
+    @UploadedFile() logo: any,
+    @Headers('mock') mock: string, @Req() req: Request) {
     return this.orgsLiteService.createOrgLite(createOrgDto, logo, mock === 'true', req);
   }
 

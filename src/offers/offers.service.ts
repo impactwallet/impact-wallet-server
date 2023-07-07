@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, HttpException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { get, isNil } from 'lodash';
-import mongoose, { Model, PopulateOptions, Types } from 'mongoose';
+import mongoose, { Model, Types } from 'mongoose';
 import { Role } from '../members/enum/roles.enum';
 import { Member, MemberDocument } from '../members/schema/member.schema';
 import { OrgDocument } from '../orgs/schema/org.schema';

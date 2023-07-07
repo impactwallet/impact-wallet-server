@@ -1,37 +1,45 @@
 module.exports = {
-  parser: '@typescript-eslint/parser',
-  parserOptions: {
-    project: 'tsconfig.json',
-    tsconfigRootDir: __dirname,
-    sourceType: 'module',
-  },
-  plugins: ['@typescript-eslint/eslint-plugin'],
-  extends: [
-    'plugin:@typescript-eslint/recommended',
-  ],
-  root: true,
-  env: {
-    node: true,
-    jest: true,
-  },
-  ignorePatterns: ['.eslintrc.js'],
-  rules: {
-    '@typescript-eslint/interface-name-prefix': 'off',
-    '@typescript-eslint/explicit-function-return-type': 'off',
-    '@typescript-eslint/explicit-module-boundary-types': 'off',
-    '@typescript-eslint/no-explicit-any': 'off',
-    "comma-dangle": ["error", "always-multiline"],
-    "array-bracket-newline": ["error", { "multiline": true }],
-    "indent": "off",
-    "@typescript-eslint/indent": [
-      "error",
-      2,
-      {
-        "ArrayExpression": 1,
-      },
+    parser: '@typescript-eslint/parser',
+    parserOptions: {
+        project: 'tsconfig.json',
+        tsconfigRootDir: __dirname,
+        sourceType: 'module'
+    },
+    extends: [
+        'airbnb-base',
+        'prettier',
+        'plugin:@typescript-eslint/recommended'
     ],
-    "function-paren-newline": ["error", "consistent"],
-    "semi": ["error", "always"],
-    "quotes": ["error", "single"],
-  },
+    settings: {
+        'import/resolver': {
+            node: {
+                extensions: ['.js', '.jsx', '.ts', '.tsx']
+            }
+        }
+    },
+    root: true,
+    env: {
+        node: true,
+        jest: true
+    },
+    ignorePatterns: ['.eslintrc.js'],
+    rules: {
+        'no-plusplus': ['error', { allowForLoopAfterthoughts: true }],
+        'no-await-in-loop': 'off',
+        'no-restricted-syntax': 'off',
+        'import/no-extraneous-dependencies': [
+            'error',
+            { devDependencies: ['**/*.test.ts', '**/*.spec.ts'] }
+        ],
+        'import/prefer-default-export': 'off',
+        'import/no-default-export': 'error',
+        'no-useless-constructor': 'off',
+        'import/extensions': [
+            'error',
+            'ignorePackages',
+            {
+                ts: 'never'
+            }
+        ]
+    }
 };

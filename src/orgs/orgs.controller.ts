@@ -86,7 +86,8 @@ export class OrgsController {
       @Body() member: MemberDto,
       @Req() req: Request
   ): Promise<Member> {
-    await this.authService.getAccountFromToken(req);
+    const account  = await this.authService.getAccountFromToken(req);
+    await this.authService.permissionCheck(orgId, account);
     return this.orgsService.addMemberToOrg(orgId, member);
   }
 
@@ -163,8 +164,8 @@ export class OrgsController {
     @Param('orgId') orgId: string,
     @Req() req: Request
   ) {
-    await this.authService.getAccountFromToken(req);
-
+    const account = await this.authService.getAccountFromToken(req);
+    await this.authService.permissionCheck(orgId, account);
     return this.orgsService.sendUsdc(orgId, sendUsdcDto);
   }
 

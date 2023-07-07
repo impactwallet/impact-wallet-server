@@ -26,6 +26,7 @@ export class UsersControllerLite {
     @Req() req: Request,
   ) {
     const account = await this.authService.getAccountFromToken(req);
+    await this.authService.permissionCheck(orgId, account);
 
     return this.userServiceLite.sendAssets(sendAssetsDto, account, orgId);
   }

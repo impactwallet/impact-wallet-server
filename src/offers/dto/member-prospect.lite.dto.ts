@@ -9,7 +9,7 @@ export class MemberProspectLiteDto {
     occupation: string;
 
   @ApiProperty({ example: 'Member', enum: Object.keys(Role) })
-    role: string;
+    role: Role;
 
   @ApiProperty({ type: EquityDto, description: 'Equity settings' })
     equity: EquityDto;

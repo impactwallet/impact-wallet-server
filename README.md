@@ -1,2 +1,2 @@
-# Impact-Wallet
-Turn your time into equity
+# Equity-Wallet
+Own your equity onchain
