@@ -32,6 +32,7 @@ import { AuthService } from '../auth/auth.service';
 import { AccountModel } from '../auth/models/account.model';
 import { JwtService } from '@nestjs/jwt';
 import { UpdateOrgDto } from './dto/update-org.dto';
+import { isDefined } from 'class-validator';
 
 const MINT_STATUS_RETRIES = 5;
 
@@ -575,19 +576,19 @@ export class OrgsService {
             throw new NotFoundException({ message: 'Organization not found' });
         }
         org.username =
-            updateOrgDto.username !== undefined
+            isDefined(updateOrgDto.username)
                 ? updateOrgDto.username
                 : org.username;
         org.name =
-            updateOrgDto.name !== undefined ? updateOrgDto.name : org.name;
+            isDefined(updateOrgDto.name) ? updateOrgDto.name : org.name;
         org.description =
-            updateOrgDto.description !== undefined
+            isDefined(updateOrgDto.description)
                 ? updateOrgDto.description
                 : org.description;
         org.link =
-            updateOrgDto.link !== undefined ? updateOrgDto.link : org.link;
+            isDefined(updateOrgDto.link) ? updateOrgDto.link : org.link;
         org.settings.treasury =
-            updateOrgDto.settings?.treasury !== undefined
+            isDefined(updateOrgDto.settings?.treasury)
                 ? updateOrgDto.settings?.treasury
                 : org.settings.treasury;
 
