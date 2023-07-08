@@ -18,7 +18,7 @@ export class AuthService {
         @InjectModel(User.name) protected userModel: Model<UserDocument>,
         @InjectModel(Org.name) protected orgModel: Model<OrgDocument>,
         @InjectModel(Member.name)
-        private memberRepository: Model<MemberDocument>
+protected memberRepository: Model<MemberDocument>
     ) {}
 
     async getAccountFromToken(req: Request): Promise<AccountModel> {
