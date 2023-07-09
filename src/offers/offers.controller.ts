@@ -116,7 +116,6 @@ export class OffersController {
     @Req() req: Request,
   ) {
     const account = await this.authService.getAccountFromToken(req);
-    await this.authService.permissionCheck(orgId, account);
 
     const org = await this.orgsService.getByOrgId(orgId);
     if (isNil(org)) {
