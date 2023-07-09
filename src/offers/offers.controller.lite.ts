@@ -89,7 +89,6 @@ export class OffersControllerLite {
         @Req() req: Request
     ) {
         const account = await this.authService.getAccountFromToken(req);
-        await this.authService.permissionCheck(orgId, account);
 
         const org = await this.orgService.getByOrgId(orgId);
         if (isNil(org)) {
