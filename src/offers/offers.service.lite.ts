@@ -97,8 +97,12 @@ export class OffersLiteService extends OffersServiceBase {
   async updateInvestOfferStatus(org: OrgDocument, offer: OfferDocument, body: OfferStatusBodyDto, account: AccountModel) {
     const memberField = account.isUser ? 'user' : 'orgUser';
 
-    const investedMembers = offer.memberProspects.map((mp) => cloneDeep(mp.toObject()));
-    const investedAmount = investedMembers.reduce((acc, mp) => acc + mp.investorSettings.investmentAmount, 0);
+    const investedMembersMap = new Map<string, MemberProspectDocument>();
+    offer.memberProspects.forEach((mp) => {
+      investedMembersMap.set(mp[memberField].toString(), cloneDeep(mp.toObject()));
+    });
+    const investedAmount = Array.from(investedMembersMap.values())
+      .reduce((acc, mp) => acc + mp.investorSettings.investmentAmount, 0);
     if (offer.investorSettings.amount < investedAmount + body.amount) {
       throw new BadRequestException({
         message: `Сannot invest more than: ${(offer.investorSettings.amount - investedAmount)}`,
@@ -156,9 +160,15 @@ export class OffersLiteService extends OffersServiceBase {
 
       payment.txnHash = txnHash;
       await payment.save();
-      const newMember = await this.paymentService.handleInvestmentPayment(org, payment, { signature: txnHash });
+      const { member, memberBeforeUpdate } = await this.paymentService.handleInvestmentPayment(org, payment, { signature: txnHash });
+      if (!isNil(memberBeforeUpdate)) {
+        investedMembersMap.set(
+          member[memberField].toString(),
+          memberBeforeUpdate.toObject(),
+        );
+      }
 
-      this.collectEquity(org, newMember, equityAllocation, investedMembers, account);
+      this.collectEquity(org, member, equityAllocation, Array.from(investedMembersMap.values()), account);
 
       break;
     case OfferStatusDto.declined:

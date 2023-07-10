@@ -2,7 +2,7 @@ import { mapSeries, delay } from 'bluebird';
 import { CheckoutItemEntity, verifyWebhookSignature } from '@candypay/checkout-sdk';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { defaultTo, get, isNil } from 'lodash';
+import { defaultTo, get, identity, isNil, pickBy } from 'lodash';
 import mongoose, { ClientSession, Model } from 'mongoose';
 import { ApiService } from '../api-service/api.service';
 import { CandyPayService } from '../api-service/candypay.service';
@@ -172,12 +172,21 @@ export class PaymentService {
     }
   }
 
-  async handleInvestmentPayment(org: OrgDocument, payment: PaymentDocument, body: { signature: string }) {
-    let member = await this.memberModel.findOne({
+  async handleInvestmentPayment(
+    org: OrgDocument,
+    payment: PaymentDocument,
+    body: { signature: string },
+  ): Promise<{ member: MemberDocument, memberBeforeUpdate: MemberDocument }> {
+    const memberQuery = {
       org: org._id,
-      user: defaultTo(payment.investor.user, payment.investor.orgUser),
-    }).populate(['user', 'orgUser']);
+      user: payment.investor.user,
+      orgUser: payment.investor.orgUser,
+    };
+    let member = await this.memberModel
+      .findOne(pickBy(memberQuery, identity))
+      .populate(['user', 'orgUser']);
     let memberUser = defaultTo(get(member, 'user') as UserDocument, get(member, 'orgUser') as OrgDocument);
+    let memberBeforeUpdate: MemberDocument;
 
     if (isNil(member)) {
       member = new this.memberModel(payment.investor.toObject());
@@ -189,24 +198,30 @@ export class PaymentService {
       await member.populate(['user', 'orgUser']);
       memberUser = defaultTo(get(member, 'user') as UserDocument, get(member, 'orgUser') as OrgDocument);
     } else {
-      member = await this.memberModel.findOneAndUpdate(
+      const newEquity = get(member, 'equity.amount', 0) + payment.investor.investorSettings.equityAllocation;
+      const newInvestmentAmount = get(member, 'investorSettings.investmentAmount', 0) + payment.investor.investorSettings.investmentAmount;
+      memberBeforeUpdate = await this.memberModel.findOneAndUpdate(
         { _id: member._id },
         {
           $set: {
-            'equity.amount': payment.investor.investorSettings.equityAllocation,
-            'investorSettings.investmentAmount': payment.investor.investorSettings.investmentAmount,
-            'investorSettings.equityAllocation': payment.investor.investorSettings.equityAllocation,
-            'equity.type': EquityType.Immediately,
+            equity: {
+              amount: newEquity,
+              type: EquityType.Immediately,
+            },
+            investorSettings: {
+              investmentAmount: newInvestmentAmount,
+              equityAllocation: newEquity,
+            },
           },
         },
-        { new: true, upsert: true },
       );
+      member = await this.memberModel.findById(member._id).populate(['user', 'orgUser']);
     }
 
     const username = defaultTo((memberUser as UserDocument).nickname, (memberUser as OrgDocument).username);
     this.apiService.sendNotification(`${username} just invested ${payment.amount} into ${org.name}:\n\n${body.signature}\n\n${this.apiService.buildExplorerLink('/tx/' + body.signature)}`);
 
-    return member;
+    return { member, memberBeforeUpdate };
   }
 
   async _handleRegularPayment(org: OrgDocument, body: any) {
