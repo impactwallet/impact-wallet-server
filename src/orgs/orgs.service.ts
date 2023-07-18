@@ -521,18 +521,16 @@ export class OrgsService {
             throw new BadRequestException('Not enough USDC to send');
         }
 
-        const fromPk = await this.apiService.getPK(org.wallet, org.password);
+        const senderPk = await this.apiService.getPK(org.wallet, org.password);
         const recipients = [
             {
+                senderPk,
                 wallet: sendUsdcDto.recipient,
                 amount: sendUsdcDto.amount
             }
         ];
 
-        const signature = await this.apiService.transferUSDC(
-            fromPk,
-            recipients
-        );
+        const signature = await this.apiService.transferUSDC(recipients);
         this.apiService.sendNotification(
             `Org ${org.username} sent ${sendUsdcDto.amount} USDC to ${
                 sendUsdcDto.recipient

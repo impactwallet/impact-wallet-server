@@ -181,15 +181,16 @@ export class UsersService extends UsersServiceBase {
 
     const senderPassword = await account.password;
 
-    const fromPk = await this.apiService.getPK(account.wallet, senderPassword);
+    const senderPk = await this.apiService.getPK(account.wallet, senderPassword);
     const recipients = [
       {
+        senderPk,
         wallet: sendUsdcDto.recipient,
         amount: sendUsdcDto.amount,
       },
     ];
 
-    const signature = await this.apiService.transferUSDC(fromPk, recipients);
+    const signature = await this.apiService.transferUSDC(recipients);
     this.apiService.sendNotification(`User ${account.username} sent ${sendUsdcDto.amount} USDC to ${sendUsdcDto.recipient}\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
   }
 
@@ -228,8 +229,8 @@ export class UsersService extends UsersServiceBase {
 
       const org = senderMember.org as OrgDocument;
 
-      const fromPk = await this.apiService.getPK(account.wallet, senderPassword);
-      const signature = await this.apiService.transfer(fromPk, org.mint, [{ wallet: recipientAddress, amount: sendAssetsDto.amount }]);
+      const senderPk = await this.apiService.getPK(account.wallet, senderPassword);
+      const signature = await this.apiService.transfer(org.mint, [{ senderPk, wallet: recipientAddress, amount: sendAssetsDto.amount }]);
 
       if (!isNil(recipient)) {
         const memberQuery = {

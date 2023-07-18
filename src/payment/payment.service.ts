@@ -228,6 +228,7 @@ export class PaymentService {
     if (org.mintStatus !== 'success') {
       return;
     }
+    const rootOrg = await this.orgModel.findOne({ wallet: process.env.ROOT_PUBKEY }, '+password');
     const paymentAmount = body.payment_amount * LAMPORTS_PER_SOL;
     const treasury = paymentAmount * (org.settings.treasury / 100);
     const amountToSplit = paymentAmount - treasury;
@@ -238,28 +239,34 @@ export class PaymentService {
       org: org._id,
       'equity.amount': { $gt: 0 },
     }).populate([
-      { path: 'user' },
+      { path: 'user', select: '+password' },
       { path: 'orgUser', select: '+password' },
     ]);
     const membersWithAmount = [];
     const orgMembers = [];
+    const orgPk = await this.apiService.getPK(org.wallet, org.password);
     
-    holders.forEach((holder) => {
+    await mapSeries(holders, async (holder) => {
       const equityAmount = holder.equity?.amount * LAMPORTS_PER_SOL;
       const amount = amountToSplit * (equityAmount / org.lamportsMinted);
       const wallet = defaultTo((holder.user as UserDocument)?.wallet, (holder.orgUser as OrgDocument)?.wallet);
-      membersWithAmount.push({ wallet, amount: amount / LAMPORTS_PER_SOL });
+      membersWithAmount.push({ senderPk: orgPk, wallet, amount: amount / LAMPORTS_PER_SOL });
       if (isNil(holder.user) && !isNil(holder.orgUser)) {
         const orgUser = holder.orgUser as OrgDocument;
         orgMembers.push({ orgUser, amount: amount / LAMPORTS_PER_SOL });
+      } else if (org.wallet !== process.env.ROOT_PUBKEY) {
+        const user = holder.user as UserDocument;
+        const userPk = await this.apiService.getPK(user.wallet, user.password);
+        const comissionAmount = (amount * +process.env.COMISSION) / LAMPORTS_PER_SOL;
+        membersWithAmount.push({ senderPk: userPk, wallet: process.env.ROOT_PUBKEY, amount: comissionAmount });
+        orgMembers.push({ orgUser: rootOrg, amount: comissionAmount });
       }
     });
 
-    const orgPk = await this.apiService.getPK(org.wallet, org.password);
-    const signature = await this.apiService.transferUSDC(orgPk, membersWithAmount);
+    const signature = await this.apiService.transferUSDC(membersWithAmount);
     await this.apiService.confirmTxnWithRetry(
       signature,
-      this.apiService.transferUSDC.bind(this.apiService, orgPk, membersWithAmount),
+      this.apiService.transferUSDC.bind(this.apiService, membersWithAmount),
     );
     this.apiService.sendNotification(`USDC transfered to ${org.name} and split between members:\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
 
@@ -347,8 +354,8 @@ export class PaymentService {
   }
 
   async transfer(source: any, destination: any, mint: string, amount: number) {
-    const fromPk = await this.apiService.getPK(source.wallet, source.password);
-    return this.apiService.transfer(fromPk, mint, [{ wallet: destination.wallet, amount: amount }]);
+    const senderPk = await this.apiService.getPK(source.wallet, source.password);
+    return this.apiService.transfer(mint, [{ senderPk, wallet: destination.wallet, amount: amount }]);
   }
 
 }

@@ -229,8 +229,8 @@ export class OffersLiteService extends OffersServiceBase {
   }
 
   async transfer(source: any, destination: any, mint: string, amount: number) {
-    const pk = await this.apiService.getPK(source.wallet, source.password);
-    return this.apiService.transfer(pk, mint, [{ wallet: destination.wallet, amount }]);
+    const senderPk = await this.apiService.getPK(source.wallet, source.password);
+    return this.apiService.transfer(mint, [{ senderPk, wallet: destination.wallet, amount }]);
   }
 
   async updateSaleOfferStatus(offerId: string, body: OfferStatusBodyDto, account: AccountModel) {
@@ -275,8 +275,8 @@ export class OffersLiteService extends OffersServiceBase {
         throw new BadRequestException({ message: 'Not enough tokens to sell' });
       }
       payment = await this.paymentService.sellAssetsInApp(offer, paymentInfo);
-      const pk = await this.apiService.getPK(buyer.wallet, buyer.password);
-      const txnHash = await this.apiService.transferUSDC(pk, [{ wallet: seller.wallet, amount: payment.amount }]);
+      const senderPk = await this.apiService.getPK(buyer.wallet, buyer.password);
+      const txnHash = await this.apiService.transferUSDC([{ senderPk, wallet: seller.wallet, amount: payment.amount }]);
 
       payment.txnHash = txnHash;
       await payment.save();

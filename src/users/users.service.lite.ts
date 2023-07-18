@@ -103,7 +103,7 @@ export class UsersServiceLite extends UsersServiceBase {
   }
 
   async transfer(source: any, sourcePassword: string, recipientAddress: string, mint: string, amount: number) {
-    const fromPk = await this.apiService.getPK(source.wallet, sourcePassword);
-    return this.apiService.transfer(fromPk, mint, [{ wallet: recipientAddress, amount }]);
+    const senderPk = await this.apiService.getPK(source.wallet, sourcePassword);
+    return this.apiService.transfer(mint, [{ senderPk, wallet: recipientAddress, amount }]);
   }
 }

@@ -79,21 +79,21 @@ export class ApiService {
     }
   }
 
-  async transfer(senderPk: string, mint: string, recepients: { wallet: string, amount: number }[], retries = 0) {
+  async transfer(mint: string, recepients: { senderPk: string, wallet: string, amount: number }[], retries = 0) {
     try {
       const multiplier = mint === this.usdcMint ? 1000000 : LAMPORTS_PER_SOL;
       const mintPublicKey = new PublicKey(mint);
-      const senderKeypair = Keypair.fromSecretKey(decode(senderPk));
-      const senderAssociatedTokenAddress = await getAssociatedTokenAddress(
-        mintPublicKey,
-        senderKeypair.publicKey,
-      );
-      const payer = this.isMainnet ? new PublicKey(process.env.FEE_PAYER) : senderKeypair.publicKey;
       const txn = new Transaction();
 
-      const promises = recepients.map(async ({ wallet, amount }) => {
+      const promises = recepients.map(async ({ senderPk, wallet, amount }) => {
         console.log('amount:', amount);
         console.log('wallet:', wallet);
+        const senderKeypair = Keypair.fromSecretKey(decode(senderPk));
+        const senderAssociatedTokenAddress = await getAssociatedTokenAddress(
+          mintPublicKey,
+          senderKeypair.publicKey,
+        );
+        const payer = new PublicKey(process.env.FEE_PAYER);
         const recipientPublicKey = new PublicKey(wallet);
 
         const recipientAssociatedTokenAddress = await getAssociatedTokenAddress(
@@ -130,28 +130,29 @@ export class ApiService {
 
       const blockhash = (await this.connection.getLatestBlockhash('finalized'));
       txn.recentBlockhash = blockhash.blockhash;
-      txn.feePayer = this.isMainnet ? new PublicKey(process.env.FEE_PAYER) : senderKeypair.publicKey;
+      txn.feePayer = new PublicKey(process.env.FEE_PAYER);
 
-      const serializedTxn = this.createSignedSerializedTxn(txn, senderPk, false, false);
+      const senderPks = recepients.map(({ senderPk }) => senderPk);
+      const serializedTxn = this.createSignedSerializedTxn(txn, senderPks, false, false);
       const signature = await this.sendTxn(serializedTxn);
       return signature;
     } catch (err) {
       if (retries > 0) {
         await new Promise(resolve => setTimeout(resolve, 5000));
         console.log(`Retrying transfer, retries left: ${retries}`);
-        return this.transfer(senderPk, mint, recepients, --retries);
+        return this.transfer(mint, recepients, --retries);
       }
       err.message = `Error transfering tokens: ${err.message}`;
       throw err;
     }
   }
 
-  async transferUSDC(senderPk: string, recepients: { wallet: string, amount: number }[]) {
+  async transferUSDC(recepients: { senderPk: string, wallet: string, amount: number }[]) {
     if (!this.isMainnet || isEmpty(recepients)) {
       return;
     }
     try {
-      const signature = await this.transfer(senderPk, this.usdcMint, recepients);
+      const signature = await this.transfer(this.usdcMint, recepients);
       return signature;
     } catch (err) {
       err.message = `Error transfering USDC: ${err.message}`;
@@ -317,7 +318,7 @@ export class ApiService {
   async mintToken(mint: string, authorityPk: string, receivers: { wallet: string, amount: number }[], memo?: string) {
     try {
       const authorityKeypair = Keypair.fromSecretKey(decode(authorityPk));
-      const payer = new PublicKey(this.isMainnet ? process.env.FEE_PAYER : authorityKeypair.publicKey);
+      const payer = new PublicKey(process.env.FEE_PAYER);
       const txn = new Transaction();
       const promises = receivers.map(async ({ wallet, amount }) => {
         const associatedTokenAddress = getAssociatedTokenAddressSync(
@@ -493,7 +494,7 @@ export class ApiService {
   }
 
   async recordMemo(memo: string, keys: { pubKey: string, pk: string }[]) {
-    const payer = new PublicKey(this.isMainnet ? process.env.FEE_PAYER : keys[0].pubKey);
+    const payer = new PublicKey(process.env.FEE_PAYER);
     const txn = new Transaction().add(
       new TransactionInstruction({
         keys: keys.map((key) => ({

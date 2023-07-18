@@ -103,8 +103,8 @@ export class OffersService extends OffersServiceBase {
           throw new BadRequestException({ message: 'Insufficient funds' });
         }
         payment = await this.paymentService.receiveInvestmentInApp(offer.memberProspects[0], org, paymentInfo);
-        const pk = await this.apiService.getPK(user.wallet, user.password);
-        const txnHash = await this.apiService.transferUSDC(pk, [{ wallet: org.wallet, amount: payment.amount }]);
+        const senderPk = await this.apiService.getPK(user.wallet, user.password);
+        const txnHash = await this.apiService.transferUSDC([{ senderPk, wallet: org.wallet, amount: payment.amount }]);
 
         payment.txnHash = txnHash;
         await payment.save();
@@ -166,8 +166,8 @@ export class OffersService extends OffersServiceBase {
         throw new BadRequestException({ message: 'Not enough tokens to sell' });
       }
       payment = await this.paymentService.sellAssetsInApp(offer, paymentInfo);
-      const pk = await this.apiService.getPK(buyer.wallet, buyer.password);
-      const txnHash = await this.apiService.transferUSDC(pk, [{ wallet: seller.wallet, amount: payment.amount }]);
+      const senderPk = await this.apiService.getPK(buyer.wallet, buyer.password);
+      const txnHash = await this.apiService.transferUSDC([{ senderPk, wallet: seller.wallet, amount: payment.amount }]);
 
       payment.txnHash = txnHash;
       await payment.save();
