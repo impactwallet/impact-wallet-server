@@ -235,7 +235,7 @@ export class OffersLiteService extends OffersServiceBase {
 
   async updateSaleOfferStatus(offerId: string, body: OfferStatusBodyDto, account: AccountModel) {
     const offer = await this.getSaleOfferById(offerId, ['org']);
-    await offer.populateSeller();
+    await offer.populateSeller('+password');
     if (offer.status !== OfferStatus.Pending) {
       throw new ForbiddenException('Offer already accepted/declined');
     }
@@ -275,8 +275,13 @@ export class OffersLiteService extends OffersServiceBase {
         throw new BadRequestException({ message: 'Not enough tokens to sell' });
       }
       payment = await this.paymentService.sellAssetsInApp(offer, paymentInfo);
+      const comissionAmount = ((payment.amount * LAMPORTS_PER_SOL) * +process.env.COMISSION) / LAMPORTS_PER_SOL;
       const senderPk = await this.apiService.getPK(buyer.wallet, buyer.password);
-      const txnHash = await this.apiService.transferUSDC([{ senderPk, wallet: seller.wallet, amount: payment.amount }]);
+      const sellerPk = await this.apiService.getPK(seller.wallet, seller.password);
+      const txnHash = await this.apiService.transferUSDC([
+        { senderPk, wallet: seller.wallet, amount: payment.amount },
+        { senderPk: sellerPk, wallet: process.env.ROOT_PUBKEY, amount: comissionAmount },
+      ]);
 
       payment.txnHash = txnHash;
       await payment.save();

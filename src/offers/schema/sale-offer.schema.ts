@@ -39,27 +39,27 @@ export class SaleOffer {
   @Prop({ type: String })
     txnHash: string;
 
-  populateSeller: () => Promise<void>;
-  populateBuyer: () => Promise<void>;
+  populateSeller: (projection?: string) => Promise<void>;
+  populateBuyer: (projection?: string) => Promise<void>;
 }
 
 export const SaleOfferSchema = SchemaFactory.createForClass(SaleOffer);
 
-SaleOfferSchema.methods.populateSeller = async function() {
+SaleOfferSchema.methods.populateSeller = async function(projection?: string) {
   const sellerId = get(this, 'seller._id', this.seller);
-  await this.populate({ path: 'seller', model: 'User' });
+  await this.populate({ path: 'seller', model: 'User', select: projection });
   if (isNil(this.seller)) {
     this.seller = sellerId;
-    await this.populate({ path: 'seller', model: 'Org' });
+    await this.populate({ path: 'seller', model: 'Org', select: projection });
   }
 };
 
-SaleOfferSchema.methods.populateBuyer = async function() {
+SaleOfferSchema.methods.populateBuyer = async function(projection?: string) {
   const buyerId = get(this, 'buyer._id', this.buyer);
-  await this.populate({ path: 'buyer', model: 'User' });
+  await this.populate({ path: 'buyer', model: 'User', select: projection });
   if (isNil(this.buyer)) {
     this.buyer = buyerId;
-    await this.populate({ path: 'buyer', model: 'Org' });
+    await this.populate({ path: 'buyer', model: 'Org', select: projection });
   }
 };
 
