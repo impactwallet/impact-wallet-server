@@ -17,11 +17,11 @@ export const OrgSettingsSchema = SchemaFactory.createForClass(OrgSettings);
 export class Org {
 
   @ApiProperty({ example: 'impact_wallet', description: 'Unique username of organization' })
-  @Prop({ unique: true, required: true })
+  @Prop({ unique: true, required: true, set: (v = '') => v.trim() })
     username: string;
 
   @ApiProperty({ example: 'Impact-Wallet', description: 'Name of organizations' })
-  @Prop({ required: true })
+  @Prop({ required: true, set: (v = '') => v.trim() })
     name: string;
 
   @ApiProperty({ example: 'Turn your time into equity', description: 'Information about the organization' })

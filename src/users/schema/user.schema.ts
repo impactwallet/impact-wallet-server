@@ -9,11 +9,11 @@ export type UserDocument = HydratedDocument<User>;
 export class User {
 
   @ApiProperty({ example: 'Dmitry', description: 'Nickname of user' })
-  @Prop({ required: true, unique: true })
+  @Prop({ required: true, unique: true, set: (value = '') => value.trim() })
     nickname: string;
 
   @ApiProperty({ example: 'Dmitry Vitko', description: 'Name of user' })
-  @Prop()
+  @Prop({ set: (value = '') => value.trim() })
     name: string;
 
   @ApiProperty({ example: 'jpg, png', description: 'Photo user profile' })
