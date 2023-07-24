@@ -195,7 +195,8 @@ export class OffersService extends OffersServiceBase {
     if (isNil(member)) {
       throw new NotFoundException('Member not found');
     }
-    if (member.lamportsEarned < saleOfferDto.tokensAmount * LAMPORTS_PER_SOL) {
+    const equityAmount = get(member, 'equity.amount', 0);
+    if (equityAmount < saleOfferDto.tokensAmount) {
       throw new BadRequestException('Not enough tokens to sell');
     }
     const saleOffer = new this.saleOfferRepository(saleOfferDto);

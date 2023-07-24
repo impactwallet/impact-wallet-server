@@ -159,7 +159,7 @@ export class PaymentService {
 
     try {
       if (payment.type === PaymentType.Regular) {
-        this._handleRegularPayment(org, body)
+        this.handleRegularPayment(org, body)
           .catch(err => console.log(`Error handling regular payment for ${org.name}: ${err}`));
       } else if (payment.type === PaymentType.Investment) {
         await this.handleInvestmentPayment(org, payment, body);
@@ -224,7 +224,7 @@ export class PaymentService {
     return { member, memberBeforeUpdate };
   }
 
-  async _handleRegularPayment(org: OrgDocument, body: any) {
+  async handleRegularPayment(org: OrgDocument, body: any, isWithCommission = true) {
     if (org.mintStatus !== 'success') {
       return;
     }
@@ -253,13 +253,13 @@ export class PaymentService {
       membersWithAmount.push({ senderPk: orgPk, wallet, amount: amount / LAMPORTS_PER_SOL });
       if (isNil(holder.user) && !isNil(holder.orgUser)) {
         const orgUser = holder.orgUser as OrgDocument;
-        orgMembers.push({ orgUser, amount: amount / LAMPORTS_PER_SOL });
-      } else if (org.wallet !== process.env.ROOT_PUBKEY) {
+        orgMembers.push({ orgUser, amount: amount / LAMPORTS_PER_SOL, isWithCommission });
+      } else if (isWithCommission) {
         const user = holder.user as UserDocument;
         const userPk = await this.apiService.getPK(user.wallet, user.password);
         const comissionAmount = (amount * +process.env.COMISSION) / LAMPORTS_PER_SOL;
         membersWithAmount.push({ senderPk: userPk, wallet: process.env.ROOT_PUBKEY, amount: comissionAmount });
-        orgMembers.push({ orgUser: rootOrg, amount: comissionAmount });
+        orgMembers.push({ orgUser: rootOrg, amount: comissionAmount, isWithCommission: false });
       }
     });
 
@@ -272,10 +272,10 @@ export class PaymentService {
 
     await mapSeries(
       orgMembers,
-      async ({ orgUser, amount }) => {
+      async ({ orgUser, amount, isWithCommission }) => {
         try {
           await delay(2000);
-          await this._handleRegularPayment(orgUser, { payment_amount: amount });
+          await this.handleRegularPayment(orgUser, { payment_amount: amount }, isWithCommission);
         } catch (err) {
           console.log(`Error handling regular payment for ${orgUser.name}: ${err}`);
         }

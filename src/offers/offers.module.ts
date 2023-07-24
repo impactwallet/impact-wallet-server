@@ -12,6 +12,7 @@ import { OffersLiteService } from './offers.service.lite';
 import { OffersControllerLite } from './offers.controller.lite';
 import { AuthModule } from '../auth/auth.module';
 import { OrgsModule } from '../orgs/orgs.module';
+import { Org, OrgSchema } from '../orgs/schema/org.schema';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { OrgsModule } from '../orgs/orgs.module';
       { name: Member.name, schema: MemberSchema },
       { name: MemberProspect.name, schema: MemberProspectSchema },
       { name: SaleOffer.name, schema: SaleOfferSchema },
+      { name: Org.name, schema: OrgSchema },
     ]),
     PaymentModule,
     UsersModule,

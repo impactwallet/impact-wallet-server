@@ -5,11 +5,11 @@ import { Member, MemberDocument } from '../members/schema/member.schema';
 import { MemberProspect, MemberProspectDocument, Offer, OfferDocument } from './schema/offer.schema';
 import { OfferLiteDto } from './dto/offer.lite.dto';
 import { UsersService } from '../users/users.service';
-import { OrgDocument } from '../orgs/schema/org.schema';
+import { Org, OrgDocument } from '../orgs/schema/org.schema';
 import { OfferStatusBodyDto, OfferStatusDto } from './dto/offer-status.dto';
 import { OfferStatus } from './enum/statuses.enum';
 import { OffersServiceBase } from './offers.service.base';
-import { cloneDeep, defaultTo, filter, first, flatten, identity, isNil } from 'lodash';
+import { cloneDeep, defaultTo, filter, first, flatten, get, identity, isNil } from 'lodash';
 import { EquityType } from '../members/enum/equity-type.enum';
 import { UserDocument } from '../users/schema/user.schema';
 import { ApiService } from '../api-service/api.service';
@@ -30,6 +30,7 @@ export class OffersLiteService extends OffersServiceBase {
     @InjectModel(Member.name) private memberRepository: Model<MemberDocument>,
     @InjectModel(MemberProspect.name) private memberProspectModel: Model<MemberProspectDocument>,
     @InjectModel(SaleOffer.name) saleOfferRepository: Model<SaleOfferDocument>,
+    @InjectModel(Org.name) private orgRepository: Model<OrgDocument>,
     private readonly userService: UsersService,
     private readonly apiService: ApiService,
     private readonly paymentService: PaymentService,
@@ -260,7 +261,6 @@ export class OffersLiteService extends OffersServiceBase {
         { path: 'orgUser', select: '+password' },
       ]);
       const balance = await this.apiService.getUSDCBalance(buyer.wallet);
-      const lamportsAmount = offer.tokensAmount * LAMPORTS_PER_SOL;
 
       offer.status = OfferStatus.Approved;
       offer.buyer = buyer._id;
@@ -271,17 +271,22 @@ export class OffersLiteService extends OffersServiceBase {
       if (balance < paymentInfo.price) {
         throw new BadRequestException({ message: 'Insufficient funds' });
       }
-      if (member.lamportsEarned < lamportsAmount) {
+      const equityAmountAvailable = get(member, 'equity.amount', 0);
+      if (equityAmountAvailable < offer.tokensAmount) {
         throw new BadRequestException({ message: 'Not enough tokens to sell' });
       }
       payment = await this.paymentService.sellAssetsInApp(offer, paymentInfo);
       const comissionAmount = ((payment.amount * LAMPORTS_PER_SOL) * +process.env.COMISSION) / LAMPORTS_PER_SOL;
+      const rootOrg = await this.orgRepository.findOne({ wallet: process.env.ROOT_PUBKEY }, '+password');
       const senderPk = await this.apiService.getPK(buyer.wallet, buyer.password);
       const sellerPk = await this.apiService.getPK(seller.wallet, seller.password);
-      const txnHash = await this.apiService.transferUSDC([
+      const transferFn = this.apiService.transferUSDC.bind(this.apiService, [
         { senderPk, wallet: seller.wallet, amount: payment.amount },
-        { senderPk: sellerPk, wallet: process.env.ROOT_PUBKEY, amount: comissionAmount },
+        { senderPk: sellerPk, wallet: rootOrg.wallet, amount: comissionAmount },
       ]);
+      const txnHash = await transferFn();
+      await this.apiService.confirmTxnWithRetry(txnHash, transferFn);
+      await this.paymentService.handleRegularPayment(rootOrg, { payment_amount: comissionAmount }, false);
 
       payment.txnHash = txnHash;
       await payment.save();
