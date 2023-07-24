@@ -154,7 +154,7 @@ export class OffersLiteService extends OffersServiceBase {
       }
       const payment = await this.paymentService.receiveInvestmentInApp(memberProspect, org, paymentInfo);
       const pk = await this.apiService.getPK(account.wallet, (await account.password));
-      const transferFn = this.apiService.transferUSDC.bind(this.apiService, pk, [{ wallet: org.wallet, amount: payment.amount }]);
+      const transferFn = this.apiService.transferUSDC.bind(this.apiService, [{ senderPk: pk, wallet: org.wallet, amount: payment.amount }]);
       let txnHash = await transferFn();
       txnHash = await this.apiService.confirmTxnWithRetry(txnHash, transferFn);
 
