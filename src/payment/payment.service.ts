@@ -254,13 +254,14 @@ export class PaymentService {
       if (isNil(holder.user) && !isNil(holder.orgUser)) {
         const orgUser = holder.orgUser as OrgDocument;
         orgMembers.push({ orgUser, amount: amount / LAMPORTS_PER_SOL, isWithCommission });
-      } else if (isWithCommission) {
-        const user = holder.user as UserDocument;
-        const userPk = await this.apiService.getPK(user.wallet, user.password);
-        const comissionAmount = (amount * +process.env.COMISSION) / LAMPORTS_PER_SOL;
-        membersWithAmount.push({ senderPk: userPk, wallet: process.env.ROOT_PUBKEY, amount: comissionAmount });
-        orgMembers.push({ orgUser: rootOrg, amount: comissionAmount, isWithCommission: false });
       }
+      // } else if (isWithCommission) {
+      //   const user = holder.user as UserDocument;
+      //   const userPk = await this.apiService.getPK(user.wallet, user.password);
+      //   const comissionAmount = (amount * +process.env.COMISSION) / LAMPORTS_PER_SOL;
+      //   membersWithAmount.push({ senderPk: userPk, wallet: process.env.ROOT_PUBKEY, amount: comissionAmount });
+      //   orgMembers.push({ orgUser: rootOrg, amount: comissionAmount, isWithCommission: false });
+      // }
     });
 
     const signature = await this.apiService.transferUSDC(membersWithAmount);
