@@ -157,6 +157,8 @@ export class PaymentService {
       return;
     }
 
+    console.log(`Handling payment for ${org.name}`);
+
     try {
       if (payment.type === PaymentType.Regular) {
         this.handleRegularPayment(org, body)
@@ -166,8 +168,9 @@ export class PaymentService {
       } else if (payment.type === PaymentType.AssetsSell) {
         await this.handleAssetsSale(payment);
       }
+      console.log(`Payment for ${org.name} handled successfully`);
     } catch (err) {
-      console.log(err);
+      console.log('Error handling payment: ', err);
       throw err;
     }
   }
