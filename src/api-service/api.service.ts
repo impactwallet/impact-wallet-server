@@ -6,7 +6,7 @@ import { AxiosRequestConfig } from 'axios';
 import { Keypair, Transaction, Connection, clusterApiUrl, Cluster, PublicKey, TransactionSignature, LAMPORTS_PER_SOL, SystemProgram, ParsedTransactionWithMeta, TransactionInstruction } from '@solana/web3.js';
 import { getAssociatedTokenAddress, createTransferInstruction, createAssociatedTokenAccountInstruction, createMintToInstruction, getAssociatedTokenAddressSync, getAccount, TokenAccountNotFoundError, TokenInvalidAccountOwnerError } from '@solana/spl-token';
 import { decode } from 'bs58';
-import { get, isEmpty, isNil } from 'lodash';
+import { flatten, get, isEmpty, isNil } from 'lodash';
 import { Org } from '../orgs/schema/org.schema';
 import { ConfigService } from '@nestjs/config';
 
@@ -79,54 +79,64 @@ export class ApiService {
     }
   }
 
+  async createTransferInstructions(mint: string, recepients: { senderPk: string, wallet: string, amount: number }[]): Promise<TransactionInstruction[]> {
+    const multiplier = mint === this.usdcMint ? 1000000 : LAMPORTS_PER_SOL;
+    const mintPublicKey = new PublicKey(mint);
+    const instructionsPromises = recepients.map(async ({ senderPk, wallet, amount }) => {
+      console.log('amount:', amount);
+      console.log('wallet:', wallet);
+      const senderKeypair = Keypair.fromSecretKey(decode(senderPk));
+      const senderAssociatedTokenAddress = await getAssociatedTokenAddress(
+        mintPublicKey,
+        senderKeypair.publicKey,
+      );
+      const payer = new PublicKey(process.env.FEE_PAYER);
+      const recipientPublicKey = new PublicKey(wallet);
+      const instructions = [];
+
+      const recipientAssociatedTokenAddress = await getAssociatedTokenAddress(
+        mintPublicKey,
+        recipientPublicKey,
+      );
+
+      try {
+        await getAccount(this.connection, recipientAssociatedTokenAddress);
+      } catch (error) {
+        if (error instanceof TokenAccountNotFoundError || error instanceof TokenInvalidAccountOwnerError) {
+          instructions.push(
+            createAssociatedTokenAccountInstruction(
+              payer,
+              recipientAssociatedTokenAddress,
+              new PublicKey(wallet),
+              mintPublicKey,
+            )
+          );
+        }
+      }
+
+      instructions.push(
+        createTransferInstruction(
+          senderAssociatedTokenAddress,
+          recipientAssociatedTokenAddress,
+          senderKeypair.publicKey,
+          Math.round(amount * multiplier),
+        )
+      );
+      return instructions;
+    });
+    let instructions = await Promise.all(instructionsPromises);
+    return flatten(instructions);
+  }
+
   async transfer(mint: string, recepients: { senderPk: string, wallet: string, amount: number }[], retries = 0) {
     try {
-      const multiplier = mint === this.usdcMint ? 1000000 : LAMPORTS_PER_SOL;
-      const mintPublicKey = new PublicKey(mint);
       const txn = new Transaction();
 
-      const promises = recepients.map(async ({ senderPk, wallet, amount }) => {
-        console.log('amount:', amount);
-        console.log('wallet:', wallet);
-        const senderKeypair = Keypair.fromSecretKey(decode(senderPk));
-        const senderAssociatedTokenAddress = await getAssociatedTokenAddress(
-          mintPublicKey,
-          senderKeypair.publicKey,
-        );
-        const payer = new PublicKey(process.env.FEE_PAYER);
-        const recipientPublicKey = new PublicKey(wallet);
+      const instructions = await this.createTransferInstructions(mint, recepients); 
 
-        const recipientAssociatedTokenAddress = await getAssociatedTokenAddress(
-          mintPublicKey,
-          recipientPublicKey,
-        );
-
-        try {
-          await getAccount(this.connection, recipientAssociatedTokenAddress);
-        } catch (error) {
-          if (error instanceof TokenAccountNotFoundError || error instanceof TokenInvalidAccountOwnerError) {
-            txn.add(
-              createAssociatedTokenAccountInstruction(
-                payer,
-                recipientAssociatedTokenAddress,
-                new PublicKey(wallet),
-                mintPublicKey,
-              )
-            );
-          }
-        }
-
-        txn.add(
-          createTransferInstruction(
-            senderAssociatedTokenAddress,
-            recipientAssociatedTokenAddress,
-            senderKeypair.publicKey,
-            Math.round(amount * multiplier),
-          )
-        );
+      instructions.forEach((instruction) => {
+        txn.add(instruction);
       });
-
-      await Promise.all(promises);
 
       const blockhash = (await this.connection.getLatestBlockhash('finalized'));
       txn.recentBlockhash = blockhash.blockhash;
