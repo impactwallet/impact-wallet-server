@@ -108,7 +108,7 @@ export class OffersService extends OffersServiceBase {
 
         payment.txnHash = txnHash;
         await payment.save();
-        await this.paymentService.handleInvestmentPayment(org, payment, { signature: txnHash });
+        await this.paymentService.handleInvestmentPayment(org, payment);
       } else {
         const newMember = new this.memberRepository(offer.memberProspects[0]);
 

@@ -89,6 +89,7 @@ export class PaymentService {
     member: MemberProspect,
     org: OrgDocument,
     body: ReceiveInvestmentDto,
+    session?: ClientSession,
   ) {
     const newPayment = new this.paymentModel({
       type: PaymentType.Investment,
@@ -97,7 +98,7 @@ export class PaymentService {
       investor: member,
     });
 
-    return newPayment.save();
+    return newPayment.save({ session });
   }
 
   async sellAssets(saleOffer: SaleOfferDocument, body: SellAssetsDto) {
@@ -178,7 +179,7 @@ export class PaymentService {
   async handleInvestmentPayment(
     org: OrgDocument,
     payment: PaymentDocument,
-    body: { signature: string },
+    session?: ClientSession,
   ): Promise<{ member: MemberDocument, memberBeforeUpdate: MemberDocument }> {
     const memberQuery = {
       org: org._id,
@@ -197,7 +198,7 @@ export class PaymentService {
         amount: payment.investor.investorSettings.equityAllocation,
         type: EquityType.Immediately,
       };
-      await member.save();
+      await member.save({ session });
       await member.populate(['user', 'orgUser']);
       memberUser = defaultTo(get(member, 'user') as UserDocument, get(member, 'orgUser') as OrgDocument);
     } else {
@@ -217,12 +218,10 @@ export class PaymentService {
             },
           },
         },
+        { session },
       );
       member = await this.memberModel.findById(member._id).populate(['user', 'orgUser']);
     }
-
-    const username = defaultTo((memberUser as UserDocument).nickname, (memberUser as OrgDocument).username);
-    this.apiService.sendNotification(`${username} just invested ${payment.amount} into ${org.name}:\n\n${body.signature}\n\n${this.apiService.buildExplorerLink('/tx/' + body.signature)}`);
 
     return { member, memberBeforeUpdate };
   }

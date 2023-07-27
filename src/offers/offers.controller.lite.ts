@@ -90,13 +90,8 @@ export class OffersControllerLite {
     ) {
         const account = await this.authService.getAccountFromToken(req);
 
-        const org = await this.orgService.getByOrgId(orgId);
-        if (isNil(org)) {
-            throw new NotFoundException({ message: 'Organization not found' });
-        }
-
         return this.offerServiceLite.updateOfferStatus(
-            org,
+            orgId,
             offerId,
             body,
             account

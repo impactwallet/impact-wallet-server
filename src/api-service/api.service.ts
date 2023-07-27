@@ -158,29 +158,40 @@ export class ApiService {
   }
 
   async createAndSendTxn(instructions: TransactionInstruction[], pks: string[], retries = 0) {
-    try {
-      const txn = new Transaction();
-
-      instructions.forEach((instruction) => {
-        txn.add(instruction);
-      });
-
-      const blockhash = (await this.connection.getLatestBlockhash('finalized'));
-      txn.recentBlockhash = blockhash.blockhash;
-      txn.feePayer = new PublicKey(process.env.FEE_PAYER);
-
-      const serializedTxn = this.createSignedSerializedTxn(txn, pks, false, false);
-      const signature = await this.sendTxn(serializedTxn);
-      return signature;
-    } catch (err) {
-      if (retries > 0) {
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        console.log(`Retrying createAndSendTxn, retries left: ${retries}`);
-        return this.createAndSendTxn(instructions, pks, --retries);
-      }
-      err.message = `Error in createAndSendTxn: ${err.message}`;
-      throw err;
+    const batchSize = 5;
+    const transactionList: Transaction[] = [];
+    const numTransactions = Math.ceil(instructions.length / batchSize);
+    for (let i = 0; i < numTransactions; i++){
+        let bulkTransaction = new Transaction();
+        let lowerIndex = i * batchSize;
+        let upperIndex = (i+1) * batchSize;
+        for (let j = lowerIndex; j < upperIndex; j++){
+            if (instructions[j]) bulkTransaction.add(instructions[j]);  
+        }
+        transactionList.push(bulkTransaction);
     }
+
+    let staggeredTransactions: Promise<string>[] = transactionList.map((transaction, i) => {
+      return (new Promise((resolve, reject) => {
+          setTimeout(() => {
+            this.connection.getLatestBlockhash('finalized')
+              .then(recentHash => {
+                transaction.recentBlockhash = recentHash.blockhash;
+                transaction.feePayer = new PublicKey(process.env.FEE_PAYER);
+              })
+              .then(() => {
+                const serializedTxn = this.createSignedSerializedTxn(transaction, pks, false, false);
+                return this.sendTxn(serializedTxn);
+              })
+              .then(resolve)
+              .catch(reject);
+          }, i * 2000);
+        })
+    )});
+
+    const result = await Promise.allSettled(staggeredTransactions);
+    console.log(`createAndSendTxn result: ${JSON.stringify(result)}`);
+    return result;
   }
 
   async transferUSDC(recepients: { senderPk: string, wallet: string, amount: number }[]) {
@@ -496,7 +507,11 @@ export class ApiService {
     const pks = Array.isArray(fromPrivateKey) ? fromPrivateKey : [fromPrivateKey];
     pks.forEach((pk) => {
       const fromSigner = Keypair.fromSecretKey(decode(pk));
-      transaction.partialSign(fromSigner);
+      const canSign = isEmpty(transaction.signatures) ||
+        transaction.signatures.some((signature) => signature.publicKey.equals(fromSigner.publicKey));
+      if (canSign) {
+        transaction.partialSign(fromSigner);
+      }
     });
     const serializedTxn = transaction.serialize({ requireAllSignatures, verifySignatures }).toString('base64');
     return serializedTxn;
