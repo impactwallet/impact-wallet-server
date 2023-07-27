@@ -573,23 +573,42 @@ export class OrgsService {
         if (isNil(org)) {
             throw new NotFoundException({ message: 'Organization not found' });
         }
-        org.username =
-            isDefined(updateOrgDto.username)
-                ? updateOrgDto.username
-                : org.username;
-        org.name =
-            isDefined(updateOrgDto.name) ? updateOrgDto.name : org.name;
-        org.description =
-            isDefined(updateOrgDto.description)
-                ? updateOrgDto.description
-                : org.description;
-        org.link =
-            isDefined(updateOrgDto.link) ? updateOrgDto.link : org.link;
-        org.settings.treasury =
-            isDefined(updateOrgDto.settings?.treasury)
-                ? updateOrgDto.settings?.treasury
-                : org.settings.treasury;
+        org.username = isDefined(updateOrgDto.username)
+            ? updateOrgDto.username
+            : org.username;
+        org.name = isDefined(updateOrgDto.name) ? updateOrgDto.name : org.name;
+        org.description = isDefined(updateOrgDto.description)
+            ? updateOrgDto.description
+            : org.description;
+        org.link = isDefined(updateOrgDto.link) ? updateOrgDto.link : org.link;
+        org.settings.treasury = isDefined(updateOrgDto.settings?.treasury)
+            ? updateOrgDto.settings?.treasury
+            : org.settings.treasury;
 
-        return this.orgRepository.findOneAndUpdate( {_id: org._id}, { $set:  org.toObject()  }, { new: true });
+        return this.orgRepository.findOneAndUpdate(
+            { _id: org._id },
+            { $set: org.toObject() },
+            { new: true }
+        );
+    }
+
+    async uploadLogo(logo: any): Promise<string> {
+        if (!logo) throw new BadRequestException('Logo is required');
+        const resized = await resizeBuffer(logo.buffer);
+        const fileName = `${uuid()}.jpg`;
+        await this.s3Service.putFile(fileName, resized);
+        return `/orgs/logo/${fileName}`;
+    }
+
+    async deleteLogo(deleteLogos: string[]) {
+        if (!deleteLogos || deleteLogos.length === 0)
+            throw new BadRequestException('File names is required');
+        try {
+            deleteLogos.forEach((fileName) => {
+                this.s3Service.deleteFile(fileName);
+            });
+        } catch (error) {
+            throw new HttpException({ error }, 500);
+        }
     }
 }

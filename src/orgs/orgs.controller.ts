@@ -17,6 +17,7 @@ import {
     Put
 } from '@nestjs/common';
 import {
+    ApiBody,
     ApiConsumes,
     ApiOperation,
     ApiResponse,
@@ -25,7 +26,7 @@ import {
 import { Org } from './schema/org.schema';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { OrgsService } from './orgs.service';
-import { CreateOrgDto } from './dto/create-org.dto';
+import { CreateOrgDto, OrgSettingsDto } from './dto/create-org.dto';
 import { OrgsFilter } from './dto/orgs.filter.dto';
 import { MemberDto } from 'src/members/dto/members.dto';
 import { Member } from 'src/members/schema/member.schema';
@@ -40,6 +41,10 @@ import { PaymentService } from '../payment/payment.service';
 import { SendUsdcDto } from '../users/dto/send-usdc.dto';
 import { AuthService } from '../auth/auth.service';
 import { UpdateOrgDto } from './dto/update-org.dto';
+import { DeleteAvatarsRequestDto } from '../users/dto/delete-avatars.request.dto';
+import { User } from '../users/schema/user.schema';
+import { UpdateUserDto } from '../users/dto/update-user.dto';
+import { DeleteLogosRequestDto } from './dto/delete-logos.request.dto';
 
 @ApiTags('Orgs')
 @Controller('orgs')
@@ -66,7 +71,140 @@ export class OrgsController {
     @ApiResponse({ status: 201, type: Org })
     @Post()
     @HttpCode(HttpStatus.CREATED)
-    @ApiConsumes('form-data')
+    @ApiBody({
+        schema: {
+            type: 'object',
+            required: ['nickname', 'name', 'logo'],
+            properties: {
+                nickname: {
+                    type: 'string',
+                    example: 'vitcoin'
+                },
+                name: {
+                    type: 'string',
+                    example: 'Dmitry Vitko'
+                },
+                description: {
+                    type: 'string',
+                    example: 'Turn your time into equity'
+                },
+                link: {
+                    type: 'string',
+                    example: 'https://equitywallet.org'
+                },
+                settings: {
+                    type: 'object',
+                    properties: {
+                        treasury: {
+                            type: 'number',
+                            example: 30
+                        }
+                    }
+                },
+                logo: {
+                    description: `The image to upload (image/jpeg, image/png, image/tiff). Max size: 20MB`,
+                    type: 'string',
+                    format: 'binary'
+                },
+                member: {
+                    type: 'object',
+                    properties: {
+                        occupation: {
+                            type: 'string',
+                            example: 'CEO',
+                            description: 'Occupation in organization'
+                        },
+                        role: {
+                            type: 'string',
+                            example: 'Admin',
+                            enum: ['Admin', 'Member', 'Investor'],
+                            description: 'Role in organization'
+                        },
+                        impactRatio: {
+                            type: 'number',
+                            example: 1.5,
+                            description: 'Impact ratio'
+                        },
+                        equity: {
+                            type: 'object',
+                            properties: {
+                                type: {
+                                    type: 'string',
+                                    example: 'Immediately',
+                                    enum: ['Immediately', 'DuringPeriod']
+                                },
+                                period: {
+                                    type: 'string',
+                                    example: 'Days',
+                                    enum: ['Days', 'Weeks', 'Months', 'Years']
+                                }
+                            }
+                        },
+                        compensation: {
+                            type: 'object',
+                            properties: {
+                                amount: {
+                                    type: 'number',
+                                    example: 3000
+                                },
+                                type: {
+                                    type: 'string',
+                                    example: 'Immediately',
+                                    enum: ['Immediately', 'DuringPeriod']
+                                },
+                                period: {
+                                    type: 'string',
+                                    example: 'Days',
+                                    enum: ['Days', 'Weeks', 'Months', 'Years']
+                                }
+                            }
+                        },
+                        isAutoContributing: {
+                            type: 'boolean',
+                            example: true,
+                            description: 'Auto contribution'
+                        },
+                        hoursPerWeek: {
+                            type: 'number',
+                            example: 40,
+                            default: 40,
+                            description: 'Hours per week',
+                            maximum: 112
+                        },
+                        agreement: {
+                            type: 'string',
+                            example: 'agreement.pdf',
+                            description: 'Work agreement'
+                        },
+                        user: {
+                            type: 'string',
+                            example: '0b1bd52d-7d8e-4518-b0a3-13ae5ad52d47',
+                            description: 'User id'
+                        },
+                        orgUser: {
+                            type: 'string',
+                            example: '49ad41f6-abc5-47c2-b8c9-a256d1203f8c',
+                            description: 'Org user id'
+                        },
+                        investorSettings: {
+                            type: 'object',
+                            properties: {
+                                investmentAmount: {
+                                    type: 'number',
+                                    example: 3000
+                                },
+                                equityAllocation: {
+                                    type: 'number',
+                                    example: 10
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    })
+    @ApiConsumes('multipart/form-data')
     @UseInterceptors(FileInterceptor('logo'))
     @ApiMockHeader('If true wallet and token creations are skipped')
     createOrg(
@@ -223,5 +361,43 @@ export class OrgsController {
         const account = await this.authService.getAccountFromToken(req);
         await this.authService.permissionCheck(orgId, account);
         return this.orgsService.updateOrg(updateOrgDto, orgId);
+    }
+
+    @ApiOperation({ summary: 'Update logo' })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                file: {
+                    description: `The image to upload (image/jpeg, image/png, image/tiff). Max size: 20MB`,
+                    type: 'string',
+                    format: 'binary'
+                }
+            }
+        }
+    })
+    @ApiConsumes('multipart/form-data')
+    @ApiResponse({ status: 200 })
+    @Post('/upload-logo')
+    @UseInterceptors(FileInterceptor('logo'))
+    @HttpCode(HttpStatus.OK)
+    async uploadLogo(
+        @UploadedFile() logo,
+        @Req() req: Request
+    ): Promise<string> {
+        await this.authService.getAccountFromToken(req);
+        return this.orgsService.uploadLogo(logo);
+    }
+
+    @ApiOperation({ summary: 'Delete avatar' })
+    @ApiResponse({ status: 200 })
+    @Post('/delete-avatars')
+    @HttpCode(HttpStatus.OK)
+    async deleteAvatar(
+        @Body() deleteLogosDto: DeleteLogosRequestDto,
+        @Req() req: Request
+    ) {
+        await this.authService.getAccountFromToken(req);
+        return this.orgsService.deleteLogo(deleteLogosDto.fileName);
     }
 }
