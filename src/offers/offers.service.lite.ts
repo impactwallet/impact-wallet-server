@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { Connection, Model, Types } from 'mongoose';
 import { Member, MemberDocument } from '../members/schema/member.schema';
 import { MemberProspect, MemberProspectDocument, Offer, OfferDocument } from './schema/offer.schema';
 import { OfferLiteDto } from './dto/offer.lite.dto';
@@ -26,7 +26,8 @@ import { areObjectIdsEqual } from '../utils/mongo';
 @Injectable()
 export class OffersLiteService extends OffersServiceBase {
   constructor(
-  @InjectModel(Offer.name) offerRepository: Model<OfferDocument>,
+    @InjectConnection() private readonly connection: Connection,
+    @InjectModel(Offer.name) offerRepository: Model<OfferDocument>,
     @InjectModel(Member.name) private memberRepository: Model<MemberDocument>,
     @InjectModel(MemberProspect.name) private memberProspectModel: Model<MemberProspectDocument>,
     @InjectModel(SaleOffer.name) saleOfferRepository: Model<SaleOfferDocument>,
@@ -250,6 +251,7 @@ export class OffersLiteService extends OffersServiceBase {
 
     switch (body.status) {
     case OfferStatusDto.accepted:
+      const rootOrg = await this.orgRepository.findOne({ wallet: process.env.ROOT_PUBKEY }, '+password');
       const member = await this.memberRepository.findOne({
         org: org._id,
         $or: [
@@ -275,22 +277,37 @@ export class OffersLiteService extends OffersServiceBase {
       if (equityAmountAvailable < offer.tokensAmount) {
         throw new BadRequestException({ message: 'Not enough tokens to sell' });
       }
-      payment = await this.paymentService.sellAssetsInApp(offer, paymentInfo);
-      const comissionAmount = ((payment.amount * LAMPORTS_PER_SOL) * +process.env.COMISSION) / LAMPORTS_PER_SOL;
-      const rootOrg = await this.orgRepository.findOne({ wallet: process.env.ROOT_PUBKEY }, '+password');
-      const senderPk = await this.apiService.getPK(buyer.wallet, buyer.password);
-      const sellerPk = await this.apiService.getPK(seller.wallet, seller.password);
-      const transferFn = this.apiService.transferUSDC.bind(this.apiService, [
-        { senderPk, wallet: seller.wallet, amount: payment.amount },
-        { senderPk: sellerPk, wallet: rootOrg.wallet, amount: comissionAmount },
-      ]);
-      const txnHash = await transferFn();
-      await this.apiService.confirmTxnWithRetry(txnHash, transferFn);
-      await this.paymentService.handleRegularPayment(rootOrg, { payment_amount: comissionAmount }, false);
+      const comissionAmount = ((offer.price * LAMPORTS_PER_SOL) * +process.env.COMISSION) / LAMPORTS_PER_SOL;
+      const session = await this.connection.startSession();
+      await session.withTransaction(async () => {
+        payment = await this.paymentService.sellAssetsInApp(offer, paymentInfo, session);
+        const buyerPk = await this.apiService.getPK(buyer.wallet, buyer.password);
+        const sellerPk = await this.apiService.getPK(seller.wallet, seller.password);
+        const transferUSDCInstructions = await this.apiService.createTransferInstructions(
+          this.apiService.usdcMint,
+          [
+            { senderPk: buyerPk, wallet: seller.wallet, amount: payment.amount },
+            { senderPk: sellerPk, wallet: rootOrg.wallet, amount: comissionAmount },
+          ],
+        );
+        const transferTokenInstructions = await this.paymentService.handleAssetsSale(payment, session);
+        const txnHash = await this.apiService.createAndSendTxn([
+          ...transferUSDCInstructions,
+          ...transferTokenInstructions,
+        ], [buyerPk, sellerPk]);
+        payment.txnHash = txnHash;
+        offer.txnHash = txnHash;
+        await payment.save({ session });
+      });
+      await session.endSession();
 
-      payment.txnHash = txnHash;
-      await payment.save();
-      await this.paymentService.handleAssetsSale(payment);
+      const buyerUsername = defaultTo((buyer as UserDocument).nickname, (buyer as OrgDocument).username);
+      const sellerUsername = defaultTo((seller as UserDocument).nickname, (seller as OrgDocument).username);
+      this.apiService.sendNotification(`${buyerUsername} just bought ${payment.sale.tokensAmount} ${org.name} impact shares from ${sellerUsername} for ${payment.amount} USDC:\n\n${payment.txnHash}\n\n${this.apiService.buildExplorerLink('/tx/' + payment.txnHash)}`);
+
+      // Our comission
+      this.paymentService.handleRegularPayment(rootOrg, { payment_amount: comissionAmount }, false)
+        .catch((error) => console.error(`Error while handling comission payment: ${error}`));
       break;
     case OfferStatusDto.declined:
       offer.status = OfferStatus.Declined;

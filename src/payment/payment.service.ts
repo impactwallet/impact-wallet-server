@@ -126,14 +126,14 @@ export class PaymentService {
     return newPayment.save();
   }
 
-  sellAssetsInApp(saleOffer: SaleOfferDocument, body: SellAssetsDto) {
+  sellAssetsInApp(saleOffer: SaleOfferDocument, body: SellAssetsDto, session?: ClientSession) {
     const newPayment = new this.paymentModel({
       type: PaymentType.AssetsSell,
       amount: body.price,
       sale: saleOffer,
     });
 
-    return newPayment.save();
+    return newPayment.save({ session });
   }
 
   async handlePayment(headers: any, body: any) {
@@ -287,7 +287,7 @@ export class PaymentService {
     );
   }
 
-  async handleAssetsSale(payment: PaymentDocument) {
+  async handleAssetsSale(payment: PaymentDocument, session?: ClientSession) {
     const member = await this.memberModel.findOne({
       $or: [
         { user: payment.sale.seller },
@@ -306,13 +306,10 @@ export class PaymentService {
     const buyerMemberField = buyer instanceof this.orgModel ? 'orgUser' : 'user';
     const lamportsAmount = payment.sale.tokensAmount * LAMPORTS_PER_SOL;
 
-    const transferFn = this.transfer.bind(this, memberUser, buyer, org.mint, payment.sale.tokensAmount);
-    let signature = await transferFn();
-    signature = await this.apiService.confirmTxnWithRetry(signature, transferFn);
-
-    await this.saleOfferModel.findOneAndUpdate(
-      { _id: payment.sale._id },
-      { $set: { txnHash: signature } },
+    const senderPk = await this.apiService.getPK(memberUser.wallet, memberUser.password);
+    const transferInstructions = await this.apiService.createTransferInstructions(
+      org.mint,
+      [{ senderPk, wallet: buyer.wallet, amount: payment.sale.tokensAmount }],
     );
 
     const buyerMember = await this.memberModel.findOne({
@@ -332,14 +329,14 @@ export class PaymentService {
           type: EquityType.Immediately,
         },
       });
-      await newMember.save();
+      await newMember.save({ session });
     } else {
       buyerMember.lamportsEarned += lamportsAmount;
       buyerMember.equity = {
         amount: get(buyerMember, 'equity.amount', 0) + payment.sale.tokensAmount,
         type: EquityType.Immediately,
       };
-      await buyerMember.save();
+      await buyerMember.save({ session });
     }
 
     await this.memberModel.findOneAndUpdate(
@@ -350,16 +347,9 @@ export class PaymentService {
           'equity.amount': -payment.sale.tokensAmount,
         },
       },
+      { session },
     );
 
-    const buyerUsername = defaultTo((buyer as UserDocument).nickname, (buyer as OrgDocument).username);
-    const sellerUsername = defaultTo((memberUser as UserDocument).nickname, (memberUser as OrgDocument).username);
-    this.apiService.sendNotification(`${buyerUsername} just bought ${payment.sale.tokensAmount} ${org.name} impact shares from ${sellerUsername} for ${payment.amount} USDC:\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
+    return transferInstructions;
   }
-
-  async transfer(source: any, destination: any, mint: string, amount: number) {
-    const senderPk = await this.apiService.getPK(source.wallet, source.password);
-    return this.apiService.transfer(mint, [{ senderPk, wallet: destination.wallet, amount: amount }]);
-  }
-
 }
