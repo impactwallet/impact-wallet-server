@@ -1,15 +1,34 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+    BadRequestException,
+    ForbiddenException,
+    Injectable,
+    NotFoundException
+} from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
 import { Member, MemberDocument } from '../members/schema/member.schema';
-import { MemberProspect, MemberProspectDocument, Offer, OfferDocument } from './schema/offer.schema';
+import {
+    MemberProspect,
+    MemberProspectDocument,
+    Offer,
+    OfferDocument
+} from './schema/offer.schema';
 import { OfferLiteDto } from './dto/offer.lite.dto';
 import { UsersService } from '../users/users.service';
 import { Org, OrgDocument } from '../orgs/schema/org.schema';
 import { OfferStatusBodyDto, OfferStatusDto } from './dto/offer-status.dto';
 import { OfferStatus } from './enum/statuses.enum';
 import { OffersServiceBase } from './offers.service.base';
-import { cloneDeep, defaultTo, filter, first, flatten, get, identity, isNil } from 'lodash';
+import {
+    cloneDeep,
+    defaultTo,
+    filter,
+    first,
+    flatten,
+    get,
+    identity,
+    isNil
+} from 'lodash';
 import { EquityType } from '../members/enum/equity-type.enum';
 import { UserDocument } from '../users/schema/user.schema';
 import { ApiService } from '../api-service/api.service';
@@ -25,343 +44,564 @@ import { areObjectIdsEqual } from '../utils/mongo';
 
 @Injectable()
 export class OffersLiteService extends OffersServiceBase {
-  constructor(
-    @InjectConnection() private readonly connection: Connection,
-    @InjectModel(Offer.name) offerRepository: Model<OfferDocument>,
-    @InjectModel(Member.name) private memberRepository: Model<MemberDocument>,
-    @InjectModel(MemberProspect.name) private memberProspectModel: Model<MemberProspectDocument>,
-    @InjectModel(SaleOffer.name) saleOfferRepository: Model<SaleOfferDocument>,
-    @InjectModel(Org.name) private orgRepository: Model<OrgDocument>,
-    private readonly userService: UsersService,
-    private readonly apiService: ApiService,
-    private readonly paymentService: PaymentService,
-    private readonly orgService: OrgsService,
-  ) {
-    super(offerRepository, saleOfferRepository);
-  }
-
-  async createLiteOffer(orgId: string, offer: OfferLiteDto) {
-    offer.org = orgId;
-    const newOffer = new this.offerRepository(offer);
-    
-    if (offer.type === OfferType.Investor) {
-      newOffer.memberProspects = [];
-    } else {
-      newOffer.memberProspects = [new this.memberProspectModel(offer.memberProspect)];
-    }
-    try {
-      return await newOffer.save();
-    } catch (error) {
-      throw new BadRequestException({ message: error.message });
-    }
-  }
-
-  async updateOfferStatus(orgId: string, offerId: string, body: OfferStatusBodyDto, account: AccountModel) {
-    const org = await this.orgService.getByOrgId(orgId, '+password');
-    if (isNil(org)) {
-        throw new NotFoundException({ message: 'Organization not found' });
+    constructor(
+        @InjectConnection() private readonly connection: Connection,
+        @InjectModel(Offer.name) offerRepository: Model<OfferDocument>,
+        @InjectModel(Member.name)
+        private memberRepository: Model<MemberDocument>,
+        @InjectModel(MemberProspect.name)
+        private memberProspectModel: Model<MemberProspectDocument>,
+        @InjectModel(SaleOffer.name)
+        saleOfferRepository: Model<SaleOfferDocument>,
+        @InjectModel(Org.name) private orgRepository: Model<OrgDocument>,
+        private readonly userService: UsersService,
+        private readonly apiService: ApiService,
+        private readonly paymentService: PaymentService,
+        private readonly orgService: OrgsService
+    ) {
+        super(offerRepository, saleOfferRepository);
     }
 
-    const offer = await this.getOrgOfferById(org._id.toString(), offerId);
+    async createLiteOffer(orgId: string, offer: OfferLiteDto) {
+        offer.org = orgId;
+        const newOffer = new this.offerRepository(offer);
 
-    if (offer.status !== OfferStatus.Pending) {
-      throw new ForbiddenException('Offer already accepted/declined');
-    }
-
-    if (offer.type === OfferType.Investor) {
-      this.updateInvestOfferStatus(org, offer, body, account)
-        .catch((error) => console.error(`Error while updating invest offer status: ${error}`));
-    } else {
-      return this.updateMemberOfferStatus(org, offer, body, account);
-    }
-  }
-
-  async updateMemberOfferStatus(org: OrgDocument, offer: OfferDocument, body: OfferStatusBodyDto, account: AccountModel) {
-    const memberField = account.isUser ? 'user' : 'orgUser';
-    const memberProspect = first(offer.memberProspects);
-
-    switch (body.status) {
-    case OfferStatusDto.accepted:
-      memberProspect[memberField] = account.id.toString();
-      memberProspect.org = org._id.toString();
-
-      offer.status = OfferStatus.Approved;
-      const newMember = new this.memberRepository(memberProspect.toObject());
-      if (!isNil(newMember.equity) && newMember.equity.type === EquityType.Immediately) {
-        newMember.lamportsEarned = newMember.equity.amount * LAMPORTS_PER_SOL;
-        this.collectEquity(org, newMember, newMember.equity.amount, [], account);
-      }
-      await newMember.save();
-
-      break;
-    case OfferStatusDto.declined:
-      offer.status = OfferStatus.Declined;
-      break;
-    }
-
-    return offer.save();
-  }
-
-  async updateInvestOfferStatus(org: OrgDocument, offer: OfferDocument, body: OfferStatusBodyDto, account: AccountModel) {
-    const memberField = account.isUser ? 'user' : 'orgUser';
-
-    const investedMembersMap = new Map<string, MemberProspectDocument>();
-    offer.memberProspects.forEach((mp) => {
-      investedMembersMap.set(mp[memberField].toString(), cloneDeep(mp.toObject()));
-    });
-    const investedAmount = Array.from(investedMembersMap.values())
-      .reduce((acc, mp) => acc + mp.investorSettings.investmentAmount, 0);
-    if (offer.investorSettings.amount < investedAmount + body.amount) {
-      throw new BadRequestException({
-        message: `Сannot invest more than: ${(offer.investorSettings.amount - investedAmount)}`,
-        investedAmount,
-      });
-    }
-    const equityAllocation =  (body.amount * offer.investorSettings.equity) / offer.investorSettings.amount;
-    let memberProspect = offer.memberProspects.find((mp) => {
-      return areObjectIdsEqual(mp[memberField], account.id);
-    });
-
-    if (isNil(memberProspect)) {
-      memberProspect = new this.memberProspectModel({
-        occupation: 'Investor',
-        role: Role.Investor,
-        equity: {
-          amount: equityAllocation,
-          type: EquityType.Immediately,
-        },
-        investorSettings: {
-          investmentAmount: body.amount,
-          equityAllocation,
-        },
-        org: org._id,
-        [memberField]: account.id,
-      });
-      offer.memberProspects.push(memberProspect);
-    } else {
-      memberProspect.investorSettings.investmentAmount += body.amount;
-      memberProspect.investorSettings.equityAllocation += equityAllocation;
-      memberProspect.equity.amount += equityAllocation;
-    }
-
-    switch (body.status) {
-    case OfferStatusDto.accepted:
-      memberProspect[memberField] = account.id.toString();
-      memberProspect.org = org._id.toString();
-
-      if (investedAmount + body.amount >= offer.investorSettings.amount) {
-        offer.status = OfferStatus.Approved;
-      }
-      let payment: PaymentDocument;
-      let equitySources = '';
-      const rootOrg = await this.orgRepository.findOne({ wallet: process.env.ROOT_PUBKEY }, '+password');
-      const balance = await this.apiService.getUSDCBalance(account.wallet);
-      const paymentInfo = {
-        info: `Investing $${body.amount} for ${equityAllocation}% of equity allocation`,
-        amount: body.amount,
-      };
-      if (balance < paymentInfo.amount) {
-        throw new BadRequestException({ message: 'Insufficient funds' });
-      }
-      const comissionAmount = ((paymentInfo.amount * LAMPORTS_PER_SOL) * +process.env.COMISSION) / LAMPORTS_PER_SOL;
-      const session = await this.connection.startSession();
-      await session.withTransaction(async () => {
-        payment = await this.paymentService.receiveInvestmentInApp(memberProspect, org, paymentInfo, session);
-        const pk = await this.apiService.getPK(account.wallet, (await account.password));
-        const orgPk = await this.apiService.getPK(org.wallet, org.password);
-        const transferUSDCInstructions = await this.apiService.createTransferInstructions(
-          this.apiService.usdcMint,
-          [
-            { senderPk: pk, wallet: org.wallet, amount: payment.amount },
-            { senderPk: orgPk, wallet: rootOrg.wallet, amount: comissionAmount },
-          ],
-        );
-
-        const { member, memberBeforeUpdate } = await this.paymentService.handleInvestmentPayment(org, payment, session);
-        if (!isNil(memberBeforeUpdate)) {
-          investedMembersMap.set(
-            member[memberField].toString(),
-            memberBeforeUpdate.toObject(),
-          );
+        if (offer.type === OfferType.Investor) {
+            newOffer.memberProspects = [];
+            if (
+                offer.investorSettings.amount <
+                offer.investorSettings.minimalInvestment
+            ) {
+                throw new BadRequestException({
+                    message: 'Amount must be greater than minimal investment'
+                });
+            }
+        } else {
+            newOffer.memberProspects = [
+                new this.memberProspectModel(offer.memberProspect)
+            ];
         }
-        const { instructions, pks, usernameToAmount } = await this.collectEquity(
-          org, member, equityAllocation, Array.from(investedMembersMap.values()), account, session,
-        );
-        const result = await this.apiService.createAndSendTxn([
-          ...transferUSDCInstructions,
-          ...instructions,
-        ], [pk, orgPk, ...pks]);
-        payment.txnHash = JSON.stringify(result);
-        await payment.save({ session });
-        equitySources = Object.keys(usernameToAmount).reduce((acc, username) => {
-          acc += `${username}: ${usernameToAmount[username]}\n`;
-          return acc;
-        }, '');
-      });
-      await session.endSession();
-
-      this.apiService.sendNotification(`${account.username} just invested ${payment.amount} USDC into ${org.name} and received the equity from:\n\n${equitySources}\n\n${payment.txnHash}`);
-
-      // Our comission
-      this.paymentService.handleRegularPayment(rootOrg, { payment_amount: comissionAmount }, false)
-        .catch((error) => console.error(`Error while handling comission payment: ${error}`));
-      break;
-    case OfferStatusDto.declined:
-      offer.status = OfferStatus.Declined;
-      break;
+        try {
+            return await newOffer.save();
+        } catch (error) {
+            throw new BadRequestException({ message: error.message });
+        }
     }
 
-    return offer.save();
-  }
+    async updateOfferStatus(
+        orgId: string,
+        offerId: string,
+        body: OfferStatusBodyDto,
+        account: AccountModel
+    ) {
+        const org = await this.orgService.getByOrgId(orgId, '+password');
+        if (isNil(org)) {
+            throw new NotFoundException({ message: 'Organization not found' });
+        }
 
-  async collectEquity(
-    org: OrgDocument,
-    newMember: MemberDocument,
-    equityAllocation: number,
-    skipMembers: MemberProspect[],
-    account: AccountModel,
-    session?: ClientSession,
-  ) {
-    if (isNil(newMember.equity) || newMember.equity.type !== EquityType.Immediately) {
-      return;
-    }
-    const instructions = [];
-    const pks = [];
-    const usernameToAmount = {};
-    const skipMembersIds = filter(flatten(skipMembers.map((mp) => [mp.user, mp.orgUser])), identity);
-    const skipAmount = skipMembers.reduce((acc, mp) => acc + mp.equity.amount, 0);
-    await this.memberRepository.find({
-      _id: { $ne: new Types.ObjectId(newMember._id) },
-      user: { $nin: skipMembersIds },
-      orgUser: { $nin: skipMembersIds },
-      org: new Types.ObjectId(org._id),
-      $and: [
-        { equity: { $ne: null } },
-        { 'equity.amount': { $gt: 0 } },
-      ],
-    })
-      .populate([
-        { path: 'user', select: '+password' },
-        { path: 'orgUser', select: '+password' },
-      ])
-      .cursor()
-      .eachAsync(async (member) => {
-        const memberUser = defaultTo(member.user as UserDocument, member.orgUser as OrgDocument);
-        const memberEquityAmountL = member.equity.amount * LAMPORTS_PER_SOL;
-        const equityAllocationL = equityAllocation * LAMPORTS_PER_SOL;
-        const totalEquityAmountL = 100 * LAMPORTS_PER_SOL;
-        const skipAmountL = skipAmount * LAMPORTS_PER_SOL;
-        const amountL = memberEquityAmountL * (equityAllocationL / (totalEquityAmountL - skipAmountL));
-        const amount = amountL / LAMPORTS_PER_SOL;
-        const senderPk = await this.apiService.getPK(memberUser.wallet, memberUser.password);
-        const transferTokenInstructions = await this.apiService.createTransferInstructions(
-          org.mint,
-          [{ senderPk, wallet: account.wallet, amount }],
-        );
-        instructions.push(...transferTokenInstructions);
-        pks.push(senderPk);
-        await this.memberRepository.findOneAndUpdate(
-          { _id: new Types.ObjectId(member._id) },
-          {
-            $inc: {
-              'equity.amount': -amount,
-              lamportsEarned: -(amount * LAMPORTS_PER_SOL),
-            },
-          },
-          { session },
-        );
-        const username = defaultTo((memberUser as UserDocument).nickname, (memberUser as OrgDocument).username);
-        usernameToAmount[username] = amount;
-      });
-    return { instructions, pks, usernameToAmount };
-  }
+        const offer = await this.getOrgOfferById(org._id.toString(), offerId);
 
-  async transfer(source: any, destination: any, mint: string, amount: number) {
-    const senderPk = await this.apiService.getPK(source.wallet, source.password);
-    return this.apiService.transfer(mint, [{ senderPk, wallet: destination.wallet, amount }]);
-  }
+        if (offer.status !== OfferStatus.Pending) {
+            throw new ForbiddenException('Offer already accepted/declined');
+        }
 
-  async updateSaleOfferStatus(offerId: string, body: OfferStatusBodyDto, account: AccountModel) {
-    const offer = await this.getSaleOfferById(offerId, ['org']);
-    await offer.populateSeller('+password');
-    if (offer.status !== OfferStatus.Pending) {
-      throw new ForbiddenException('Offer already accepted/declined');
+        if (offer.type === OfferType.Investor) {
+            if (offer.investorSettings.amount % 2 !== 0) {
+                throw new BadRequestException({
+                    message: 'Amount must be integer'
+                });
+            }
+            if (
+                offer.investorSettings.amount <
+                offer.investorSettings.minimalInvestment
+            ) {
+                throw new BadRequestException({
+                    message: 'Amount must be greater than minimal investment'
+                });
+            }
+
+            this.updateInvestOfferStatus(org, offer, body, account).catch(
+                (error) =>
+                    console.error(
+                        `Error while updating invest offer status: ${error}`
+                    )
+            );
+        } else {
+            return this.updateMemberOfferStatus(org, offer, body, account);
+        }
     }
 
-    const buyer = account.isUser
-      ? await this.userService.getByUserId(account.id.toString(), '+password')
-      : await this.orgService.getByOrgId(account.id.toString(), '+password');
-    const seller = offer.seller as UserDocument | OrgDocument;
-    const org = offer.org as OrgDocument;
-    let payment: PaymentDocument;
+    async updateMemberOfferStatus(
+        org: OrgDocument,
+        offer: OfferDocument,
+        body: OfferStatusBodyDto,
+        account: AccountModel
+    ) {
+        const memberField = account.isUser ? 'user' : 'orgUser';
+        const memberProspect = first(offer.memberProspects);
 
-    switch (body.status) {
-    case OfferStatusDto.accepted:
-      const rootOrg = await this.orgRepository.findOne({ wallet: process.env.ROOT_PUBKEY }, '+password');
-      const member = await this.memberRepository.findOne({
-        org: org._id,
-        $or: [
-          { user: seller._id },
-          { orgUser: seller._id },
-        ],
-      }).populate([
-        { path: 'user', select: '+password' },
-        { path: 'orgUser', select: '+password' },
-      ]);
-      const balance = await this.apiService.getUSDCBalance(buyer.wallet);
+        switch (body.status) {
+            case OfferStatusDto.accepted:
+                memberProspect[memberField] = account.id.toString();
+                memberProspect.org = org._id.toString();
 
-      offer.status = OfferStatus.Approved;
-      offer.buyer = buyer._id;
-      const paymentInfo = {
-        info: `Selling ${offer.tokensAmount} impact shares for $${offer.price}`,
-        price: offer.price,
-      };
-      if (balance < paymentInfo.price) {
-        throw new BadRequestException({ message: 'Insufficient funds' });
-      }
-      const equityAmountAvailable = get(member, 'equity.amount', 0);
-      if (equityAmountAvailable < offer.tokensAmount) {
-        throw new BadRequestException({ message: 'Not enough tokens to sell' });
-      }
-      const comissionAmount = ((offer.price * LAMPORTS_PER_SOL) * +process.env.COMISSION) / LAMPORTS_PER_SOL;
-      const session = await this.connection.startSession();
-      await session.withTransaction(async () => {
-        payment = await this.paymentService.sellAssetsInApp(offer, paymentInfo, session);
-        const buyerPk = await this.apiService.getPK(buyer.wallet, buyer.password);
-        const sellerPk = await this.apiService.getPK(seller.wallet, seller.password);
-        const transferUSDCInstructions = await this.apiService.createTransferInstructions(
-          this.apiService.usdcMint,
-          [
-            { senderPk: buyerPk, wallet: seller.wallet, amount: payment.amount },
-            { senderPk: sellerPk, wallet: rootOrg.wallet, amount: comissionAmount },
-          ],
-        );
-        const transferTokenInstructions = await this.paymentService.handleAssetsSale(payment, session);
-        const result = await this.apiService.createAndSendTxn([
-          ...transferUSDCInstructions,
-          ...transferTokenInstructions,
-        ], [buyerPk, sellerPk]);
-        payment.txnHash = offer.txnHash = JSON.stringify(result);
-        await payment.save({ session });
-      });
-      await session.endSession();
+                offer.status = OfferStatus.Approved;
+                const newMember = new this.memberRepository(
+                    memberProspect.toObject()
+                );
+                if (
+                    !isNil(newMember.equity) &&
+                    newMember.equity.type === EquityType.Immediately
+                ) {
+                    newMember.lamportsEarned =
+                        newMember.equity.amount * LAMPORTS_PER_SOL;
+                    this.collectEquity(
+                        org,
+                        newMember,
+                        newMember.equity.amount,
+                        [],
+                        account
+                    );
+                }
+                await newMember.save();
 
-      const buyerUsername = defaultTo((buyer as UserDocument).nickname, (buyer as OrgDocument).username);
-      const sellerUsername = defaultTo((seller as UserDocument).nickname, (seller as OrgDocument).username);
-      this.apiService.sendNotification(`${buyerUsername} just bought ${payment.sale.tokensAmount} ${org.name} impact shares from ${sellerUsername} for ${payment.amount} USDC:\n\n${payment.txnHash}`);
+                break;
+            case OfferStatusDto.declined:
+                offer.status = OfferStatus.Declined;
+                break;
+        }
 
-      // Our comission
-      this.paymentService.handleRegularPayment(rootOrg, { payment_amount: comissionAmount }, false)
-        .catch((error) => console.error(`Error while handling comission payment: ${error}`));
-      break;
-    case OfferStatusDto.declined:
-      offer.status = OfferStatus.Declined;
-      break;
+        return offer.save();
     }
 
-    await offer.save();
+    async updateInvestOfferStatus(
+        org: OrgDocument,
+        offer: OfferDocument,
+        body: OfferStatusBodyDto,
+        account: AccountModel
+    ) {
+        const memberField = account.isUser ? 'user' : 'orgUser';
 
-    return payment;
-  }
+        const investedMembersMap = new Map<string, MemberProspectDocument>();
+        offer.memberProspects.forEach((mp) => {
+            investedMembersMap.set(
+                mp[memberField].toString(),
+                cloneDeep(mp.toObject())
+            );
+        });
+        const investedAmount = Array.from(investedMembersMap.values()).reduce(
+            (acc, mp) => acc + mp.investorSettings.investmentAmount,
+            0
+        );
+        if (offer.investorSettings.amount < investedAmount + body.amount) {
+            throw new BadRequestException({
+                message: `Сannot invest more than: ${
+                    offer.investorSettings.amount - investedAmount
+                }`,
+                investedAmount
+            });
+        }
+        const equityAllocation =
+            (body.amount * offer.investorSettings.equity) /
+            offer.investorSettings.amount;
+        let memberProspect = offer.memberProspects.find((mp) => {
+            return areObjectIdsEqual(mp[memberField], account.id);
+        });
 
+        if (isNil(memberProspect)) {
+            memberProspect = new this.memberProspectModel({
+                occupation: 'Investor',
+                role: Role.Investor,
+                equity: {
+                    amount: equityAllocation,
+                    type: EquityType.Immediately
+                },
+                investorSettings: {
+                    investmentAmount: body.amount,
+                    equityAllocation
+                },
+                org: org._id,
+                [memberField]: account.id
+            });
+            offer.memberProspects.push(memberProspect);
+        } else {
+            memberProspect.investorSettings.investmentAmount += body.amount;
+            memberProspect.investorSettings.equityAllocation +=
+                equityAllocation;
+            memberProspect.equity.amount += equityAllocation;
+        }
+
+        switch (body.status) {
+            case OfferStatusDto.accepted:
+                memberProspect[memberField] = account.id.toString();
+                memberProspect.org = org._id.toString();
+
+                if (
+                    investedAmount + body.amount >=
+                    offer.investorSettings.amount
+                ) {
+                    offer.status = OfferStatus.Approved;
+                }
+                let payment: PaymentDocument;
+                let equitySources = '';
+                const rootOrg = await this.orgRepository.findOne(
+                    { wallet: process.env.ROOT_PUBKEY },
+                    '+password'
+                );
+                const balance = await this.apiService.getUSDCBalance(
+                    account.wallet
+                );
+                const paymentInfo = {
+                    info: `Investing $${body.amount} for ${equityAllocation}% of equity allocation`,
+                    amount: body.amount
+                };
+                if (balance < paymentInfo.amount) {
+                    throw new BadRequestException({
+                        message: 'Insufficient funds'
+                    });
+                }
+                const comissionAmount =
+                    (paymentInfo.amount *
+                        LAMPORTS_PER_SOL *
+                        +process.env.COMISSION) /
+                    LAMPORTS_PER_SOL;
+                const session = await this.connection.startSession();
+                await session.withTransaction(async () => {
+                    payment = await this.paymentService.receiveInvestmentInApp(
+                        memberProspect,
+                        org,
+                        paymentInfo,
+                        session
+                    );
+                    const pk = await this.apiService.getPK(
+                        account.wallet,
+                        await account.password
+                    );
+                    const orgPk = await this.apiService.getPK(
+                        org.wallet,
+                        org.password
+                    );
+                    const transferUSDCInstructions =
+                        await this.apiService.createTransferInstructions(
+                            this.apiService.usdcMint,
+                            [
+                                {
+                                    senderPk: pk,
+                                    wallet: org.wallet,
+                                    amount: payment.amount
+                                },
+                                {
+                                    senderPk: orgPk,
+                                    wallet: rootOrg.wallet,
+                                    amount: comissionAmount
+                                }
+                            ]
+                        );
+
+                    const { member, memberBeforeUpdate } =
+                        await this.paymentService.handleInvestmentPayment(
+                            org,
+                            payment,
+                            session
+                        );
+                    if (!isNil(memberBeforeUpdate)) {
+                        investedMembersMap.set(
+                            member[memberField].toString(),
+                            memberBeforeUpdate.toObject()
+                        );
+                    }
+                    const { instructions, pks, usernameToAmount } =
+                        await this.collectEquity(
+                            org,
+                            member,
+                            equityAllocation,
+                            Array.from(investedMembersMap.values()),
+                            account,
+                            session
+                        );
+                    const result = await this.apiService.createAndSendTxn(
+                        [...transferUSDCInstructions, ...instructions],
+                        [pk, orgPk, ...pks]
+                    );
+                    payment.txnHash = JSON.stringify(result);
+                    await payment.save({ session });
+                    equitySources = Object.keys(usernameToAmount).reduce(
+                        (acc, username) => {
+                            acc += `${username}: ${usernameToAmount[username]}\n`;
+                            return acc;
+                        },
+                        ''
+                    );
+                });
+                await session.endSession();
+
+                this.apiService.sendNotification(
+                    `${account.username} just invested ${payment.amount} USDC into ${org.name} and received the equity from:\n\n${equitySources}\n\n${payment.txnHash}`
+                );
+
+                // Our comission
+                this.paymentService
+                    .handleRegularPayment(
+                        rootOrg,
+                        { payment_amount: comissionAmount },
+                        false
+                    )
+                    .catch((error) =>
+                        console.error(
+                            `Error while handling comission payment: ${error}`
+                        )
+                    );
+                break;
+            case OfferStatusDto.declined:
+                offer.status = OfferStatus.Declined;
+                break;
+        }
+
+        return offer.save();
+    }
+
+    async collectEquity(
+        org: OrgDocument,
+        newMember: MemberDocument,
+        equityAllocation: number,
+        skipMembers: MemberProspect[],
+        account: AccountModel,
+        session?: ClientSession
+    ) {
+        if (
+            isNil(newMember.equity) ||
+            newMember.equity.type !== EquityType.Immediately
+        ) {
+            return;
+        }
+        const instructions = [];
+        const pks = [];
+        const usernameToAmount = {};
+        const skipMembersIds = filter(
+            flatten(skipMembers.map((mp) => [mp.user, mp.orgUser])),
+            identity
+        );
+        const skipAmount = skipMembers.reduce(
+            (acc, mp) => acc + mp.equity.amount,
+            0
+        );
+        await this.memberRepository
+            .find({
+                _id: { $ne: new Types.ObjectId(newMember._id) },
+                user: { $nin: skipMembersIds },
+                orgUser: { $nin: skipMembersIds },
+                org: new Types.ObjectId(org._id),
+                $and: [
+                    { equity: { $ne: null } },
+                    { 'equity.amount': { $gt: 0 } }
+                ]
+            })
+            .populate([
+                { path: 'user', select: '+password' },
+                { path: 'orgUser', select: '+password' }
+            ])
+            .cursor()
+            .eachAsync(async (member) => {
+                const memberUser = defaultTo(
+                    member.user as UserDocument,
+                    member.orgUser as OrgDocument
+                );
+                const memberEquityAmountL =
+                    member.equity.amount * LAMPORTS_PER_SOL;
+                const equityAllocationL = equityAllocation * LAMPORTS_PER_SOL;
+                const totalEquityAmountL = 100 * LAMPORTS_PER_SOL;
+                const skipAmountL = skipAmount * LAMPORTS_PER_SOL;
+                const amountL =
+                    memberEquityAmountL *
+                    (equityAllocationL / (totalEquityAmountL - skipAmountL));
+                const amount = amountL / LAMPORTS_PER_SOL;
+                const senderPk = await this.apiService.getPK(
+                    memberUser.wallet,
+                    memberUser.password
+                );
+                const transferTokenInstructions =
+                    await this.apiService.createTransferInstructions(org.mint, [
+                        { senderPk, wallet: account.wallet, amount }
+                    ]);
+                instructions.push(...transferTokenInstructions);
+                pks.push(senderPk);
+                await this.memberRepository.findOneAndUpdate(
+                    { _id: new Types.ObjectId(member._id) },
+                    {
+                        $inc: {
+                            'equity.amount': -amount,
+                            lamportsEarned: -(amount * LAMPORTS_PER_SOL)
+                        }
+                    },
+                    { session }
+                );
+                const username = defaultTo(
+                    (memberUser as UserDocument).nickname,
+                    (memberUser as OrgDocument).username
+                );
+                usernameToAmount[username] = amount;
+            });
+        return { instructions, pks, usernameToAmount };
+    }
+
+    async transfer(
+        source: any,
+        destination: any,
+        mint: string,
+        amount: number
+    ) {
+        const senderPk = await this.apiService.getPK(
+            source.wallet,
+            source.password
+        );
+        return this.apiService.transfer(mint, [
+            { senderPk, wallet: destination.wallet, amount }
+        ]);
+    }
+
+    async updateSaleOfferStatus(
+        offerId: string,
+        body: OfferStatusBodyDto,
+        account: AccountModel
+    ) {
+        const offer = await this.getSaleOfferById(offerId, ['org']);
+        await offer.populateSeller('+password');
+        if (offer.status !== OfferStatus.Pending) {
+            throw new ForbiddenException('Offer already accepted/declined');
+        }
+
+        const buyer = account.isUser
+            ? await this.userService.getByUserId(
+                  account.id.toString(),
+                  '+password'
+              )
+            : await this.orgService.getByOrgId(
+                  account.id.toString(),
+                  '+password'
+              );
+        const seller = offer.seller as UserDocument | OrgDocument;
+        const org = offer.org as OrgDocument;
+        let payment: PaymentDocument;
+
+        switch (body.status) {
+            case OfferStatusDto.accepted:
+                const rootOrg = await this.orgRepository.findOne(
+                    { wallet: process.env.ROOT_PUBKEY },
+                    '+password'
+                );
+                const member = await this.memberRepository
+                    .findOne({
+                        org: org._id,
+                        $or: [{ user: seller._id }, { orgUser: seller._id }]
+                    })
+                    .populate([
+                        { path: 'user', select: '+password' },
+                        { path: 'orgUser', select: '+password' }
+                    ]);
+                const balance = await this.apiService.getUSDCBalance(
+                    buyer.wallet
+                );
+
+                offer.status = OfferStatus.Approved;
+                offer.buyer = buyer._id;
+                const paymentInfo = {
+                    info: `Selling ${offer.tokensAmount} impact shares for $${offer.price}`,
+                    price: offer.price
+                };
+                if (balance < paymentInfo.price) {
+                    throw new BadRequestException({
+                        message: 'Insufficient funds'
+                    });
+                }
+                const equityAmountAvailable = get(member, 'equity.amount', 0);
+                if (equityAmountAvailable < offer.tokensAmount) {
+                    throw new BadRequestException({
+                        message: 'Not enough tokens to sell'
+                    });
+                }
+                const comissionAmount =
+                    (offer.price * LAMPORTS_PER_SOL * +process.env.COMISSION) /
+                    LAMPORTS_PER_SOL;
+                const session = await this.connection.startSession();
+                await session.withTransaction(async () => {
+                    payment = await this.paymentService.sellAssetsInApp(
+                        offer,
+                        paymentInfo,
+                        session
+                    );
+                    const buyerPk = await this.apiService.getPK(
+                        buyer.wallet,
+                        buyer.password
+                    );
+                    const sellerPk = await this.apiService.getPK(
+                        seller.wallet,
+                        seller.password
+                    );
+                    const transferUSDCInstructions =
+                        await this.apiService.createTransferInstructions(
+                            this.apiService.usdcMint,
+                            [
+                                {
+                                    senderPk: buyerPk,
+                                    wallet: seller.wallet,
+                                    amount: payment.amount
+                                },
+                                {
+                                    senderPk: sellerPk,
+                                    wallet: rootOrg.wallet,
+                                    amount: comissionAmount
+                                }
+                            ]
+                        );
+                    const transferTokenInstructions =
+                        await this.paymentService.handleAssetsSale(
+                            payment,
+                            session
+                        );
+                    const result = await this.apiService.createAndSendTxn(
+                        [
+                            ...transferUSDCInstructions,
+                            ...transferTokenInstructions
+                        ],
+                        [buyerPk, sellerPk]
+                    );
+                    payment.txnHash = offer.txnHash = JSON.stringify(result);
+                    await payment.save({ session });
+                });
+                await session.endSession();
+
+                const buyerUsername = defaultTo(
+                    (buyer as UserDocument).nickname,
+                    (buyer as OrgDocument).username
+                );
+                const sellerUsername = defaultTo(
+                    (seller as UserDocument).nickname,
+                    (seller as OrgDocument).username
+                );
+                this.apiService.sendNotification(
+                    `${buyerUsername} just bought ${payment.sale.tokensAmount} ${org.name} impact shares from ${sellerUsername} for ${payment.amount} USDC:\n\n${payment.txnHash}`
+                );
+
+                // Our comission
+                this.paymentService
+                    .handleRegularPayment(
+                        rootOrg,
+                        { payment_amount: comissionAmount },
+                        false
+                    )
+                    .catch((error) =>
+                        console.error(
+                            `Error while handling comission payment: ${error}`
+                        )
+                    );
+                break;
+            case OfferStatusDto.declined:
+                offer.status = OfferStatus.Declined;
+                break;
+        }
+
+        await offer.save();
+
+        return payment;
+    }
 }
