@@ -76,10 +76,6 @@ export class OffersControllerLite {
         status: 200,
         description: 'Offer status updated and new member added to the org'
     })
-    @ApiResponse({
-        status: 403,
-        description: 'Offer already accepted/declined'
-    })
     @ApiTags('Orgs - Lite')
     @Patch('lite/orgs/:orgId/offers/:offerId')
     async updateOfferStatus(
