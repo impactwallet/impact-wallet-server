@@ -230,6 +230,10 @@ export class ApiService {
         }
       });
 
+      if (isEmpty(txn.instructions)) {
+        return;
+      }
+
       const blockhash = await this.connection.getLatestBlockhash('finalized');
       txn.recentBlockhash = blockhash.blockhash;
       txn.feePayer = new PublicKey(process.env.FEE_PAYER);

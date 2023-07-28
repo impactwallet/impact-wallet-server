@@ -119,7 +119,9 @@ export class OffersLiteService extends OffersServiceBase {
         console.error(`Error while updating invest offer status: ${error}`),
       );
     } else {
-      return this.updateMemberOfferStatus(org, offer, body, account);
+      this.updateMemberOfferStatus(org, offer, body, account).catch((error) =>
+        console.error(`Error while updating member offer status: ${error}`),
+      );
     }
   }
 
@@ -139,20 +141,33 @@ export class OffersLiteService extends OffersServiceBase {
 
         offer.status = OfferStatus.Approved;
         const newMember = new this.memberRepository(memberProspect.toObject());
-        if (
-          !isNil(newMember.equity) &&
-          newMember.equity.type === EquityType.Immediately
-        ) {
-          newMember.lamportsEarned = newMember.equity.amount * LAMPORTS_PER_SOL;
-          this.collectEquity(
-            org,
-            newMember,
-            newMember.equity.amount,
+        const session = await this.connection.startSession();
+        await session.withTransaction(async () => {
+          const createTokenAccountInstruction =
+            await this.apiService.createTokenAccountInstruction(
+              org.mint,
+              account.wallet,
+            );
+          await this.apiService.createAndSendTxn(
+            [createTokenAccountInstruction],
             [],
-            account,
           );
-        }
-        await newMember.save();
+          if (
+            !isNil(newMember.equity) &&
+            newMember.equity.type === EquityType.Immediately
+          ) {
+            await this.collectEquity(
+              org,
+              newMember,
+              newMember.equity.amount,
+              [],
+              account,
+              session,
+            );
+          }
+          await newMember.save({ session });
+        });
+        await session.endSession();
 
         break;
       case OfferStatusDto.declined:
