@@ -5,34 +5,34 @@ import {
     Injectable,
     NotFoundException
 } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { isDefined } from 'class-validator';
+import { Request } from 'express';
 import { get, identity, isEmpty, isNil, pickBy, truncate } from 'lodash';
-import { v4 as uuid } from 'uuid';
 import mongoose, { ClientSession, Model, PipelineStage, Types } from 'mongoose';
+import { delay, firstValueFrom, of } from 'rxjs';
 import { ApiService } from 'src/api-service/api.service';
-import { CreateOrgDto } from './dto/create-org.dto';
-import { OrgsFilter } from './dto/orgs.filter.dto';
-import { Org, OrgDocument } from './schema/org.schema';
 import { MemberDto } from 'src/members/dto/members.dto';
 import { MembersService } from 'src/members/members.service';
 import { MemberDocument } from 'src/members/schema/member.schema';
-import { Request } from 'express';
-import { OrgUsernameFilter } from './dto/org-username.filter.dto';
-import { MemberEquityDto } from '../members/dto/member-equity.dto';
-import { delay, firstValueFrom, of } from 'rxjs';
-import { MintInfoDto } from './dto/mint-info.dto';
-import { MintStatus } from './enum/mint-status.enum';
-import { resizeBuffer } from '../utils/images';
 import { S3Service } from 'src/s3/s3.service';
-import { SendUsdcDto } from '../users/dto/send-usdc.dto';
-import { Role } from '../members/enum/roles.enum';
-import { OrgHistoryItemAction } from './enum/org-history-item-action.enum';
-import { LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { v4 as uuid } from 'uuid';
 import { AuthService } from '../auth/auth.service';
 import { AccountModel } from '../auth/models/account.model';
-import { JwtService } from '@nestjs/jwt';
+import { MemberEquityDto } from '../members/dto/member-equity.dto';
+import { Role } from '../members/enum/roles.enum';
+import { SendUsdcDto } from '../users/dto/send-usdc.dto';
+import { resizeBuffer } from '../utils/images';
+import { CreateOrgDto } from './dto/create-org.dto';
+import { MintInfoDto } from './dto/mint-info.dto';
+import { OrgUsernameFilter } from './dto/org-username.filter.dto';
+import { OrgsFilter } from './dto/orgs.filter.dto';
 import { UpdateOrgDto } from './dto/update-org.dto';
-import { isDefined } from 'class-validator';
+import { MintStatus } from './enum/mint-status.enum';
+import { OrgHistoryItemAction } from './enum/org-history-item-action.enum';
+import { Org, OrgDocument } from './schema/org.schema';
 
 const MINT_STATUS_RETRIES = 5;
 
@@ -581,6 +581,7 @@ export class OrgsService {
             ? updateOrgDto.description
             : org.description;
         org.link = isDefined(updateOrgDto.link) ? updateOrgDto.link : org.link;
+        org.logo = isDefined(updateOrgDto.logo) ? updateOrgDto.logo : org.logo;
         org.settings.treasury = isDefined(updateOrgDto.settings?.treasury)
             ? updateOrgDto.settings?.treasury
             : org.settings.treasury;

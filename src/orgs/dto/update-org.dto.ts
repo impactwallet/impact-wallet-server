@@ -39,6 +39,13 @@ export class UpdateOrgDto {
     })
     link: string;
 
+    @ApiProperty({
+        example: '/orgs/logo/18004f5d-0f2b-4635-9b22-60ac8d3f24e6.jpg',
+        description: 'Organization logo',
+        required: false
+    })
+    logo: string;
+
     @ApiProperty({ required: false })
     settings: OrgSettingsDto;
 }
