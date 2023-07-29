@@ -119,7 +119,9 @@ export class OffersLiteService extends OffersServiceBase {
         console.error(`Error while updating invest offer status: ${error}`),
       );
     } else {
-      return this.updateMemberOfferStatus(org, offer, body, account);
+      this.updateMemberOfferStatus(org, offer, body, account).catch((error) =>
+        console.error(`Error while updating member offer status: ${error}`),
+      );
     }
   }
 
@@ -139,20 +141,33 @@ export class OffersLiteService extends OffersServiceBase {
 
         offer.status = OfferStatus.Approved;
         const newMember = new this.memberRepository(memberProspect.toObject());
-        if (
-          !isNil(newMember.equity) &&
-          newMember.equity.type === EquityType.Immediately
-        ) {
-          newMember.lamportsEarned = newMember.equity.amount * LAMPORTS_PER_SOL;
-          this.collectEquity(
-            org,
-            newMember,
-            newMember.equity.amount,
+        const session = await this.connection.startSession();
+        await session.withTransaction(async () => {
+          const createTokenAccountInstruction =
+            await this.apiService.createTokenAccountInstruction(
+              org.mint,
+              account.wallet,
+            );
+          await this.apiService.createAndSendTxn(
+            [createTokenAccountInstruction],
             [],
-            account,
           );
-        }
-        await newMember.save();
+          if (
+            !isNil(newMember.equity) &&
+            newMember.equity.type === EquityType.Immediately
+          ) {
+            await this.collectEquity(
+              org,
+              newMember,
+              newMember.equity.amount,
+              [],
+              account,
+              session,
+            );
+          }
+          await newMember.save({ session });
+        });
+        await session.endSession();
 
         break;
       case OfferStatusDto.declined:
@@ -259,6 +274,11 @@ export class OffersLiteService extends OffersServiceBase {
             await account.password,
           );
           const orgPk = await this.apiService.getPK(org.wallet, org.password);
+          const createUSDCAccountInstruction =
+            await this.apiService.createTokenAccountInstruction(
+              this.apiService.usdcMint,
+              org.wallet,
+            );
           const transferUSDCInstructions =
             await this.apiService.createTransferInstructions(
               this.apiService.usdcMint,
@@ -275,6 +295,11 @@ export class OffersLiteService extends OffersServiceBase {
                 },
               ],
             );
+          const createTokenAccountInstruction =
+            await this.apiService.createTokenAccountInstruction(
+              org.mint,
+              account.wallet,
+            );
 
           const { member, memberBeforeUpdate } =
             await this.paymentService.handleInvestmentPayment(
@@ -289,7 +314,11 @@ export class OffersLiteService extends OffersServiceBase {
             );
           }
           const txnHash = await this.apiService.createAndSendTxn(
-            transferUSDCInstructions,
+            [
+              createUSDCAccountInstruction,
+              ...transferUSDCInstructions,
+              createTokenAccountInstruction,
+            ],
             [pk, orgPk],
           );
           payment.txnHash = txnHash;
@@ -303,21 +332,21 @@ export class OffersLiteService extends OffersServiceBase {
           );
           payment.txnHash += `\n${txnsHashes}`;
           await payment.save({ session });
-          equitySources = Object.keys(memberDataMap).reduce(
-            (acc, memberId, i) => {
-              if (i === 0) {
-                return acc;
-              }
-              acc += `${memberDataMap[memberId].username}: ${memberDataMap[memberId].amount}\n`;
-              return acc;
-            },
-            '',
-          );
+          equitySources = Object.keys(memberDataMap).reduce((acc, memberId) => {
+            acc += `${memberDataMap[memberId].username}: ${memberDataMap[memberId].amount}\n`;
+            return acc;
+          }, '');
         });
         await session.endSession();
 
+        const txnLinks = payment.txnHash
+          .split('\n')
+          .map((hash) => {
+            return this.apiService.buildExplorerLink(`/tx/${hash}`);
+          })
+          .join('\n');
         this.apiService.sendNotification(
-          `${account.username} just invested ${payment.amount} USDC into ${org.name} and received the equity from:\n\n${equitySources}\n\n${payment.txnHash}`,
+          `${account.username} just invested ${payment.amount} USDC into ${org.name} and received the equity from:\n\n${equitySources}\n\n${txnLinks}`,
         );
 
         // Our comission
@@ -404,7 +433,7 @@ export class OffersLiteService extends OffersServiceBase {
         memberDataMap[member._id.toString()] = {
           amount,
           username,
-          instructions: transferTokenInstructions,
+          instruction: transferTokenInstructions[0],
           senderPk,
         };
       });
@@ -417,9 +446,7 @@ export class OffersLiteService extends OffersServiceBase {
       const membersToProcess = membersIds.slice(lowerIndex, upperIndex);
       const { instructions, pks } = membersToProcess.reduce(
         (acc, memberId) => {
-          acc.instructions = acc.instructions.concat(
-            memberDataMap[memberId].instructions,
-          );
+          acc.instructions.push(memberDataMap[memberId].instruction);
           acc.pks.push(memberDataMap[memberId].senderPk);
           return acc;
         },
@@ -542,6 +569,11 @@ export class OffersLiteService extends OffersServiceBase {
             seller.wallet,
             seller.password,
           );
+          const createUSDCAccountInstruction =
+            await this.apiService.createTokenAccountInstruction(
+              this.apiService.usdcMint,
+              seller.wallet,
+            );
           const transferUSDCInstructions =
             await this.apiService.createTransferInstructions(
               this.apiService.usdcMint,
@@ -558,10 +590,20 @@ export class OffersLiteService extends OffersServiceBase {
                 },
               ],
             );
+          const createTokenAccountInstruction =
+            await this.apiService.createTokenAccountInstruction(
+              org.mint,
+              buyer.wallet,
+            );
           const transferTokenInstructions =
             await this.paymentService.handleAssetsSale(payment, session);
           const txnHash = await this.apiService.createAndSendTxn(
-            [...transferUSDCInstructions, ...transferTokenInstructions],
+            [
+              createUSDCAccountInstruction,
+              ...transferUSDCInstructions,
+              createTokenAccountInstruction,
+              ...transferTokenInstructions,
+            ],
             [buyerPk, sellerPk],
           );
           payment.txnHash = offer.txnHash = txnHash;

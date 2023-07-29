@@ -3,8 +3,29 @@ import { HttpService } from '@nestjs/axios';
 import * as FormData from 'form-data';
 import { delay, firstValueFrom, of } from 'rxjs';
 import { AxiosRequestConfig } from 'axios';
-import { Keypair, Transaction, Connection, clusterApiUrl, Cluster, PublicKey, TransactionSignature, LAMPORTS_PER_SOL, SystemProgram, ParsedTransactionWithMeta, TransactionInstruction } from '@solana/web3.js';
-import { getAssociatedTokenAddress, createTransferInstruction, createAssociatedTokenAccountInstruction, createMintToInstruction, getAssociatedTokenAddressSync, getAccount, TokenAccountNotFoundError, TokenInvalidAccountOwnerError } from '@solana/spl-token';
+import {
+  Keypair,
+  Transaction,
+  Connection,
+  clusterApiUrl,
+  Cluster,
+  PublicKey,
+  TransactionSignature,
+  LAMPORTS_PER_SOL,
+  SystemProgram,
+  ParsedTransactionWithMeta,
+  TransactionInstruction,
+} from '@solana/web3.js';
+import {
+  getAssociatedTokenAddress,
+  createTransferInstruction,
+  createAssociatedTokenAccountInstruction,
+  createMintToInstruction,
+  getAssociatedTokenAddressSync,
+  getAccount,
+  TokenAccountNotFoundError,
+  TokenInvalidAccountOwnerError,
+} from '@solana/spl-token';
 import { decode } from 'bs58';
 import { flatten, get, isEmpty, isNil } from 'lodash';
 import { Org } from '../orgs/schema/org.schema';
@@ -18,10 +39,14 @@ export class ApiService {
   private readonly telegramToken: string;
   private readonly telegramChatId: string;
 
-
-  constructor(private http: HttpService, private readonly configService: ConfigService) {
+  constructor(
+    private http: HttpService,
+    private readonly configService: ConfigService,
+  ) {
     this.telegramToken = configService.get<string>('TELEGRAM_TOKEN') as string;
-    this.telegramChatId = configService.get<string>('TELEGRAM_CHAT_ID') as string;
+    this.telegramChatId = configService.get<string>(
+      'TELEGRAM_CHAT_ID',
+    ) as string;
     this.tgBaseUrl = `https://api.telegram.org/bot${this.telegramToken}`;
   }
 
@@ -49,10 +74,12 @@ export class ApiService {
       return;
     }
     try {
-      await firstValueFrom(this.http.post(`${this.tgBaseUrl}/sendMessage`, {
-        chat_id: this.telegramChatId,
-        text: text,
-      }));
+      await firstValueFrom(
+        this.http.post(`${this.tgBaseUrl}/sendMessage`, {
+          chat_id: this.telegramChatId,
+          text: text,
+        }),
+      );
     } catch (err) {
       console.log(`Notification error: ${err.message}`);
     }
@@ -70,7 +97,9 @@ export class ApiService {
       timeout: REQUEST_TIMEOUT,
     };
     try {
-      const response = await firstValueFrom(this.http.get(`${this.solscanBaseUrl}/token/holders`, config));
+      const response = await firstValueFrom(
+        this.http.get(`${this.solscanBaseUrl}/token/holders`, config),
+      );
       return get(response, 'data.data');
     } catch (err) {
       err.message = `Error fetching token holders: ${err.message}`;
@@ -79,76 +108,106 @@ export class ApiService {
     }
   }
 
-  async createTransferInstructions(mint: string, recepients: { senderPk: string, wallet: string, amount: number }[]): Promise<TransactionInstruction[]> {
+  async createTokenAccountInstruction(mint: string, owner: string) {
+    const mintPublicKey = new PublicKey(mint);
+    const recipientPublicKey = new PublicKey(owner);
+    const recipientAssociatedTokenAddress = await getAssociatedTokenAddress(
+      mintPublicKey,
+      recipientPublicKey,
+    );
+    const payer = new PublicKey(process.env.FEE_PAYER);
+    try {
+      await getAccount(this.connection, recipientAssociatedTokenAddress);
+    } catch (error) {
+      if (
+        error instanceof TokenAccountNotFoundError ||
+        error instanceof TokenInvalidAccountOwnerError
+      ) {
+        return createAssociatedTokenAccountInstruction(
+          payer,
+          recipientAssociatedTokenAddress,
+          new PublicKey(owner),
+          mintPublicKey,
+        );
+      }
+    }
+  }
+
+  async createTransferInstructions(
+    mint: string,
+    recepients: { senderPk: string; wallet: string; amount: number }[],
+  ): Promise<TransactionInstruction[]> {
     const multiplier = mint === this.usdcMint ? 1000000 : LAMPORTS_PER_SOL;
     const mintPublicKey = new PublicKey(mint);
-    const instructionsPromises = recepients.map(async ({ senderPk, wallet, amount }) => {
-      console.log('amount:', amount);
-      console.log('wallet:', wallet);
-      const senderKeypair = Keypair.fromSecretKey(decode(senderPk));
-      const senderAssociatedTokenAddress = await getAssociatedTokenAddress(
-        mintPublicKey,
-        senderKeypair.publicKey,
-      );
-      const payer = new PublicKey(process.env.FEE_PAYER);
-      const recipientPublicKey = new PublicKey(wallet);
-      const instructions = [];
+    const instructionsPromises = recepients.map(
+      async ({ senderPk, wallet, amount }) => {
+        console.log('amount:', amount);
+        console.log('wallet:', wallet);
+        const senderKeypair = Keypair.fromSecretKey(decode(senderPk));
+        const senderAssociatedTokenAddress = await getAssociatedTokenAddress(
+          mintPublicKey,
+          senderKeypair.publicKey,
+        );
+        const recipientPublicKey = new PublicKey(wallet);
 
-      const recipientAssociatedTokenAddress = await getAssociatedTokenAddress(
-        mintPublicKey,
-        recipientPublicKey,
-      );
+        const recipientAssociatedTokenAddress = await getAssociatedTokenAddress(
+          mintPublicKey,
+          recipientPublicKey,
+        );
 
-      try {
-        await getAccount(this.connection, recipientAssociatedTokenAddress);
-      } catch (error) {
-        if (error instanceof TokenAccountNotFoundError || error instanceof TokenInvalidAccountOwnerError) {
-          instructions.push(
-            createAssociatedTokenAccountInstruction(
-              payer,
-              recipientAssociatedTokenAddress,
-              new PublicKey(wallet),
-              mintPublicKey,
-            )
-          );
-        }
-      }
-
-      instructions.push(
-        createTransferInstruction(
+        return createTransferInstruction(
           senderAssociatedTokenAddress,
           recipientAssociatedTokenAddress,
           senderKeypair.publicKey,
           Math.round(amount * multiplier),
-        )
-      );
-      return instructions;
-    });
-    let instructions = await Promise.all(instructionsPromises);
-    return flatten(instructions);
+        );
+      },
+    );
+    return Promise.all(instructionsPromises);
   }
 
-  async transfer(mint: string, recepients: { senderPk: string, wallet: string, amount: number }[], retries = 0) {
+  async transfer(
+    mint: string,
+    recepients: { senderPk: string; wallet: string; amount: number }[],
+    retries = 0,
+  ) {
     try {
       const txn = new Transaction();
+      const tokenAccountInstructions = await Promise.all(
+        recepients.map(({ wallet }) =>
+          this.createTokenAccountInstruction(mint, wallet),
+        ),
+      );
+      tokenAccountInstructions.forEach((instruction) => {
+        if (!isNil(instruction)) {
+          txn.add(instruction);
+        }
+      });
 
-      const instructions = await this.createTransferInstructions(mint, recepients); 
-
-      instructions.forEach((instruction) => {
+      const transferInstructions = await this.createTransferInstructions(
+        mint,
+        recepients,
+      );
+      transferInstructions.forEach((instruction) => {
         txn.add(instruction);
       });
 
-      const blockhash = (await this.connection.getLatestBlockhash('finalized'));
+      const blockhash = await this.connection.getLatestBlockhash('finalized');
       txn.recentBlockhash = blockhash.blockhash;
       txn.feePayer = new PublicKey(process.env.FEE_PAYER);
 
       const senderPks = recepients.map(({ senderPk }) => senderPk);
-      const serializedTxn = this.createSignedSerializedTxn(txn, senderPks, false, false);
+      const serializedTxn = this.createSignedSerializedTxn(
+        txn,
+        senderPks,
+        false,
+        false,
+      );
       const signature = await this.sendTxn(serializedTxn);
       return signature;
     } catch (err) {
       if (retries > 0) {
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        await new Promise((resolve) => setTimeout(resolve, 5000));
         console.log(`Retrying transfer, retries left: ${retries}`);
         return this.transfer(mint, recepients, --retries);
       }
@@ -157,24 +216,39 @@ export class ApiService {
     }
   }
 
-  async createAndSendTxn(instructions: TransactionInstruction[], pks: string[], retries = 0) {
+  async createAndSendTxn(
+    instructions: TransactionInstruction[],
+    pks: string[],
+    retries = 0,
+  ) {
     try {
       const txn = new Transaction();
 
       instructions.forEach((instruction) => {
-        txn.add(instruction);
+        if (!isNil(instruction)) {
+          txn.add(instruction);
+        }
       });
 
-      const blockhash = (await this.connection.getLatestBlockhash('finalized'));
+      if (isEmpty(txn.instructions)) {
+        return;
+      }
+
+      const blockhash = await this.connection.getLatestBlockhash('finalized');
       txn.recentBlockhash = blockhash.blockhash;
       txn.feePayer = new PublicKey(process.env.FEE_PAYER);
 
-      const serializedTxn = this.createSignedSerializedTxn(txn, pks, false, false);
+      const serializedTxn = this.createSignedSerializedTxn(
+        txn,
+        pks,
+        false,
+        false,
+      );
       const signature = await this.sendTxn(serializedTxn);
       return signature;
     } catch (err) {
       if (retries > 0) {
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        await new Promise((resolve) => setTimeout(resolve, 5000));
         console.log(`Retrying createAndSendTxn, retries left: ${retries}`);
         return this.createAndSendTxn(instructions, pks, --retries);
       }
@@ -183,7 +257,9 @@ export class ApiService {
     }
   }
 
-  async transferUSDC(recepients: { senderPk: string, wallet: string, amount: number }[]) {
+  async transferUSDC(
+    recepients: { senderPk: string; wallet: string; amount: number }[],
+  ) {
     if (!this.isMainnet || isEmpty(recepients)) {
       return;
     }
@@ -208,7 +284,7 @@ export class ApiService {
 
     try {
       const response = await firstValueFrom(
-        this.http.get(`${this.shyftBaseUrl}/semi_wallet/get_keypair`, config)
+        this.http.get(`${this.shyftBaseUrl}/semi_wallet/get_keypair`, config),
       );
       return get(response, 'data.result.secretKey');
     } catch (err) {
@@ -248,10 +324,14 @@ export class ApiService {
           USDCMintPublicKey,
         ),
       );
-      const blockhash = (await this.connection.getLatestBlockhash('finalized'));
+      const blockhash = await this.connection.getLatestBlockhash('finalized');
       createAccountTxn.recentBlockhash = blockhash.blockhash;
       createAccountTxn.feePayer = new PublicKey(process.env.FEE_PAYER);
-      const serializedTxn = this.createSignedSerializedTxn(createAccountTxn, walletPk, false);
+      const serializedTxn = this.createSignedSerializedTxn(
+        createAccountTxn,
+        walletPk,
+        false,
+      );
       await this.sendTxn(serializedTxn);
     } catch (err) {
       err.message = `Error creating account: ${err.message}`;
@@ -264,13 +344,20 @@ export class ApiService {
       const pk = await this.getPK(walletAddress, password);
       return this.createAccount(pk);
     }
-    const signature: TransactionSignature = await this.connection.requestAirdrop(new PublicKey(walletAddress), LAMPORTS_PER_SOL);
+    const signature: TransactionSignature =
+      await this.connection.requestAirdrop(
+        new PublicKey(walletAddress),
+        LAMPORTS_PER_SOL,
+      );
     const blockhash = await this.connection.getLatestBlockhash('finalized');
-    await this.connection.confirmTransaction({
-      blockhash: blockhash.blockhash,
-      lastValidBlockHeight: blockhash.lastValidBlockHeight,
-      signature,
-    }, 'finalized');
+    await this.connection.confirmTransaction(
+      {
+        blockhash: blockhash.blockhash,
+        lastValidBlockHeight: blockhash.lastValidBlockHeight,
+        signature,
+      },
+      'finalized',
+    );
   }
 
   async createWallet(password: string) {
@@ -284,7 +371,9 @@ export class ApiService {
 
     const body = JSON.stringify({ password });
     try {
-      const response = await firstValueFrom(this.http.post(`${this.shyftBaseUrl}/semi_wallet/create`, body, config));
+      const response = await firstValueFrom(
+        this.http.post(`${this.shyftBaseUrl}/semi_wallet/create`, body, config),
+      );
       const walletAddress = get(response, 'data.result.wallet_address');
       await this.airdrop(walletAddress, password);
       return walletAddress;
@@ -309,9 +398,18 @@ export class ApiService {
       encoded_transaction: txn,
     });
     try {
-      const endpoint = this.isMainnet && isRelay ? '/txn_relayer/sign' : '/transaction/send_txn';
-      const response = await firstValueFrom(this.http.post(`${this.shyftBaseUrl}${endpoint}`, body, config));
-      return get(response, 'data.result.signature', get(response, 'data.result.tx'));
+      const endpoint =
+        this.isMainnet && isRelay
+          ? '/txn_relayer/sign'
+          : '/transaction/send_txn';
+      const response = await firstValueFrom(
+        this.http.post(`${this.shyftBaseUrl}${endpoint}`, body, config),
+      );
+      return get(
+        response,
+        'data.result.signature',
+        get(response, 'data.result.tx'),
+      );
     } catch (err) {
       err.message = `Error sending transaction: ${err.message}`;
       console.log(JSON.stringify(get(err, 'response.data', err)));
@@ -337,13 +435,22 @@ export class ApiService {
 
     try {
       const response = await firstValueFrom(
-        this.http.post(`${this.shyftBaseUrl}/token/create_detach`, body, config),
+        this.http.post(
+          `${this.shyftBaseUrl}/token/create_detach`,
+          body,
+          config,
+        ),
       );
       const encodedTxn = get(response, 'data.result.encoded_transaction');
       const mint = get(response, 'data.result.mint');
       const txn = Transaction.from(Buffer.from(encodedTxn, 'base64'));
       const pk = await this.getPK(org.wallet, org.password);
-      const serializedTxn = this.createSignedSerializedTxn(txn, pk, true, false);
+      const serializedTxn = this.createSignedSerializedTxn(
+        txn,
+        pk,
+        true,
+        false,
+      );
       const txnHash = await this.sendTxn(serializedTxn);
       return { mint, txnHash };
     } catch (err) {
@@ -351,7 +458,12 @@ export class ApiService {
       throw err;
     }
   }
-  async mintToken(mint: string, authorityPk: string, receivers: { wallet: string, amount: number }[], memo?: string) {
+  async mintToken(
+    mint: string,
+    authorityPk: string,
+    receivers: { wallet: string; amount: number }[],
+    memo?: string,
+  ) {
     try {
       const authorityKeypair = Keypair.fromSecretKey(decode(authorityPk));
       const payer = new PublicKey(process.env.FEE_PAYER);
@@ -364,23 +476,28 @@ export class ApiService {
         try {
           await getAccount(this.connection, associatedTokenAddress);
         } catch (error) {
-          if (error instanceof TokenAccountNotFoundError || error instanceof TokenInvalidAccountOwnerError) {
+          if (
+            error instanceof TokenAccountNotFoundError ||
+            error instanceof TokenInvalidAccountOwnerError
+          ) {
             txn.add(
               createAssociatedTokenAccountInstruction(
                 payer,
                 associatedTokenAddress,
                 new PublicKey(wallet),
                 new PublicKey(mint),
-              )
+              ),
             );
           }
         }
-        txn.add(createMintToInstruction(
-          new PublicKey(mint),
-          associatedTokenAddress,
-          new PublicKey(authorityKeypair.publicKey),
-          amount,
-        ));
+        txn.add(
+          createMintToInstruction(
+            new PublicKey(mint),
+            associatedTokenAddress,
+            new PublicKey(authorityKeypair.publicKey),
+            amount,
+          ),
+        );
         if (!isNil(memo)) {
           txn.add(
             new TransactionInstruction({
@@ -393,15 +510,20 @@ export class ApiService {
               ],
               data: Buffer.from(memo, 'utf-8'),
               programId: new PublicKey(this.memoProgramId),
-            })
+            }),
           );
         }
       });
       await Promise.all(promises);
-      const blockhash = (await this.connection.getLatestBlockhash('finalized'));
+      const blockhash = await this.connection.getLatestBlockhash('finalized');
       txn.recentBlockhash = blockhash.blockhash;
       txn.feePayer = payer;
-      const serializedTxn = this.createSignedSerializedTxn(txn, authorityPk, true, false);
+      const serializedTxn = this.createSignedSerializedTxn(
+        txn,
+        authorityPk,
+        true,
+        false,
+      );
       const txnHash = await this.sendTxn(serializedTxn);
       return txnHash;
     } catch (err) {
@@ -433,7 +555,10 @@ export class ApiService {
     }
   }
 
-  async getParsedTransaction(signature: TransactionSignature, retries = RETRIES): Promise<ParsedTransactionWithMeta> {
+  async getParsedTransaction(
+    signature: TransactionSignature,
+    retries = RETRIES,
+  ): Promise<ParsedTransactionWithMeta> {
     const fn = async (r: number) => {
       let txn: ParsedTransactionWithMeta;
       let error: any;
@@ -456,25 +581,29 @@ export class ApiService {
     return fn(retries);
   }
 
-
-  async getTokenHistory(wallet: string, mint: string): Promise<{
-    associatedAddress: PublicKey,
-    parsedTxns: ParsedTransactionWithMeta[],
+  async getTokenHistory(
+    wallet: string,
+    mint: string,
+  ): Promise<{
+    associatedAddress: PublicKey;
+    parsedTxns: ParsedTransactionWithMeta[];
   }> {
     const mintPublicKey = new PublicKey(mint);
     const associatedAddress = await getAssociatedTokenAddress(
       mintPublicKey,
       new PublicKey(wallet),
     );
-    const txns = await this.connection.getSignaturesForAddress(associatedAddress);
+    const txns = await this.connection.getSignaturesForAddress(
+      associatedAddress,
+    );
     const signatures = txns.map((txn) => txn.signature);
     const parsedTxns = await this.connection.getParsedTransactions(signatures);
     return { associatedAddress, parsedTxns };
   }
 
   async getUSDCHistory(wallet: string): Promise<{
-    associatedAddress: PublicKey,
-    parsedTxns: ParsedTransactionWithMeta[],
+    associatedAddress: PublicKey;
+    parsedTxns: ParsedTransactionWithMeta[];
   }> {
     if (!this.isMainnet) {
       return { associatedAddress: PublicKey.unique(), parsedTxns: [] };
@@ -483,7 +612,10 @@ export class ApiService {
   }
 
   async getAccountInfo(address: string) {
-    const accountInfo = await getAccount(this.connection, new PublicKey(address));
+    const accountInfo = await getAccount(
+      this.connection,
+      new PublicKey(address),
+    );
     return accountInfo;
   }
 
@@ -493,16 +625,23 @@ export class ApiService {
     requireAllSignatures = true,
     verifySignatures = true,
   ) {
-    const pks = Array.isArray(fromPrivateKey) ? fromPrivateKey : [fromPrivateKey];
+    const pks = Array.isArray(fromPrivateKey)
+      ? fromPrivateKey
+      : [fromPrivateKey];
     pks.forEach((pk) => {
       const fromSigner = Keypair.fromSecretKey(decode(pk));
-      const canSign = isEmpty(transaction.signatures) ||
-        transaction.signatures.some((signature) => signature.publicKey.equals(fromSigner.publicKey));
+      const canSign =
+        isEmpty(transaction.signatures) ||
+        transaction.signatures.some((signature) =>
+          signature.publicKey.equals(fromSigner.publicKey),
+        );
       if (canSign) {
         transaction.partialSign(fromSigner);
       }
     });
-    const serializedTxn = transaction.serialize({ requireAllSignatures, verifySignatures }).toString('base64');
+    const serializedTxn = transaction
+      .serialize({ requireAllSignatures, verifySignatures })
+      .toString('base64');
     return serializedTxn;
   }
 
@@ -533,7 +672,7 @@ export class ApiService {
     throw txnError;
   }
 
-  async recordMemo(memo: string, keys: { pubKey: string, pk: string }[]) {
+  async recordMemo(memo: string, keys: { pubKey: string; pk: string }[]) {
     const payer = new PublicKey(process.env.FEE_PAYER);
     const txn = new Transaction().add(
       new TransactionInstruction({
@@ -546,11 +685,16 @@ export class ApiService {
         programId: new PublicKey(this.memoProgramId),
       }),
     );
-    
-    const blockhash = (await this.connection.getLatestBlockhash('finalized'));
+
+    const blockhash = await this.connection.getLatestBlockhash('finalized');
     txn.recentBlockhash = blockhash.blockhash;
     txn.feePayer = payer;
-    const serializedTxn = this.createSignedSerializedTxn(txn, keys.map((key) => key.pk), true, false);
+    const serializedTxn = this.createSignedSerializedTxn(
+      txn,
+      keys.map((key) => key.pk),
+      true,
+      false,
+    );
     const txnHash = await this.sendTxn(serializedTxn);
     return txnHash;
   }
