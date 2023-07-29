@@ -48,6 +48,7 @@ export class AccountModel {
       isUser: this.isUser,
       image: this.image,
       user: this.user,
+      organization: this.org,
     };
   }
 }
