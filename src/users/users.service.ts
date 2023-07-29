@@ -199,7 +199,7 @@ export class UsersService extends UsersServiceBase {
     }
 
     async updateUser(updateUserDto: UpdateUserDto, account: AccountModel) {
-        const user = await this.userRepository.findById(account.user._id);
+        const user = await this.userRepository.findById(new mongoose.Types.ObjectId(account.user._id));
         if (isNil(user)) {
             throw new NotFoundException({ message: 'User not found' });
         }
@@ -216,7 +216,7 @@ export class UsersService extends UsersServiceBase {
             user.avatar = updateUserDto.avatar;
         }
 
-        return this.orgRepository.findOneAndUpdate(
+        return this.userRepository.findOneAndUpdate(
             { _id: user._id },
             { $set: user.toObject() },
             { new: true }
