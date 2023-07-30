@@ -4,30 +4,30 @@ import * as FormData from 'form-data';
 import { delay, firstValueFrom, of } from 'rxjs';
 import { AxiosRequestConfig } from 'axios';
 import {
-  Keypair,
-  Transaction,
-  Connection,
-  clusterApiUrl,
   Cluster,
-  PublicKey,
-  TransactionSignature,
+  clusterApiUrl,
+  Connection,
+  Keypair,
   LAMPORTS_PER_SOL,
-  SystemProgram,
   ParsedTransactionWithMeta,
+  PublicKey,
+  SystemProgram,
+  Transaction,
   TransactionInstruction,
+  TransactionSignature,
 } from '@solana/web3.js';
 import {
-  getAssociatedTokenAddress,
-  createTransferInstruction,
   createAssociatedTokenAccountInstruction,
   createMintToInstruction,
-  getAssociatedTokenAddressSync,
+  createTransferInstruction,
   getAccount,
+  getAssociatedTokenAddress,
+  getAssociatedTokenAddressSync,
   TokenAccountNotFoundError,
   TokenInvalidAccountOwnerError,
 } from '@solana/spl-token';
 import { decode } from 'bs58';
-import { flatten, get, isEmpty, isNil } from 'lodash';
+import { get, isEmpty, isNil } from 'lodash';
 import { Org } from '../orgs/schema/org.schema';
 import { ConfigService } from '@nestjs/config';
 
@@ -599,6 +599,15 @@ export class ApiService {
     const signatures = txns.map((txn) => txn.signature);
     const parsedTxns = await this.connection.getParsedTransactions(signatures);
     return { associatedAddress, parsedTxns };
+  }
+
+  async getRootAssociatedAddress(): Promise<PublicKey> {
+    const rootWallet = process.env.ROOT_PUBKEY;
+    const mintPublicKey = new PublicKey(this.usdcMint);
+    return await getAssociatedTokenAddress(
+      mintPublicKey,
+      new PublicKey(rootWallet),
+    );
   }
 
   async getUSDCHistory(wallet: string): Promise<{
