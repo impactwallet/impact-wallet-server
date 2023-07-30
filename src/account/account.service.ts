@@ -2,17 +2,27 @@ import { Injectable } from '@nestjs/common';
 import { AccountModel } from '../auth/models/account.model';
 import { TxnHistoryItemDto } from '../common/dto/txn-history-item.dto';
 import { ApiService } from '../api-service/api.service';
-import { ParsedInstruction, ParsedTransactionWithMeta, PublicKey } from '@solana/web3.js';
+import {
+  ParsedInstruction,
+  ParsedTransactionWithMeta,
+  PublicKey,
+} from '@solana/web3.js';
 import { get, isEmpty, isEqual, isNil, toNumber } from 'lodash';
 import { Org, OrgDocument } from '../orgs/schema/org.schema';
 import { EntityFromTxnDto } from '../common/dto/entity-from-txn.dto';
 import { Model } from 'mongoose';
 import { Payment, PaymentDocument } from '../payment/schema/payment.schema';
-import { SaleOffer, SaleOfferDocument, SaleOfferModel } from '../offers/schema/sale-offer.schema';
+import {
+  SaleOffer,
+  SaleOfferDocument,
+  SaleOfferModel,
+} from '../offers/schema/sale-offer.schema';
 import { PaymentType } from '../payment/enum/payment-type.enum';
 import { User, UserDocument } from '../users/schema/user.schema';
 import { Account } from '@solana/spl-token';
 import { InjectModel } from '@nestjs/mongoose';
+import { getAssociatedTokenAddress } from '@solana/spl-token';
+import { TransactionHistoryDto } from './dto/transaction-history.dto';
 
 @Injectable()
 export class AccountService {
@@ -20,12 +30,15 @@ export class AccountService {
     private readonly apiService: ApiService,
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @InjectModel(Org.name) private readonly orgModel: Model<OrgDocument>,
-    @InjectModel(Payment.name) private readonly paymentModel: Model<PaymentDocument>,
-    @InjectModel(SaleOffer.name) private readonly saleOfferModel: SaleOfferModel,
+    @InjectModel(Payment.name)
+    private readonly paymentModel: Model<PaymentDocument>,
+    @InjectModel(SaleOffer.name)
+    private readonly saleOfferModel: SaleOfferModel,
   ) {}
 
   async getUsdcHistory(account: AccountModel): Promise<TxnHistoryItemDto[]> {
-    const { associatedAddress, parsedTxns } = await this.apiService.getUSDCHistory(account.wallet);
+    const { associatedAddress, parsedTxns } =
+      await this.apiService.getUSDCHistory(account.wallet);
     return this._buildUsdcHistory(account, associatedAddress, parsedTxns);
   }
 
@@ -35,76 +48,126 @@ export class AccountService {
     parsedTxns: ParsedTransactionWithMeta[],
   ): Promise<TxnHistoryItemDto[]> {
     const history: TxnHistoryItemDto[] = [];
+    const rootAssociatedAddress =
+      await this.apiService.getRootAssociatedAddress();
     for (const txn of parsedTxns) {
       if (!isNil(txn.meta.err)) {
         continue;
       }
-      const { amount, description } = this._getTxnAmount(txn, associatedAddress);
-      const historyItem: TxnHistoryItemDto = {
-        amount,
-        description,
-      };
-      const inAppEntity = await this._getEntityFromTxn(account, txn);
-      historyItem.addressOrUsername = get(inAppEntity, 'username');
-      historyItem.img = get(inAppEntity, 'img');
-      if (isNil(inAppEntity)) {
-        continue;
+      const transactionHistory = this._getTxnAmount(
+        txn,
+        associatedAddress,
+        rootAssociatedAddress,
+      );
+      for (const transaction of transactionHistory) {
+        const historyItem: TxnHistoryItemDto = {
+          amount: transaction.amount,
+          description: transaction.description,
+        };
+        if (transaction.description !== 'Commission') {
+          const inAppEntity = await this._getEntityFromTxn(account, txn);
+          historyItem.addressOrUsername = get(inAppEntity, 'username');
+          historyItem.img = get(inAppEntity, 'img');
+          if (isNil(inAppEntity)) {
+            continue;
+          }
+          if (!isNil(inAppEntity.sale)) {
+            const org = inAppEntity.sale.org as OrgDocument;
+            const action =
+              transaction.amount < 0 ? 'Paid for' : 'Received for selling';
+            historyItem.description = `${action} ${inAppEntity.sale.tokensAmount} Impact Shares of @${org.username}`;
+          } else if (!isNil(inAppEntity.org)) {
+            historyItem.description = 'Profit Share';
+          } else if (!isNil(inAppEntity.from)) {
+            historyItem.description = 'Received';
+          }
+        } else if (
+          transaction.description === 'Commission' &&
+          transactionHistory.length > 1
+        ) {
+          const org: OrgDocument = await this.orgModel.findOne({
+            wallet: process.env.ROOT_PUBKEY,
+          });
+          historyItem.addressOrUsername = org.name;
+          historyItem.img = org.logo;
+          historyItem.description = 'Commission';
+        }
+        historyItem.processedAt = txn.blockTime * 1000;
+        history.push(historyItem);
       }
-      if (!isNil(inAppEntity.sale)) {
-        const org = inAppEntity.sale.org as OrgDocument;
-        const action = amount < 0 ? 'Paid for' : 'Received for selling';
-        historyItem.description = `${action} ${inAppEntity.sale.tokensAmount} Impact Shares of @${org.username}`;
-      } else if (!isNil(inAppEntity.org)) {
-        historyItem.description = 'Profit Share';
-      } else if (!isNil(inAppEntity.from)) {
-        historyItem.description = 'Received';
-      }
-      historyItem.processedAt = txn.blockTime * 1000;
-      history.push(historyItem);
     }
     return history;
   }
 
-  _getTxnAmount(txn: ParsedTransactionWithMeta, associatedAddress: PublicKey) {
-    let amount = 0;
+  _getTxnAmount(
+    txn: ParsedTransactionWithMeta,
+    associatedAddress: PublicKey,
+    rootAssociatedAddress?: PublicKey,
+  ) {
     let description = 'Received';
-    const instructions = txn.transaction.message.instructions as ParsedInstruction[];
+    const historyItem: TransactionHistoryDto[] = [];
+    const instructions = txn.transaction.message
+      .instructions as ParsedInstruction[];
     for (const instruction of instructions) {
-      if (amount) break;
       const source = get(instruction, 'parsed.info.source', '');
       const destination = get(instruction, 'parsed.info.destination', '');
       const isSent = isEqual(source.toString(), associatedAddress.toString());
-      const isReceived = isEqual(destination.toString(), associatedAddress.toString());
-      if (!isSent && !isReceived) {
+      const isReceived = isEqual(
+        destination.toString(),
+        associatedAddress.toString(),
+      );
+      const isSentCommision = isEqual(
+        destination.toString(),
+        rootAssociatedAddress.toString(),
+      );
+
+      if (!isSent && !isReceived && !isSentCommision) {
         continue;
       }
+      let amount = 0;
       amount = toNumber(
-        get(instruction, 'parsed.info.amount', get(instruction, 'parsed.info.tokenAmount.amount', 0)),
+        get(
+          instruction,
+          'parsed.info.amount',
+          get(instruction, 'parsed.info.tokenAmount.amount', 0),
+        ),
       );
-      if (isSent) {
+      if (isSentCommision) {
+        amount = -amount;
+        description = 'Commission';
+      }
+      if (!isSentCommision && isSent) {
         amount = -amount;
         description = 'Sent';
       }
+      if (amount !== 0) {
+        historyItem.push({ amount, description });
+      }
     }
-    return { amount, description };
+    return historyItem;
   }
 
-  async _getEntityFromTxn(account: AccountModel, txn: ParsedTransactionWithMeta)
-    : Promise<EntityFromTxnDto | null> {
-    const payment = await this.paymentModel.findOne({
-      $or: [
-        { 'cpResult.signature': { $in: txn.transaction.signatures } },
-        { txnHash: { $in: txn.transaction.signatures } },
-      ],
-    }).populate(['sale.org']);
+  async _getEntityFromTxn(
+    account: AccountModel,
+    txn: ParsedTransactionWithMeta,
+  ): Promise<EntityFromTxnDto | null> {
+    const payment = await this.paymentModel
+      .findOne({
+        $or: [
+          { 'cpResult.signature': { $in: txn.transaction.signatures } },
+          { txnHash: { $in: txn.transaction.signatures } },
+        ],
+      })
+      .populate(['sale.org']);
     let sale: SaleOfferDocument;
     if (!isNil(payment) && payment.type === PaymentType.AssetsSell) {
       await this.saleOfferModel.populateSeller(payment);
       await this.saleOfferModel.populateBuyer(payment);
       sale = payment.sale;
     } else {
-      sale = await this.saleOfferModel
-        .findOne({ txnHash: { $in: txn.transaction.signatures } });
+      sale = await this.saleOfferModel.findOne({
+        txnHash: { $in: txn.transaction.signatures },
+      });
       if (!isNil(sale)) {
         await sale.populateBuyer();
         await sale.populateSeller();
@@ -119,40 +182,63 @@ export class AccountService {
       };
     }
     const instructions = txn.transaction.message.instructions;
-    return instructions
-      .reduce<Promise<EntityFromTxnDto | null>>
-    (async (entity, instruction: ParsedInstruction) => {
-      if (!isNil(await entity)) {
-        return entity;
-      }
-      const parsed = get(instruction, 'parsed');
-      const authority = get(parsed, 'info.authority', get(parsed, 'info.mintAuthority', ''));
-      const org = await this.orgModel.findOne({ wallet: authority.toString() });
-      if (!isNil(org)) {
-        return { username: org.username, img: org.logo, org };
-      }
-      const destination = get(parsed, 'info.destination', '');
-      let accInfo: Account, owner: PublicKey;
-      if (!isEmpty(destination)) {
-        accInfo = await this.apiService.getAccountInfo(destination.toString());
-        owner = get(accInfo, 'owner');
-      }
-      if (isEqual(authority.toString(), account.wallet.toString())) {
-        const receiver = await this.userModel.findOne({ wallet: owner.toString() });
-        if (!isNil(receiver)) {
-          return { username: receiver.nickname, img: receiver.avatar };
-        } else {
-          return { username: owner.toString() };
+    return instructions.reduce<Promise<EntityFromTxnDto | null>>(
+      async (entity, instruction: ParsedInstruction) => {
+        if (!isNil(await entity)) {
+          return entity;
         }
-      }
-      if (!isNil(owner) && isEqual(owner.toString(), account.wallet.toString())) {
-        const sender = await this.userModel.findOne({ wallet: authority.toString() });
-        if (!isNil(sender)) {
-          return { username: sender.nickname, img: sender.avatar, from: sender };
-        } else {
-          return { username: authority.toString(), from: authority.toString() };
+        const parsed = get(instruction, 'parsed');
+        const authority = get(
+          parsed,
+          'info.authority',
+          get(parsed, 'info.mintAuthority', ''),
+        );
+        const org = await this.orgModel.findOne({
+          wallet: authority.toString(),
+        });
+        if (!isNil(org)) {
+          return { username: org.username, img: org.logo, org };
         }
-      }
-    }, null);
+        const destination = get(parsed, 'info.destination', '');
+        let accInfo: Account, owner: PublicKey;
+        if (!isEmpty(destination)) {
+          accInfo = await this.apiService.getAccountInfo(
+            destination.toString(),
+          );
+          owner = get(accInfo, 'owner');
+        }
+        if (isEqual(authority.toString(), account.wallet.toString())) {
+          const receiver = await this.userModel.findOne({
+            wallet: owner.toString(),
+          });
+          if (!isNil(receiver)) {
+            return { username: receiver.nickname, img: receiver.avatar };
+          } else {
+            return { username: owner.toString() };
+          }
+        }
+        if (
+          !isNil(owner) &&
+          isEqual(owner.toString(), account.wallet.toString())
+        ) {
+          const sender = await this.userModel.findOne({
+            wallet: authority.toString(),
+          });
+          if (!isNil(sender)) {
+            return {
+              username: sender.nickname,
+              img: sender.avatar,
+              from: sender,
+            };
+          } else {
+            return {
+              username: authority.toString(),
+              from: authority.toString(),
+            };
+          }
+        }
+      },
+      null,
+    );
   }
 }
