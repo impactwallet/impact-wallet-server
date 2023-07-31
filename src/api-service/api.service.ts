@@ -341,8 +341,7 @@ export class ApiService {
 
   async airdrop(walletAddress: string, password: string) {
     if (this.isMainnet) {
-      const pk = await this.getPK(walletAddress, password);
-      return this.createAccount(pk);
+      return;
     }
     const signature: TransactionSignature =
       await this.connection.requestAirdrop(
@@ -375,7 +374,6 @@ export class ApiService {
         this.http.post(`${this.shyftBaseUrl}/semi_wallet/create`, body, config),
       );
       const walletAddress = get(response, 'data.result.wallet_address');
-      await this.airdrop(walletAddress, password);
       return walletAddress;
     } catch (err) {
       err.message = `Error creating wallet: ${err.message}`;
