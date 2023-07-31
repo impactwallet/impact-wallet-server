@@ -1,14 +1,20 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { TransactionSignature } from '@solana/web3.js';
 
 export class TxnHistoryItemDto {
-  @ApiProperty({ type: 'number', description: 'The unix timestamp of when the transaction was processed' })
-    processedAt?: number;
+  @ApiProperty({
+    type: 'number',
+    description: 'The unix timestamp of when the transaction was processed',
+  })
+  processedAt?: number;
   @ApiProperty({ type: 'string', description: 'Address or entity username' })
-    addressOrUsername?: string;
+  addressOrUsername?: string;
   @ApiProperty({ type: 'string', description: 'Entity image' })
-    img?: string;
+  img?: string;
   @ApiProperty({ type: 'number', description: 'Transaction amount' })
-    amount?: number;
+  amount?: number;
   @ApiProperty({ type: 'string', description: 'Transaction description' })
-    description?: string;
+  description?: string;
+  @ApiProperty({ type: 'string', description: 'Transaction signature' })
+  transactionSignature?: string;
 }

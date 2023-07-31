@@ -6,6 +6,7 @@ import {
   ParsedInstruction,
   ParsedTransactionWithMeta,
   PublicKey,
+  SignaturesForAddressOptions,
 } from '@solana/web3.js';
 import { get, isEmpty, isEqual, isNil, toNumber } from 'lodash';
 import { Org, OrgDocument } from '../orgs/schema/org.schema';
@@ -35,9 +36,12 @@ export class AccountService {
     private readonly saleOfferModel: SaleOfferModel,
   ) {}
 
-  async getUsdcHistory(account: AccountModel): Promise<TxnHistoryItemDto[]> {
+  async getUsdcHistory(
+    account: AccountModel,
+    options?: SignaturesForAddressOptions,
+  ): Promise<TxnHistoryItemDto[]> {
     const { associatedAddress, parsedTxns } =
-      await this.apiService.getUSDCHistory(account.wallet);
+      await this.apiService.getUSDCHistory(account.wallet, options);
     return this._buildUsdcHistory(account, associatedAddress, parsedTxns);
   }
 
@@ -50,6 +54,7 @@ export class AccountService {
     const rootAssociatedAddress =
       await this.apiService.getRootAssociatedAddress();
     for (const txn of parsedTxns) {
+      let count = 0;
       if (!isNil(txn.meta.err)) {
         continue;
       }
@@ -62,7 +67,9 @@ export class AccountService {
         const historyItem: TxnHistoryItemDto = {
           amount: transaction.amount,
           description: transaction.description,
+          transactionSignature: txn.transaction.signatures[count],
         };
+        count++;
         if (transaction.description !== 'Commission') {
           const inAppEntity = await this._getEntityFromTxn(account, txn);
           historyItem.addressOrUsername = get(inAppEntity, 'username');
@@ -83,7 +90,7 @@ export class AccountService {
         } else if (
           transaction.description === 'Commission' &&
           transactionHistory.length > 1
-        ) {       
+        ) {
           const orgSeller: OrgDocument = await this.orgModel.findOne({
             wallet: transaction.authority,
           });
