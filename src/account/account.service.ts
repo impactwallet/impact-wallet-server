@@ -40,6 +40,8 @@ export class AccountService {
     account: AccountModel,
     options?: SignaturesForAddressOptions,
   ): Promise<TxnHistoryItemDto[]> {
+     const limit = options.limit ?? 10;
+     options = { ...options, limit };
     const { associatedAddress, parsedTxns } =
       await this.apiService.getUSDCHistory(account.wallet, options);
     return this._buildUsdcHistory(account, associatedAddress, parsedTxns);
