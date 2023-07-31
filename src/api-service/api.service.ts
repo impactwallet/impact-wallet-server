@@ -262,7 +262,7 @@ export class ApiService {
   async transferUSDC(
     recepients: { senderPk: string; wallet: string; amount: number }[],
   ) {
-    if (!this.isMainnet || isEmpty(recepients)) {
+    if (isEmpty(recepients)) {
       return;
     }
     try {
