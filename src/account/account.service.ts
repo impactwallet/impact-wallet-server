@@ -83,20 +83,16 @@ export class AccountService {
         } else if (
           transaction.description === 'Commission' &&
           transactionHistory.length > 1
-        ) {
+        ) {       
+          const orgSeller: OrgDocument = await this.orgModel.findOne({
+            wallet: transaction.authority,
+          });
           const org: OrgDocument = await this.orgModel.findOne({
             wallet: process.env.ROOT_PUBKEY,
           });
-          const payment = await this.paymentModel
-          .findOne({
-            $or: [
-              { 'cpResult.signature': { $in: txn.transaction.signatures } },
-              { txnHash: { $in: txn.transaction.signatures } },
-            ],
-          })
           historyItem.addressOrUsername = org.name;
           historyItem.img = org.logo;
-          historyItem.description = 'Commission';
+          historyItem.description = `Commission for selling equity of ${orgSeller.name}`;
         }
         historyItem.processedAt = txn.blockTime * 1000;
         history.push(historyItem);
@@ -115,6 +111,7 @@ export class AccountService {
     const instructions = txn.transaction.message
       .instructions as ParsedInstruction[];
     for (const instruction of instructions) {
+      const authority = get(instruction, 'parsed.info.authority', '');
       const source = get(instruction, 'parsed.info.source', '');
       const destination = get(instruction, 'parsed.info.destination', '');
       const isSent = isEqual(source.toString(), associatedAddress.toString());
@@ -146,7 +143,7 @@ export class AccountService {
         description = 'Sent';
       }
       if (amount !== 0) {
-        historyItem.push({ amount, description });
+        historyItem.push({ amount, description, authority });
       }
     }
     return historyItem.reverse();
