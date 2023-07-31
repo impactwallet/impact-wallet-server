@@ -1,6 +1,9 @@
 import { mapSeries, delay } from 'bluebird';
-import { CheckoutItemEntity, verifyWebhookSignature } from '@candypay/checkout-sdk';
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  CheckoutItemEntity,
+  verifyWebhookSignature,
+} from '@candypay/checkout-sdk';
+import { BadRequestException, Injectable, Session } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { defaultTo, get, identity, isNil, pickBy } from 'lodash';
 import mongoose, { ClientSession, Model } from 'mongoose';
@@ -14,7 +17,11 @@ import { ReceiveInvestmentDto } from './dto/receive-investment.dto';
 import { ReceivePaymentDto } from './dto/receive-payment.dto';
 import { PaymentType } from './enum/payment-type.enum';
 import { Payment, PaymentDocument } from './schema/payment.schema';
-import { SaleOffer, SaleOfferDocument, SaleOfferModel } from '../offers/schema/sale-offer.schema';
+import {
+  SaleOffer,
+  SaleOfferDocument,
+  SaleOfferModel,
+} from '../offers/schema/sale-offer.schema';
 import { SellAssetsDto } from './dto/sale-assets.dto';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { Role } from '../members/enum/roles.enum';
@@ -22,7 +29,6 @@ import { EquityType } from '../members/enum/equity-type.enum';
 
 @Injectable()
 export class PaymentService {
-
   constructor(
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
     @InjectModel(Member.name) private memberModel: Model<MemberDocument>,
@@ -31,7 +37,7 @@ export class PaymentService {
     @InjectConnection() private readonly connection: mongoose.Connection,
     private candypayService: CandyPayService,
     private apiService: ApiService,
-  ) { }
+  ) {}
 
   async receivePayment(org: OrgDocument, body: ReceivePaymentDto) {
     const session = await this.connection.startSession();
@@ -41,13 +47,17 @@ export class PaymentService {
       amount: totalAmount,
     });
     await session.withTransaction(async () => {
-      const items: CheckoutItemEntity[] = body.items.map(item => ({
+      const items: CheckoutItemEntity[] = body.items.map((item) => ({
         name: item.name,
         price: item.amount,
         image: defaultTo(item.image, `${process.env.SERVER_URL}${org.logo}`),
         quantity: 1,
       }));
-      const sessionData = await this.candypayService.createSession({ logo: org.logo, receiver: org, items });
+      const sessionData = await this.candypayService.createSession({
+        logo: org.logo,
+        receiver: org,
+        items,
+      });
       newPayment.cpSessionId = sessionData.session_id;
       newPayment.cpOrderId = sessionData.order_id;
       newPayment.cpPaymentUrl = sessionData.payment_url;
@@ -59,7 +69,12 @@ export class PaymentService {
     return newPayment;
   }
 
-  async receiveInvestmentCandyPay(org: OrgDocument, member: MemberProspect, body: ReceiveInvestmentDto, session?: ClientSession) {
+  async receiveInvestmentCandyPay(
+    org: OrgDocument,
+    member: MemberProspect,
+    body: ReceiveInvestmentDto,
+    session?: ClientSession,
+  ) {
     const newPayment = new this.paymentModel({
       type: PaymentType.Investment,
       org: org._id,
@@ -75,7 +90,11 @@ export class PaymentService {
         quantity: 1,
       },
     ];
-    const sessionData = await this.candypayService.createSession({ logo: org.logo, receiver: org, items });
+    const sessionData = await this.candypayService.createSession({
+      logo: org.logo,
+      receiver: org,
+      items,
+    });
     newPayment.cpSessionId = sessionData.session_id;
     newPayment.cpOrderId = sessionData.order_id;
     newPayment.cpPaymentUrl = sessionData.payment_url;
@@ -119,7 +138,11 @@ export class PaymentService {
         quantity: 1,
       },
     ];
-    const sessionData = await this.candypayService.createSession({ logo: org.logo, receiver: seller, items });
+    const sessionData = await this.candypayService.createSession({
+      logo: org.logo,
+      receiver: seller,
+      items,
+    });
     newPayment.cpSessionId = sessionData.session_id;
     newPayment.cpOrderId = sessionData.order_id;
     newPayment.cpPaymentUrl = sessionData.payment_url;
@@ -127,7 +150,11 @@ export class PaymentService {
     return newPayment.save();
   }
 
-  sellAssetsInApp(saleOffer: SaleOfferDocument, body: SellAssetsDto, session?: ClientSession) {
+  sellAssetsInApp(
+    saleOffer: SaleOfferDocument,
+    body: SellAssetsDto,
+    session?: ClientSession,
+  ) {
     const newPayment = new this.paymentModel({
       type: PaymentType.AssetsSell,
       amount: body.price,
@@ -147,10 +174,12 @@ export class PaymentService {
     } catch (err) {
       throw new BadRequestException('Invalid webhook signature');
     }
-    const payment = await this.paymentModel.findOneAndUpdate(
-      { cpOrderId: body.order_id },
-      { $set: { cpResult: body } },
-    ).populate({ path: 'org', select: '+password' });
+    const payment = await this.paymentModel
+      .findOneAndUpdate(
+        { cpOrderId: body.order_id },
+        { $set: { cpResult: body } },
+      )
+      .populate({ path: 'org', select: '+password' });
 
     const org = payment.org as OrgDocument;
 
@@ -162,8 +191,9 @@ export class PaymentService {
 
     try {
       if (payment.type === PaymentType.Regular) {
-        this.handleRegularPayment(org, body)
-          .catch(err => console.log(`Error handling regular payment for ${org.name}: ${err}`));
+        this.handleRegularPayment(org, body).catch((err) =>
+          console.log(`Error handling regular payment for ${org.name}: ${err}`),
+        );
       } else if (payment.type === PaymentType.Investment) {
         await this.handleInvestmentPayment(org, payment, body);
       } else if (payment.type === PaymentType.AssetsSell) {
@@ -180,7 +210,7 @@ export class PaymentService {
     org: OrgDocument,
     payment: PaymentDocument,
     session?: ClientSession,
-  ): Promise<{ member: MemberDocument, memberBeforeUpdate: MemberDocument }> {
+  ): Promise<{ member: MemberDocument; memberBeforeUpdate: MemberDocument }> {
     const memberQuery = {
       org: org._id,
       user: payment.investor.user,
@@ -189,7 +219,10 @@ export class PaymentService {
     let member = await this.memberModel
       .findOne(pickBy(memberQuery, identity))
       .populate(['user', 'orgUser']);
-    let memberUser = defaultTo(get(member, 'user') as UserDocument, get(member, 'orgUser') as OrgDocument);
+    let memberUser = defaultTo(
+      get(member, 'user') as UserDocument,
+      get(member, 'orgUser') as OrgDocument,
+    );
     let memberBeforeUpdate: MemberDocument;
 
     if (isNil(member)) {
@@ -200,10 +233,17 @@ export class PaymentService {
       };
       await member.save({ session });
       await member.populate(['user', 'orgUser']);
-      memberUser = defaultTo(get(member, 'user') as UserDocument, get(member, 'orgUser') as OrgDocument);
+      memberUser = defaultTo(
+        get(member, 'user') as UserDocument,
+        get(member, 'orgUser') as OrgDocument,
+      );
     } else {
-      const newEquity = get(member, 'equity.amount', 0) + payment.investor.investorSettings.equityAllocation;
-      const newInvestmentAmount = get(member, 'investorSettings.investmentAmount', 0) + payment.investor.investorSettings.investmentAmount;
+      const newEquity =
+        get(member, 'equity.amount', 0) +
+        payment.investor.investorSettings.equityAllocation;
+      const newInvestmentAmount =
+        get(member, 'investorSettings.investmentAmount', 0) +
+        payment.investor.investorSettings.investmentAmount;
       memberBeforeUpdate = await this.memberModel.findOneAndUpdate(
         { _id: member._id },
         {
@@ -220,49 +260,76 @@ export class PaymentService {
         },
         { session },
       );
-      member = await this.memberModel.findById(member._id).populate(['user', 'orgUser']);
+      member = await this.memberModel
+        .findById(member._id)
+        .populate(['user', 'orgUser']);
     }
 
     return { member, memberBeforeUpdate };
   }
 
-  async handleRegularPayment(org: OrgDocument, body: any, isWithCommission = true) {
+  async handleRegularPayment(
+    org: OrgDocument,
+    body: any,
+    isWithCommission = true,
+  ) {
     if (org.mintStatus !== 'success') {
       return;
     }
-    const rootOrg = await this.orgModel.findOne({ wallet: process.env.ROOT_PUBKEY }, '+password');
+    const rootOrg = await this.orgModel.findOne(
+      { wallet: process.env.ROOT_PUBKEY },
+      '+password',
+    );
     const paymentAmount = body.payment_amount * LAMPORTS_PER_SOL;
     const treasury = paymentAmount * (org.settings.treasury / 100);
     const amountToSplit = paymentAmount - treasury;
     if (amountToSplit <= 0) {
       return;
     }
-    const holders = await this.memberModel.find({
-      org: org._id,
-      'equity.amount': { $gt: 0 },
-    }).populate([
-      { path: 'user', select: '+password' },
-      { path: 'orgUser', select: '+password' },
-    ]);
+    const holders = await this.memberModel
+      .find({
+        org: org._id,
+        'equity.amount': { $gt: 0 },
+      })
+      .populate([
+        { path: 'user', select: '+password' },
+        { path: 'orgUser', select: '+password' },
+      ]);
     const membersWithAmount = [];
     const orgMembers = [];
     const orgPk = await this.apiService.getPK(org.wallet, org.password);
-    
+
     await mapSeries(holders, async (holder) => {
       const equityAmount = holder.equity?.amount * LAMPORTS_PER_SOL;
       const amount = amountToSplit * (equityAmount / org.lamportsMinted);
-      const wallet = defaultTo((holder.user as UserDocument)?.wallet, (holder.orgUser as OrgDocument)?.wallet);
-      membersWithAmount.push({ senderPk: orgPk, wallet, amount: amount / LAMPORTS_PER_SOL });
+      this.profitCalculationAndSave(
+        holder,
+        amount / LAMPORTS_PER_SOL,
+        body.session,
+      );
+      const wallet = defaultTo(
+        (holder.user as UserDocument)?.wallet,
+        (holder.orgUser as OrgDocument)?.wallet,
+      );
+      membersWithAmount.push({
+        senderPk: orgPk,
+        wallet,
+        amount: amount / LAMPORTS_PER_SOL,
+      });
       if (isNil(holder.user) && !isNil(holder.orgUser)) {
         const orgUser = holder.orgUser as OrgDocument;
-        orgMembers.push({ orgUser, amount: amount / LAMPORTS_PER_SOL, isWithCommission });
+        orgMembers.push({
+          orgUser,
+          amount: amount / LAMPORTS_PER_SOL,
+          isWithCommission,
+        });
       }
       // } else if (isWithCommission) {
       //   const user = holder.user as UserDocument;
       //   const userPk = await this.apiService.getPK(user.wallet, user.password);
-      //   const comissionAmount = (amount * +process.env.COMISSION) / LAMPORTS_PER_SOL;
-      //   membersWithAmount.push({ senderPk: userPk, wallet: process.env.ROOT_PUBKEY, amount: comissionAmount });
-      //   orgMembers.push({ orgUser: rootOrg, amount: comissionAmount, isWithCommission: false });
+      //   const commissionAmount = (amount * +process.env.COMMISSION) / LAMPORTS_PER_SOL;
+      //   membersWithAmount.push({ senderPk: userPk, wallet: process.env.ROOT_PUBKEY, amount: commissionAmount });
+      //   orgMembers.push({ orgUser: rootOrg, amount: commissionAmount, isWithCommission: false });
       // }
     });
 
@@ -271,45 +338,63 @@ export class PaymentService {
       signature,
       this.apiService.transferUSDC.bind(this.apiService, membersWithAmount),
     );
-    this.apiService.sendNotification(`USDC transfered to ${org.name} and split between members:\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
+    this.apiService.sendNotification(
+      `USDC transfered to ${
+        org.name
+      } and split between members:\n\n${signature}\n\n${this.apiService.buildExplorerLink(
+        '/tx/' + signature,
+      )}`,
+    );
 
     await mapSeries(
       orgMembers,
       async ({ orgUser, amount, isWithCommission }) => {
         try {
           await delay(2000);
-          await this.handleRegularPayment(orgUser, { payment_amount: amount }, isWithCommission);
+          await this.handleRegularPayment(
+            orgUser,
+            { payment_amount: amount },
+            isWithCommission,
+          );
         } catch (err) {
-          console.log(`Error handling regular payment for ${orgUser.name}: ${err}`);
+          console.log(
+            `Error handling regular payment for ${orgUser.name}: ${err}`,
+          );
         }
       },
     );
   }
 
   async handleAssetsSale(payment: PaymentDocument, session?: ClientSession) {
-    const member = await this.memberModel.findOne({
-      $or: [
-        { user: payment.sale.seller },
-        { orgUser: payment.sale.seller },
-      ],
-      org: payment.sale.org,
-    }).populate([
-      { path: 'user', select: '+password' },
-      { path: 'orgUser', select: '+password' },
-    ]);
-    const memberUser = defaultTo(member.user as UserDocument, member.orgUser as OrgDocument);
+    const member = await this.memberModel
+      .findOne({
+        $or: [{ user: payment.sale.seller }, { orgUser: payment.sale.seller }],
+        org: payment.sale.org,
+      })
+      .populate([
+        { path: 'user', select: '+password' },
+        { path: 'orgUser', select: '+password' },
+      ]);
+    const memberUser = defaultTo(
+      member.user as UserDocument,
+      member.orgUser as OrgDocument,
+    );
     await payment.populate('sale.org');
     await this.saleOfferModel.populateBuyer(payment);
     const org = payment.sale.org as OrgDocument;
     const buyer = payment.sale.buyer as UserDocument | OrgDocument;
-    const buyerMemberField = buyer instanceof this.orgModel ? 'orgUser' : 'user';
+    const buyerMemberField =
+      buyer instanceof this.orgModel ? 'orgUser' : 'user';
     const lamportsAmount = payment.sale.tokensAmount * LAMPORTS_PER_SOL;
 
-    const senderPk = await this.apiService.getPK(memberUser.wallet, memberUser.password);
-    const transferInstructions = await this.apiService.createTransferInstructions(
-      org.mint,
-      [{ senderPk, wallet: buyer.wallet, amount: payment.sale.tokensAmount }],
+    const senderPk = await this.apiService.getPK(
+      memberUser.wallet,
+      memberUser.password,
     );
+    const transferInstructions =
+      await this.apiService.createTransferInstructions(org.mint, [
+        { senderPk, wallet: buyer.wallet, amount: payment.sale.tokensAmount },
+      ]);
 
     const buyerMember = await this.memberModel.findOne({
       org: org._id,
@@ -332,7 +417,8 @@ export class PaymentService {
     } else {
       buyerMember.lamportsEarned += lamportsAmount;
       buyerMember.equity = {
-        amount: get(buyerMember, 'equity.amount', 0) + payment.sale.tokensAmount,
+        amount:
+          get(buyerMember, 'equity.amount', 0) + payment.sale.tokensAmount,
         type: EquityType.Immediately,
       };
       await buyerMember.save({ session });
@@ -350,5 +436,14 @@ export class PaymentService {
     );
 
     return transferInstructions;
+  }
+
+  async profitCalculationAndSave(
+    member: MemberDocument,
+    profit: number,
+    session?: ClientSession,
+  ) {
+    member.profit += profit;
+    await member.save({ session });
   }
 }

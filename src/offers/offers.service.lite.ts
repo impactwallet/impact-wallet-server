@@ -258,8 +258,8 @@ export class OffersLiteService extends OffersServiceBase {
             message: 'Insufficient funds',
           });
         }
-        const comissionAmount =
-          (paymentInfo.amount * LAMPORTS_PER_SOL * +process.env.COMISSION) /
+        const commissionAmount =
+          (paymentInfo.amount * LAMPORTS_PER_SOL * +process.env.COMMISSION) /
           LAMPORTS_PER_SOL;
         const session = await this.connection.startSession();
         await session.withTransaction(async () => {
@@ -291,7 +291,7 @@ export class OffersLiteService extends OffersServiceBase {
                 {
                   senderPk: orgPk,
                   wallet: rootOrg.wallet,
-                  amount: comissionAmount,
+                  amount: commissionAmount,
                 },
               ],
             );
@@ -349,15 +349,15 @@ export class OffersLiteService extends OffersServiceBase {
           `${account.username} just invested ${payment.amount} USDC into ${org.name} and received the equity from:\n\n${equitySources}\n\n${txnLinks}`,
         );
 
-        // Our comission
+        // Our commission
         this.paymentService
           .handleRegularPayment(
             rootOrg,
-            { payment_amount: comissionAmount },
+            { payment_amount: commissionAmount },
             false,
           )
           .catch((error) =>
-            console.error(`Error while handling comission payment: ${error}`),
+            console.error(`Error while handling commission payment: ${error}`),
           );
         break;
       case OfferStatusDto.declined:
@@ -551,11 +551,12 @@ export class OffersLiteService extends OffersServiceBase {
             message: 'Not enough tokens to sell',
           });
         }
-        const comissionAmount =
-          (offer.price * LAMPORTS_PER_SOL * +process.env.COMISSION) /
+        const commimssionAmount =
+          (offer.price * LAMPORTS_PER_SOL * +process.env.COMMISSION) /
           LAMPORTS_PER_SOL;
         const session = await this.connection.startSession();
         await session.withTransaction(async () => {
+          this.paymentService.profitCalculationAndSave( member, commimssionAmount, session );
           payment = await this.paymentService.sellAssetsInApp(
             offer,
             paymentInfo,
@@ -586,7 +587,7 @@ export class OffersLiteService extends OffersServiceBase {
                 {
                   senderPk: sellerPk,
                   wallet: rootOrg.wallet,
-                  amount: comissionAmount,
+                  amount: commimssionAmount,
                 },
               ],
             );
@@ -623,15 +624,15 @@ export class OffersLiteService extends OffersServiceBase {
           `${buyerUsername} just bought ${payment.sale.tokensAmount} ${org.name} impact shares from ${sellerUsername} for ${payment.amount} USDC:\n\n${payment.txnHash}`,
         );
 
-        // Our comission
+        // Our commission
         this.paymentService
           .handleRegularPayment(
             rootOrg,
-            { payment_amount: comissionAmount },
+            { payment_amount: commimssionAmount },
             false,
           )
           .catch((error) =>
-            console.error(`Error while handling comission payment: ${error}`),
+            console.error(`Error while handling commission payment: ${error}`),
           );
         break;
       case OfferStatusDto.declined:

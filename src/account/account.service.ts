@@ -21,7 +21,6 @@ import { PaymentType } from '../payment/enum/payment-type.enum';
 import { User, UserDocument } from '../users/schema/user.schema';
 import { Account } from '@solana/spl-token';
 import { InjectModel } from '@nestjs/mongoose';
-import { getAssociatedTokenAddress } from '@solana/spl-token';
 import { TransactionHistoryDto } from './dto/transaction-history.dto';
 
 @Injectable()
@@ -106,6 +105,7 @@ export class AccountService {
   ) {
     let description = 'Received';
     const historyItem: TransactionHistoryDto[] = [];
+    const result: TransactionHistoryDto[] = [];
     const instructions = txn.transaction.message
       .instructions as ParsedInstruction[];
     for (const instruction of instructions) {
@@ -144,7 +144,7 @@ export class AccountService {
         historyItem.push({ amount, description });
       }
     }
-    return historyItem;
+    return historyItem.reverse();
   }
 
   async _getEntityFromTxn(
