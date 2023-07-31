@@ -40,8 +40,6 @@ export class AccountService {
     account: AccountModel,
     options?: SignaturesForAddressOptions,
   ): Promise<TxnHistoryItemDto[]> {
-     const limit = options.limit ?? 10;
-     options = { ...options, limit };
     const { associatedAddress, parsedTxns } =
       await this.apiService.getUSDCHistory(account.wallet, options);
     return this._buildUsdcHistory(account, associatedAddress, parsedTxns);
@@ -93,15 +91,22 @@ export class AccountService {
           transaction.description === 'Commission' &&
           transactionHistory.length > 1
         ) {
-          const orgSeller: OrgDocument = await this.orgModel.findOne({
+          let seller: UserDocument | OrgDocument;
+           seller = await this.orgModel.findOne({
             wallet: transaction.authority,
           });
+           if (!seller) {
+            seller = await this.userModel.findOne({
+            wallet: transaction.authority,
+          });
+        }
           const org: OrgDocument = await this.orgModel.findOne({
             wallet: process.env.ROOT_PUBKEY,
           });
           historyItem.addressOrUsername = org.name;
           historyItem.img = org.logo;
-          historyItem.description = `Commission for selling equity of ${orgSeller.name}`;
+          historyItem.description = `Commission for selling equity of ${seller.name}`;
+          
         }
         historyItem.processedAt = txn.blockTime * 1000;
         history.push(historyItem);

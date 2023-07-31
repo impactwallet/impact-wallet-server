@@ -30,7 +30,9 @@ export class AccountController {
     @Body() options?: SignaturesForAddressOptions,
   ) {
     const account = await this.authService.getAccountFromToken(req);
-
+    options = options ?? {};
+    const limit = options.limit ?? 10;
+    options = { ...options, limit };
     return this.accountService.getUsdcHistory(account, options);
   }
 }
