@@ -238,9 +238,7 @@ export class PaymentService {
         get(member, 'orgUser') as OrgDocument,
       );
     } else {
-      const newEquity =
-        get(member, 'equity.amount', 0) +
-        payment.investor.investorSettings.equityAllocation;
+      const newEquity = payment.investor.investorSettings.equityAllocation;
       const newInvestmentAmount =
         get(member, 'investorSettings.investmentAmount', 0) +
         payment.investor.investorSettings.investmentAmount;

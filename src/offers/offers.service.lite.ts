@@ -276,12 +276,12 @@ export class OffersLiteService extends OffersServiceBase {
           const orgPk = await this.apiService.getPK(org.wallet, org.password);
           const createUSDCAccountInstruction =
             await this.apiService.createTokenAccountInstruction(
-              this.apiService.usdcMint,
+              process.env.USDC_MINT,
               org.wallet,
             );
           const transferUSDCInstructions =
             await this.apiService.createTransferInstructions(
-              this.apiService.usdcMint,
+              process.env.USDC_MINT,
               [
                 {
                   senderPk: pk,
@@ -300,19 +300,6 @@ export class OffersLiteService extends OffersServiceBase {
               org.mint,
               account.wallet,
             );
-
-          const { member, memberBeforeUpdate } =
-            await this.paymentService.handleInvestmentPayment(
-              org,
-              payment,
-              session,
-            );
-          if (!isNil(memberBeforeUpdate)) {
-            investedMembersMap.set(
-              member[memberField].toString(),
-              memberBeforeUpdate.toObject(),
-            );
-          }
           const txnHash = await this.apiService.createAndSendTxn(
             [
               createUSDCAccountInstruction,
@@ -322,6 +309,18 @@ export class OffersLiteService extends OffersServiceBase {
             [pk, orgPk],
           );
           payment.txnHash = txnHash;
+          const { member, memberBeforeUpdate } =
+            await this.paymentService.handleInvestmentPayment(
+              org,
+              payment,
+              session,
+            );
+          if (!isNil(memberBeforeUpdate)) {
+            investedMembersMap.set(
+              get(member[memberField], '_id', '').toString(),
+              memberBeforeUpdate.toObject(),
+            );
+          }
           const { memberDataMap, txnsHashes } = await this.collectEquity(
             org,
             member,
@@ -556,7 +555,11 @@ export class OffersLiteService extends OffersServiceBase {
           LAMPORTS_PER_SOL;
         const session = await this.connection.startSession();
         await session.withTransaction(async () => {
-          this.paymentService.profitCalculationAndSave( member, commimssionAmount, session );
+          this.paymentService.profitCalculationAndSave(
+            member,
+            commimssionAmount,
+            session,
+          );
           payment = await this.paymentService.sellAssetsInApp(
             offer,
             paymentInfo,
@@ -572,12 +575,12 @@ export class OffersLiteService extends OffersServiceBase {
           );
           const createUSDCAccountInstruction =
             await this.apiService.createTokenAccountInstruction(
-              this.apiService.usdcMint,
+              process.env.USDC_MINT,
               seller.wallet,
             );
           const transferUSDCInstructions =
             await this.apiService.createTransferInstructions(
-              this.apiService.usdcMint,
+              process.env.USDC_MINT,
               [
                 {
                   senderPk: buyerPk,

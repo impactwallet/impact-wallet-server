@@ -57,7 +57,6 @@ export class ApiService {
   solscanBaseUrl = 'https://public-api.solscan.io';
   network: Cluster = process.env.NETWORK as Cluster;
   connection = new Connection(clusterApiUrl(this.network), 'confirmed');
-  usdcMint = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
   memoProgramId = 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr';
   explorerUrl = 'https://explorer.solana.com';
 
@@ -139,7 +138,8 @@ export class ApiService {
     mint: string,
     recepients: { senderPk: string; wallet: string; amount: number }[],
   ): Promise<TransactionInstruction[]> {
-    const multiplier = mint === this.usdcMint ? 1000000 : LAMPORTS_PER_SOL;
+    const multiplier =
+      mint === process.env.USDC_MINT ? 1000000 : LAMPORTS_PER_SOL;
     const mintPublicKey = new PublicKey(mint);
     const instructionsPromises = recepients.map(
       async ({ senderPk, wallet, amount }) => {
@@ -262,11 +262,11 @@ export class ApiService {
   async transferUSDC(
     recepients: { senderPk: string; wallet: string; amount: number }[],
   ) {
-    if (!this.isMainnet || isEmpty(recepients)) {
+    if (isEmpty(recepients)) {
       return;
     }
     try {
-      const signature = await this.transfer(this.usdcMint, recepients);
+      const signature = await this.transfer(process.env.USDC_MINT, recepients);
       return signature;
     } catch (err) {
       err.message = `Error transfering USDC: ${err.message}`;
@@ -302,7 +302,7 @@ export class ApiService {
       const toKeypair = Keypair.fromSecretKey(decode(walletPk));
       const rentExemptionAmount =
         await this.connection.getMinimumBalanceForRentExemption(space);
-      const USDCMintPublicKey = new PublicKey(this.usdcMint);
+      const USDCMintPublicKey = new PublicKey(process.env.USDC_MINT);
 
       const createAccountParams = {
         fromPubkey: new PublicKey(process.env.FEE_PAYER),
@@ -343,8 +343,7 @@ export class ApiService {
 
   async airdrop(walletAddress: string, password: string) {
     if (this.isMainnet) {
-      const pk = await this.getPK(walletAddress, password);
-      return this.createAccount(pk);
+      return;
     }
     const signature: TransactionSignature =
       await this.connection.requestAirdrop(
@@ -377,7 +376,6 @@ export class ApiService {
         this.http.post(`${this.shyftBaseUrl}/semi_wallet/create`, body, config),
       );
       const walletAddress = get(response, 'data.result.wallet_address');
-      await this.airdrop(walletAddress, password);
       return walletAddress;
     } catch (err) {
       err.message = `Error creating wallet: ${err.message}`;
@@ -400,10 +398,7 @@ export class ApiService {
       encoded_transaction: txn,
     });
     try {
-      const endpoint =
-        this.isMainnet && isRelay
-          ? '/txn_relayer/sign'
-          : '/transaction/send_txn';
+      const endpoint = isRelay ? '/txn_relayer/sign' : '/transaction/send_txn';
       const response = await firstValueFrom(
         this.http.post(`${this.shyftBaseUrl}${endpoint}`, body, config),
       );
@@ -425,9 +420,7 @@ export class ApiService {
     body.append('wallet', org.wallet);
     body.append('name', org.name.substring(0, 32));
     body.append('symbol', org.username.toUpperCase().substring(0, 10));
-    if (this.isMainnet) {
-      body.append('fee_payer', process.env.FEE_PAYER);
-    }
+    body.append('fee_payer', process.env.FEE_PAYER);
     body.append('file', logo, 'logo');
 
     const config: AxiosRequestConfig = {
@@ -541,7 +534,7 @@ export class ApiService {
       params: {
         network: this.network,
         wallet,
-        token: this.usdcMint,
+        token: process.env.USDC_MINT,
       },
     };
 
@@ -607,7 +600,7 @@ export class ApiService {
 
   async getRootAssociatedAddress(): Promise<PublicKey> {
     const rootWallet = process.env.ROOT_PUBKEY;
-    const mintPublicKey = new PublicKey(this.usdcMint);
+    const mintPublicKey = new PublicKey(process.env.USDC_MINT);
     return await getAssociatedTokenAddress(
       mintPublicKey,
       new PublicKey(rootWallet),
@@ -621,10 +614,7 @@ export class ApiService {
     associatedAddress: PublicKey;
     parsedTxns: ParsedTransactionWithMeta[];
   }> {
-    if (!this.isMainnet) {
-      return { associatedAddress: PublicKey.unique(), parsedTxns: [] };
-    }
-    return this.getTokenHistory(wallet, this.usdcMint, options);
+    return this.getTokenHistory(wallet, process.env.USDC_MINT, options);
   }
 
   async getAccountInfo(address: string) {
