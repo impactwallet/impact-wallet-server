@@ -276,12 +276,12 @@ export class OffersLiteService extends OffersServiceBase {
           const orgPk = await this.apiService.getPK(org.wallet, org.password);
           const createUSDCAccountInstruction =
             await this.apiService.createTokenAccountInstruction(
-              this.apiService.usdcMint,
+              process.env.USDC_MINT,
               org.wallet,
             );
           const transferUSDCInstructions =
             await this.apiService.createTransferInstructions(
-              this.apiService.usdcMint,
+              process.env.USDC_MINT,
               [
                 {
                   senderPk: pk,
@@ -572,12 +572,12 @@ export class OffersLiteService extends OffersServiceBase {
           );
           const createUSDCAccountInstruction =
             await this.apiService.createTokenAccountInstruction(
-              this.apiService.usdcMint,
+              process.env.USDC_MINT,
               seller.wallet,
             );
           const transferUSDCInstructions =
             await this.apiService.createTransferInstructions(
-              this.apiService.usdcMint,
+              process.env.USDC_MINT,
               [
                 {
                   senderPk: buyerPk,
