@@ -11,6 +11,7 @@ import {
   LAMPORTS_PER_SOL,
   ParsedTransactionWithMeta,
   PublicKey,
+  SignaturesForAddressOptions,
   SystemProgram,
   Transaction,
   TransactionInstruction,
@@ -30,6 +31,7 @@ import { decode } from 'bs58';
 import { get, isEmpty, isNil } from 'lodash';
 import { Org } from '../orgs/schema/org.schema';
 import { ConfigService } from '@nestjs/config';
+import { TransactionHistoryDto } from '../account/dto/transaction-history.dto';
 
 const REQUEST_TIMEOUT = 1000 * 60 * 60;
 const RETRIES = 5;
@@ -577,6 +579,7 @@ export class ApiService {
   async getTokenHistory(
     wallet: string,
     mint: string,
+    options?: SignaturesForAddressOptions,
   ): Promise<{
     associatedAddress: PublicKey;
     parsedTxns: ParsedTransactionWithMeta[];
@@ -588,6 +591,7 @@ export class ApiService {
     );
     const txns = await this.connection.getSignaturesForAddress(
       associatedAddress,
+      options,
     );
     const signatures = txns.map((txn) => txn.signature);
     const parsedTxns = await this.connection.getParsedTransactions(signatures);
@@ -603,14 +607,14 @@ export class ApiService {
     );
   }
 
-  async getUSDCHistory(wallet: string): Promise<{
+  async getUSDCHistory(
+    wallet: string,
+    options?: SignaturesForAddressOptions,
+  ): Promise<{
     associatedAddress: PublicKey;
     parsedTxns: ParsedTransactionWithMeta[];
   }> {
-    if (!this.isMainnet) {
-      return { associatedAddress: PublicKey.unique(), parsedTxns: [] };
-    }
-    return this.getTokenHistory(wallet, process.env.USDC_MINT);
+    return this.getTokenHistory(wallet, process.env.USDC_MINT, options);
   }
 
   async getAccountInfo(address: string) {

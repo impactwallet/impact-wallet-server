@@ -6,6 +6,7 @@ import {
   ParsedInstruction,
   ParsedTransactionWithMeta,
   PublicKey,
+  SignaturesForAddressOptions,
 } from '@solana/web3.js';
 import { get, isEmpty, isEqual, isNil, toNumber } from 'lodash';
 import { Org, OrgDocument } from '../orgs/schema/org.schema';
@@ -35,9 +36,14 @@ export class AccountService {
     private readonly saleOfferModel: SaleOfferModel,
   ) {}
 
-  async getUsdcHistory(account: AccountModel): Promise<TxnHistoryItemDto[]> {
+  async getUsdcHistory(
+    account: AccountModel,
+    options?: SignaturesForAddressOptions,
+  ): Promise<TxnHistoryItemDto[]> {
+     const limit = options.limit ?? 10;
+     options = { ...options, limit };
     const { associatedAddress, parsedTxns } =
-      await this.apiService.getUSDCHistory(account.wallet);
+      await this.apiService.getUSDCHistory(account.wallet, options);
     return this._buildUsdcHistory(account, associatedAddress, parsedTxns);
   }
 
@@ -50,6 +56,7 @@ export class AccountService {
     const rootAssociatedAddress =
       await this.apiService.getRootAssociatedAddress();
     for (const txn of parsedTxns) {
+      let count = 0;
       if (!isNil(txn.meta.err)) {
         continue;
       }
@@ -62,7 +69,9 @@ export class AccountService {
         const historyItem: TxnHistoryItemDto = {
           amount: transaction.amount,
           description: transaction.description,
+          transactionSignature: txn.transaction.signatures[count],
         };
+        count++;
         if (transaction.description !== 'Commission') {
           const inAppEntity = await this._getEntityFromTxn(account, txn);
           historyItem.addressOrUsername = get(inAppEntity, 'username');
@@ -84,19 +93,15 @@ export class AccountService {
           transaction.description === 'Commission' &&
           transactionHistory.length > 1
         ) {
+          const orgSeller: OrgDocument = await this.orgModel.findOne({
+            wallet: transaction.authority,
+          });
           const org: OrgDocument = await this.orgModel.findOne({
             wallet: process.env.ROOT_PUBKEY,
           });
-          const payment = await this.paymentModel
-          .findOne({
-            $or: [
-              { 'cpResult.signature': { $in: txn.transaction.signatures } },
-              { txnHash: { $in: txn.transaction.signatures } },
-            ],
-          })
           historyItem.addressOrUsername = org.name;
           historyItem.img = org.logo;
-          historyItem.description = 'Commission';
+          historyItem.description = `Commission for selling equity of ${orgSeller.name}`;
         }
         historyItem.processedAt = txn.blockTime * 1000;
         history.push(historyItem);
@@ -115,6 +120,7 @@ export class AccountService {
     const instructions = txn.transaction.message
       .instructions as ParsedInstruction[];
     for (const instruction of instructions) {
+      const authority = get(instruction, 'parsed.info.authority', '');
       const source = get(instruction, 'parsed.info.source', '');
       const destination = get(instruction, 'parsed.info.destination', '');
       const isSent = isEqual(source.toString(), associatedAddress.toString());
@@ -146,7 +152,7 @@ export class AccountService {
         description = 'Sent';
       }
       if (amount !== 0) {
-        historyItem.push({ amount, description });
+        historyItem.push({ amount, description, authority });
       }
     }
     return historyItem.reverse();

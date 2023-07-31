@@ -8,4 +8,5 @@ export class TransactionHistoryDto {
     @ApiProperty({ example: 'Commission', description: 'Trunsaction description' })
     description: string;
 
+    authority: string;
   }

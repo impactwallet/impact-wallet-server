@@ -556,7 +556,7 @@ export class OffersLiteService extends OffersServiceBase {
           LAMPORTS_PER_SOL;
         const session = await this.connection.startSession();
         await session.withTransaction(async () => {
-          // this.paymentService.profitCalculationAndSave( member, commimssionAmount, session );
+          this.paymentService.profitCalculationAndSave( member, commimssionAmount, session );
           payment = await this.paymentService.sellAssetsInApp(
             offer,
             paymentInfo,
