@@ -87,6 +87,13 @@ export class AccountService {
           const org: OrgDocument = await this.orgModel.findOne({
             wallet: process.env.ROOT_PUBKEY,
           });
+          const payment = await this.paymentModel
+          .findOne({
+            $or: [
+              { 'cpResult.signature': { $in: txn.transaction.signatures } },
+              { txnHash: { $in: txn.transaction.signatures } },
+            ],
+          })
           historyItem.addressOrUsername = org.name;
           historyItem.img = org.logo;
           historyItem.description = 'Commission';
@@ -105,7 +112,6 @@ export class AccountService {
   ) {
     let description = 'Received';
     const historyItem: TransactionHistoryDto[] = [];
-    const result: TransactionHistoryDto[] = [];
     const instructions = txn.transaction.message
       .instructions as ParsedInstruction[];
     for (const instruction of instructions) {
@@ -116,10 +122,9 @@ export class AccountService {
         destination.toString(),
         associatedAddress.toString(),
       );
-      const isSentCommision = isEqual(
-        destination.toString(),
-        rootAssociatedAddress.toString(),
-      );
+      const isSentCommision =
+        isEqual(destination.toString(), rootAssociatedAddress.toString()) &&
+        isEqual(source.toString(), associatedAddress.toString());
 
       if (!isSent && !isReceived && !isSentCommision) {
         continue;
