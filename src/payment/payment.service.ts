@@ -45,11 +45,12 @@ export class PaymentService {
     const newPayment = new this.paymentModel({
       org: org._id,
       amount: totalAmount,
+      orgPayload: body.customData,
     });
     await session.withTransaction(async () => {
       const items: CheckoutItemEntity[] = body.items.map((item) => ({
         name: item.name,
-        price: item.amount,
+        price: +item.amount,
         image: defaultTo(item.image, `${process.env.SERVER_URL}${org.logo}`),
         quantity: 1,
       }));
