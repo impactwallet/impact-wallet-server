@@ -19,6 +19,20 @@ export class OrgSettings {
   })
   @Prop()
   webhook: string;
+
+  @ApiProperty({
+    example: 'https://org.com/success',
+    description: 'Org payment success url',
+  })
+  @Prop()
+  successUrl: string;
+
+  @ApiProperty({
+    example: 'https://org.com/cancel',
+    description: 'Org payment cancel url',
+  })
+  @Prop()
+  cancelUrl: string;
 }
 
 export const OrgSettingsSchema = SchemaFactory.createForClass(OrgSettings);

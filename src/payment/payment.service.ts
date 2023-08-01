@@ -61,6 +61,8 @@ export class PaymentService {
         logo: org.logo,
         receiver: org,
         items,
+        successUrl: org.settings.successUrl,
+        cancelUrl: org.settings.cancelUrl,
       });
       newPayment.cpSessionId = sessionData.session_id;
       newPayment.cpOrderId = sessionData.order_id;
