@@ -107,8 +107,7 @@ export class OffersLiteService extends OffersServiceBase {
 
     if (offer.type === OfferType.Investor) {
       if (
-        offer.investorSettings.amount <=
-        offer.investorSettings.minimalInvestment
+        offer.investorSettings.amount < offer.investorSettings.minimalInvestment
       ) {
         throw new BadRequestException({
           message: 'Amount must be not less than minimal investment',
