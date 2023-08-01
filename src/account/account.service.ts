@@ -23,6 +23,7 @@ import { User, UserDocument } from '../users/schema/user.schema';
 import { Account } from '@solana/spl-token';
 import { InjectModel } from '@nestjs/mongoose';
 import { TransactionHistoryDto } from './dto/transaction-history.dto';
+import { MemberProspectDocument } from '../offers/schema/offer.schema';
 
 @Injectable()
 export class AccountService {
@@ -70,7 +71,10 @@ export class AccountService {
           transactionSignature: txn.transaction.signatures[count],
         };
         count++;
-        if (transaction.description !== 'Commission') {
+        if (
+          transaction.description !== 'Commission' &&
+          transaction.description !== 'Sent'
+        ) {
           const inAppEntity = await this._getEntityFromTxn(account, txn);
           historyItem.addressOrUsername = get(inAppEntity, 'username');
           historyItem.img = get(inAppEntity, 'img');
@@ -81,7 +85,7 @@ export class AccountService {
             const org = inAppEntity.sale.org as OrgDocument;
             const action =
               transaction.amount < 0 ? 'Paid for' : 'Received for selling';
-            historyItem.description = `${action} ${inAppEntity.sale.tokensAmount} Impact Shares of @${org.username}`;
+            historyItem.description = `${action} ${inAppEntity.sale.tokensAmount}% of @${org.username}`;
           } else if (!isNil(inAppEntity.org)) {
             historyItem.description = 'Profit Share';
           } else if (!isNil(inAppEntity.from)) {
@@ -91,22 +95,40 @@ export class AccountService {
           transaction.description === 'Commission' &&
           transactionHistory.length > 1
         ) {
-          let seller: UserDocument | OrgDocument;
-           seller = await this.orgModel.findOne({
-            wallet: transaction.authority,
-          });
-           if (!seller) {
-            seller = await this.userModel.findOne({
-            wallet: transaction.authority,
-          });
-        }
+          const regex = new RegExp(`${historyItem.transactionSignature}`, 'i');
+          const payment = await this.paymentModel
+            .findOne({ txnHash: regex })
+            .populate(['sale.org']);
+          let seller: SaleOfferDocument | MemberProspectDocument;
+          let tokensAmount = 0;
+          let sellerName = '';
+
+          if (!isNil(payment) && payment.type === PaymentType.AssetsSell) {
+            seller = payment.sale as SaleOfferDocument;
+            tokensAmount = seller.tokensAmount;
+          }
+          if (!isNil(payment) && payment.type === PaymentType.Investment) {
+            seller = payment.investor as MemberProspectDocument;
+            tokensAmount = seller.equity.amount;
+          }
+          let soldOrganization: OrgDocument;
+
+          if (!isNil(seller)) {
+            soldOrganization = await this.orgModel.findOne({
+              _id: seller.org,
+            });
+          }
+
+          sellerName = !isNil(soldOrganization)
+            ? soldOrganization.username
+            : '';
+
           const org: OrgDocument = await this.orgModel.findOne({
             wallet: process.env.ROOT_PUBKEY,
           });
           historyItem.addressOrUsername = org.name;
           historyItem.img = org.logo;
-          historyItem.description = `Commission for selling equity of ${seller.name}`;
-          
+          historyItem.description = `Commission for selling ${tokensAmount}% of @${sellerName}`;
         }
         historyItem.processedAt = txn.blockTime * 1000;
         history.push(historyItem);
