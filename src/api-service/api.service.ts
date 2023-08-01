@@ -31,7 +31,6 @@ import { decode } from 'bs58';
 import { get, isEmpty, isNil } from 'lodash';
 import { Org } from '../orgs/schema/org.schema';
 import { ConfigService } from '@nestjs/config';
-import { TransactionHistoryDto } from '../account/dto/transaction-history.dto';
 
 const REQUEST_TIMEOUT = 1000 * 60 * 60;
 const RETRIES = 5;

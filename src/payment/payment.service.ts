@@ -5,7 +5,7 @@ import {
 } from '@candypay/checkout-sdk';
 import { BadRequestException, Injectable, Session } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { defaultTo, get, identity, isNil, pickBy } from 'lodash';
+import { defaultTo, get, identity, isEmpty, isNil, pickBy } from 'lodash';
 import mongoose, { ClientSession, Model } from 'mongoose';
 import { ApiService } from '../api-service/api.service';
 import { CandyPayService } from '../api-service/candypay.service';
@@ -26,6 +26,8 @@ import { SellAssetsDto } from './dto/sale-assets.dto';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { Role } from '../members/enum/roles.enum';
 import { EquityType } from '../members/enum/equity-type.enum';
+import { HttpService } from '@nestjs/axios';
+import { firstValueFrom } from 'rxjs';
 
 @Injectable()
 export class PaymentService {
@@ -37,6 +39,7 @@ export class PaymentService {
     @InjectConnection() private readonly connection: mongoose.Connection,
     private candypayService: CandyPayService,
     private apiService: ApiService,
+    private http: HttpService,
   ) {}
 
   async receivePayment(org: OrgDocument, body: ReceivePaymentDto) {
@@ -192,6 +195,7 @@ export class PaymentService {
 
     try {
       if (payment.type === PaymentType.Regular) {
+        body.custom_data = payment.orgPayload;
         this.handleRegularPayment(org, body).catch((err) =>
           console.log(`Error handling regular payment for ${org.name}: ${err}`),
         );
@@ -275,6 +279,11 @@ export class PaymentService {
     if (org.mintStatus !== 'success') {
       return;
     }
+    if (!isEmpty(org.settings.webhook)) {
+      this.callOrgWebhook(org, body.custom_data).catch((err) => {
+        console.log(`Error calling webhook for ${org.name}: ${err}`);
+      });
+    }
     const rootOrg = await this.orgModel.findOne(
       { wallet: process.env.ROOT_PUBKEY },
       '+password',
@@ -301,11 +310,7 @@ export class PaymentService {
     await mapSeries(holders, async (holder) => {
       const equityAmount = holder.equity?.amount * LAMPORTS_PER_SOL;
       const amount = amountToSplit * (equityAmount / org.lamportsMinted);
-      this.profitCalculationAndSave(
-        holder,
-        amount / LAMPORTS_PER_SOL,
-        body.session,
-      );
+      this.profitCalculationAndSave(holder, amount / LAMPORTS_PER_SOL);
       const wallet = defaultTo(
         (holder.user as UserDocument)?.wallet,
         (holder.orgUser as OrgDocument)?.wallet,
@@ -444,5 +449,12 @@ export class PaymentService {
   ) {
     member.profit += profit;
     await member.save({ session });
+  }
+
+  async callOrgWebhook(org: OrgDocument, data: any) {
+    const response = await firstValueFrom(
+      this.http.post(org.settings.webhook, data),
+    );
+    return get(response, 'data');
   }
 }

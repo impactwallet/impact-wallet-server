@@ -6,63 +6,89 @@ export type OrgDocument = HydratedDocument<Org>;
 
 @Schema()
 export class OrgSettings {
-  @ApiProperty({ example: '30', description: 'Reserved for organization needs' })
+  @ApiProperty({
+    example: '30',
+    description: 'Reserved for organization needs',
+  })
   @Prop({ default: 0 })
-    treasury: number;
+  treasury: number;
+
+  @ApiProperty({
+    example: 'https://org.com/webhook',
+    description: 'Org payment webhook',
+  })
+  @Prop()
+  webhook: string;
 }
 
 export const OrgSettingsSchema = SchemaFactory.createForClass(OrgSettings);
 
 @Schema({ timestamps: true })
 export class Org {
-
-  @ApiProperty({ example: 'impact_wallet', description: 'Unique username of organization' })
+  @ApiProperty({
+    example: 'impact_wallet',
+    description: 'Unique username of organization',
+  })
   @Prop({ unique: true, required: true, set: (v = '') => v.trim() })
-    username: string;
+  username: string;
 
-  @ApiProperty({ example: 'Impact-Wallet', description: 'Name of organizations' })
+  @ApiProperty({
+    example: 'Impact-Wallet',
+    description: 'Name of organizations',
+  })
   @Prop({ required: true, set: (v = '') => v.trim() })
-    name: string;
+  name: string;
 
-  @ApiProperty({ example: 'Turn your time into equity', description: 'Information about the organization' })
+  @ApiProperty({
+    example: 'Turn your time into equity',
+    description: 'Information about the organization',
+  })
   @Prop()
-    description: string;
+  description: string;
 
-  @ApiProperty({ example: 'https://impact-wallet.com', description: 'Organization link' })
+  @ApiProperty({
+    example: 'https://impact-wallet.com',
+    description: 'Organization link',
+  })
   @Prop()
-    link: string;
+  link: string;
 
   @ApiProperty({ example: 'jpg, png', description: 'Logo organization' })
   @Prop({ required: true })
-    logo: string;
+  logo: string;
 
-  @ApiProperty({ example: '6ZMDvWkKG9v7GhoTjCPd9FyVCQ36YVxxsB7W57At9ShD', description: 'Organization wallet' })
+  @ApiProperty({
+    example: '6ZMDvWkKG9v7GhoTjCPd9FyVCQ36YVxxsB7W57At9ShD',
+    description: 'Organization wallet',
+  })
   @Prop()
-    wallet: string;
-
-  @Prop()
-    mint: string;
-
-  @Prop()
-    mintError: string;
+  wallet: string;
 
   @Prop()
-    mintStatus: string;
+  mint: string;
 
-  @ApiProperty({ example: 'msLadpoohjKhd621CPd9FyVCQ36YVsxxsB7W57At9ShM', description: 'Organization token' })
   @Prop()
-    token: string;
-    
+  mintError: string;
+
+  @Prop()
+  mintStatus: string;
+
+  @ApiProperty({
+    example: 'msLadpoohjKhd621CPd9FyVCQ36YVsxxsB7W57At9ShM',
+    description: 'Organization token',
+  })
+  @Prop()
+  token: string;
+
   @Prop({ select: false })
-    password: string;
+  password: string;
 
-  @Prop({ _id: false, type: OrgSettingsSchema, default: new OrgSettings()})
-    settings: OrgSettings;
+  @Prop({ _id: false, type: OrgSettingsSchema, default: new OrgSettings() })
+  settings: OrgSettings;
 
   @ApiProperty({ example: 0 })
   @Prop({ type: Number, default: 0 })
-    lamportsMinted: number;
-
+  lamportsMinted: number;
 }
 
 export const OrgSchema = SchemaFactory.createForClass(Org);
