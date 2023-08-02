@@ -1,4 +1,4 @@
-import { mapSeries, delay } from 'bluebird';
+import { mapSeries, delay, map } from 'bluebird';
 import {
   CheckoutItemEntity,
   verifyWebhookSignature,
@@ -341,20 +341,58 @@ export class PaymentService {
       // }
     });
 
-    const signature = await this.apiService.transferUSDC(membersWithAmount);
-    await this.apiService.confirmTxnWithRetry(
-      signature,
-      this.apiService.transferUSDC.bind(this.apiService, membersWithAmount),
-    );
+    const batchSize = 5;
+    const numBatches = Math.ceil(membersWithAmount.length / batchSize);
+    const txnHashes = [];
+    for (let i = 0; i < numBatches; i++) {
+      let lowerIndex = i * batchSize;
+      let upperIndex = (i + 1) * batchSize;
+      const membersToProcess = membersWithAmount.slice(lowerIndex, upperIndex);
+      const createUSDCAccountInstructions = await mapSeries(
+        membersToProcess,
+        ({ wallet }) =>
+          this.apiService.createTokenAccountInstruction(
+            process.env.USDC_MINT,
+            wallet,
+          ),
+      );
+      const transferUSDCInstructions =
+        await this.apiService.createTransferInstructions(
+          process.env.USDC_MINT,
+          membersToProcess,
+        );
+      const transferFn = this.apiService.createAndSendTxn.bind(
+        this.apiService,
+        [...createUSDCAccountInstructions, ...transferUSDCInstructions],
+        [orgPk],
+      );
+      try {
+        let txnHash = await transferFn();
+        txnHash = await this.apiService.confirmTxnWithRetry(
+          txnHash,
+          transferFn,
+        );
+        txnHashes.push(txnHash);
+      } catch (err) {
+        console.log(
+          `Error handling regular payment for ${JSON.stringify(
+            membersToProcess,
+          )}: ${err}`,
+        );
+      }
+    }
+
+    const txnLinks = txnHashes
+      .map((hash) => {
+        return this.apiService.buildExplorerLink(`/tx/${hash}`);
+      })
+      .join('\n');
+
     this.apiService.sendNotification(
-      `USDC transfered to ${
-        org.name
-      } and split between members:\n\n${signature}\n\n${this.apiService.buildExplorerLink(
-        '/tx/' + signature,
-      )}`,
+      `USDC transfered to ${org.name} and split between members:\n\n${txnLinks}`,
     );
 
-    await mapSeries(
+    await map(
       orgMembers,
       async ({ orgUser, amount, isWithCommission }) => {
         try {
@@ -370,6 +408,7 @@ export class PaymentService {
           );
         }
       },
+      { concurrency: 3 },
     );
   }
 
