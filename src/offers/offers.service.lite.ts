@@ -114,6 +114,13 @@ export class OffersLiteService extends OffersServiceBase {
         });
       }
 
+      const balance = await this.apiService.getUSDCBalance(account.wallet);
+      if (balance < offer.investorSettings.amount) {
+        throw new BadRequestException({
+          message: 'Insufficient funds',
+        });
+      }
+
       this.updateInvestOfferStatus(org, offer, body, account).catch((error) =>
         console.error(`Error while updating invest offer status: ${error}`),
       );
@@ -207,31 +214,20 @@ export class OffersLiteService extends OffersServiceBase {
     const equityAllocation =
       (body.amount * offer.investorSettings.equity) /
       offer.investorSettings.amount;
-    let memberProspect = offer.memberProspects.find((mp) => {
-      return areObjectIdsEqual(mp[memberField], account.id);
+    const memberProspect = new this.memberProspectModel({
+      occupation: 'Investor',
+      role: Role.Investor,
+      equity: {
+        amount: equityAllocation,
+        type: EquityType.Immediately,
+      },
+      investorSettings: {
+        investmentAmount: body.amount,
+        equityAllocation,
+      },
+      org: org._id,
+      [memberField]: account.id,
     });
-
-    if (isNil(memberProspect)) {
-      memberProspect = new this.memberProspectModel({
-        occupation: 'Investor',
-        role: Role.Investor,
-        equity: {
-          amount: equityAllocation,
-          type: EquityType.Immediately,
-        },
-        investorSettings: {
-          investmentAmount: body.amount,
-          equityAllocation,
-        },
-        org: org._id,
-        [memberField]: account.id,
-      });
-      offer.memberProspects.push(memberProspect);
-    } else {
-      memberProspect.investorSettings.investmentAmount += body.amount;
-      memberProspect.investorSettings.equityAllocation += equityAllocation;
-      memberProspect.equity.amount += equityAllocation;
-    }
 
     switch (body.status) {
       case OfferStatusDto.accepted:
@@ -247,16 +243,10 @@ export class OffersLiteService extends OffersServiceBase {
           { wallet: process.env.ROOT_PUBKEY },
           '+password',
         );
-        const balance = await this.apiService.getUSDCBalance(account.wallet);
         const paymentInfo = {
           info: `Investing $${body.amount} for ${equityAllocation}% of equity allocation`,
           amount: body.amount,
         };
-        if (balance < paymentInfo.amount) {
-          throw new BadRequestException({
-            message: 'Insufficient funds',
-          });
-        }
         const commissionAmount =
           (paymentInfo.amount * LAMPORTS_PER_SOL * +process.env.COMMISSION) /
           LAMPORTS_PER_SOL;
@@ -334,6 +324,21 @@ export class OffersLiteService extends OffersServiceBase {
             acc += `${memberDataMap[memberId].username}: ${memberDataMap[memberId].amount}\n`;
             return acc;
           }, '');
+
+          const existingMemberProspect = offer.memberProspects.find((mp) => {
+            return areObjectIdsEqual(mp[memberField], account.id);
+          });
+          if (isNil(existingMemberProspect)) {
+            offer.memberProspects.push(memberProspect);
+          } else {
+            existingMemberProspect.investorSettings.investmentAmount +=
+              body.amount;
+            existingMemberProspect.investorSettings.equityAllocation +=
+              equityAllocation;
+            existingMemberProspect.equity.amount += equityAllocation;
+          }
+
+          await offer.save({ session });
         });
         await session.endSession();
 
@@ -360,10 +365,11 @@ export class OffersLiteService extends OffersServiceBase {
         break;
       case OfferStatusDto.declined:
         offer.status = OfferStatus.Declined;
+        await offer.save();
         break;
     }
 
-    return offer.save();
+    return offer;
   }
 
   async collectEquity(
