@@ -115,7 +115,7 @@ export class OffersLiteService extends OffersServiceBase {
       }
 
       const balance = await this.apiService.getUSDCBalance(account.wallet);
-      if (balance < offer.investorSettings.amount) {
+      if (balance < body.amount) {
         throw new BadRequestException({
           message: 'Insufficient funds',
         });
