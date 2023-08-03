@@ -1,8 +1,18 @@
 import mongoose, { Connection, Model } from 'mongoose';
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 
-import { Contribution, ContributionDocument, ContributionSplit } from './schema/contribution.schema';
+import {
+  Contribution,
+  ContributionDocument,
+  ContributionSplit,
+} from './schema/contribution.schema';
 import { StartContributionDto } from './dto/start-contribution.dto';
 import { MembersService } from '../members/members.service';
 import { areObjectIdsEqual } from '../utils/mongo';
@@ -22,12 +32,13 @@ import { AccountModel } from '../auth/models/account.model';
 @Injectable()
 export class ContributionsService {
   constructor(
-    @InjectModel(Contribution.name) private readonly contributionModel: Model<ContributionDocument>,
+    @InjectModel(Contribution.name)
+    private readonly contributionModel: Model<ContributionDocument>,
     @InjectConnection() private readonly connection: Connection,
     private readonly membersService: MembersService,
     private readonly apiService: ApiService,
     private readonly orgsService: OrgsService,
-  ) { }
+  ) {}
 
   getContributions(filter: ContributionsFilterDto) {
     const query = {};
@@ -54,7 +65,9 @@ export class ContributionsService {
           },
         },
         { $addFields: { member: { $first: '$member' } } },
-        { $match: { 'member.user': new mongoose.Types.ObjectId(filter.userId) } }
+        {
+          $match: { 'member.user': new mongoose.Types.ObjectId(filter.userId) },
+        },
       );
     }
 
@@ -73,7 +86,11 @@ export class ContributionsService {
     return this.contributionModel.aggregate(pipelines);
   }
 
-  async startContribution(orgId: string, body: StartContributionDto, account: AccountModel) {
+  async startContribution(
+    orgId: string,
+    body: StartContributionDto,
+    account: AccountModel,
+  ) {
     const org = await this.orgsService.getByOrgId(orgId);
     if (isNil(org)) {
       throw new NotFoundException({ message: 'Organization not found' });
@@ -81,15 +98,25 @@ export class ContributionsService {
 
     const { memberId } = body;
 
-    const member = await this.membersService.getMemberById(memberId, [{ path: 'user' }, { path: 'org' }]);
-    const memberUser: UserDocument | OrgDocument = defaultTo(member.user as UserDocument, member.orgUser as OrgDocument);
+    const member = await this.membersService.getMemberById(memberId, [
+      { path: 'user' },
+      { path: 'org' },
+    ]);
+    const memberUser: UserDocument | OrgDocument = defaultTo(
+      member.user as UserDocument,
+      member.orgUser as OrgDocument,
+    );
 
     if (!areObjectIdsEqual(memberUser._id, account.id)) {
-      throw new UnauthorizedException('It is not allowed to start contribution for another user');
+      throw new UnauthorizedException(
+        'It is not allowed to start contribution for another user',
+      );
     }
 
     if (!areObjectIdsEqual(member.org, orgId)) {
-      throw new ForbiddenException('Member does not belong to the organisation');
+      throw new ForbiddenException(
+        'Member does not belong to the organisation',
+      );
     }
 
     const existingContributions = await this.contributionModel.find({
@@ -129,10 +156,11 @@ export class ContributionsService {
 
     const session = await this.connection.startSession();
     await session.withTransaction(async () => {
-      contribution = await this.contributionModel.findOne({
-        _id: new mongoose.Types.ObjectId(contributionId),
-        org: new mongoose.Types.ObjectId(orgId),
-      })
+      contribution = await this.contributionModel
+        .findOne({
+          _id: new mongoose.Types.ObjectId(contributionId),
+          org: new mongoose.Types.ObjectId(orgId),
+        })
         .populate([
           { path: 'member', populate: [{ path: 'user' }, { path: 'orgUser' }] },
           'org',
@@ -153,7 +181,10 @@ export class ContributionsService {
       }
 
       const member: MemberDocument = contribution.member as MemberDocument;
-      const memberUser: UserDocument | OrgDocument = defaultTo(member.user as UserDocument, member.orgUser as OrgDocument);
+      const memberUser: UserDocument | OrgDocument = defaultTo(
+        member.user as UserDocument,
+        member.orgUser as OrgDocument,
+      );
 
       if (!areObjectIdsEqual(account.id, memberUser._id)) {
         throw new UnauthorizedException({
@@ -165,12 +196,20 @@ export class ContributionsService {
       contribution.stoppedAt = stoppedAt;
 
       const stoppedAtMoment = moment(stoppedAt);
-      const diff = moment(stoppedAtMoment).diff(contribution.createdAt, 'milliseconds');
+      const diff = moment(stoppedAtMoment).diff(
+        contribution.createdAt,
+        'milliseconds',
+      );
       const duration = moment.duration(diff).asHours();
-      let lamportsEarned = Math.round(duration * contribution.impactRatio * LAMPORTS_PER_SOL);
+      let lamportsEarned = Math.round(
+        duration * contribution.impactRatio * LAMPORTS_PER_SOL,
+      );
       contribution.lamportsEarned = lamportsEarned;
 
-      const investorsShares = await this._calculateAndUpdateInvestorsShares(org, lamportsEarned);
+      const investorsShares = await this._calculateAndUpdateInvestorsShares(
+        org,
+        lamportsEarned,
+      );
       const split = investorsShares.receivers;
       lamportsEarned -= investorsShares.total;
       split.push({
@@ -182,12 +221,23 @@ export class ContributionsService {
       contribution.split = split;
 
       contribution.txnStatus = 'processing';
-      const promises = split.map(data => {
-        return this.membersService.updateContributed((data.member as MemberDocument)._id, data.duration, data.amount, session).exec();
+      const promises = split.map((data) => {
+        return this.membersService
+          .updateContributed(
+            (data.member as MemberDocument)._id,
+            data.duration,
+            data.amount,
+            session,
+          )
+          .exec();
       });
       await Promise.all(promises);
       await contribution.save({ session });
-      await this.orgsService.updateMintedAmount(orgId, contribution.lamportsEarned, session);
+      await this.orgsService.updateMintedAmount(
+        orgId,
+        contribution.lamportsEarned,
+        session,
+      );
     });
     await session.endSession();
 
@@ -196,21 +246,36 @@ export class ContributionsService {
     return contribution;
   }
 
-  async mintAndConfirmWithRetryAndReverse(org: OrgDocument, contribution: ContributionDocument, body: StopContributionDto) {
+  async mintAndConfirmWithRetryAndReverse(
+    org: OrgDocument,
+    contribution: ContributionDocument,
+    body: StopContributionDto,
+  ) {
     try {
-      const mintContributionTokensFn = this.mintContributionTokens.bind(this, org, contribution, body.memo);
+      const mintContributionTokensFn = this.mintContributionTokens.bind(
+        this,
+        org,
+        contribution,
+        body.memo,
+      );
       let txnHash = await mintContributionTokensFn();
-      txnHash = await this.apiService.confirmTxnWithRetry(txnHash, mintContributionTokensFn);
+      txnHash = await this.apiService.confirmTxnWithRetry(
+        txnHash,
+        mintContributionTokensFn,
+      );
       contribution.txnHash = txnHash;
 
       contribution.txnStatus = 'confirmed';
       const nicknames = contribution.split
         .map(
-          ({ member }) => ((member as MemberDocument).user as UserDocument).nickname
+          ({ member }) =>
+            ((member as MemberDocument).user as UserDocument).nickname,
         )
         .join(', ');
       this.apiService.sendNotification(
-        `Tokens ${org.username.toUpperCase()} minted ant sent to members: ${nicknames}:\n\n${txnHash}\n\n${this.apiService.buildExplorerLink('/tx/' + txnHash)}`
+        `Tokens ${org.username.toUpperCase()} minted ant sent to members: ${nicknames}:\n\n${txnHash}\n\n${this.apiService.buildExplorerLink(
+          '/tx/' + txnHash,
+        )}`,
       );
     } catch (err) {
       contribution.txnError = err.message;
@@ -218,15 +283,25 @@ export class ContributionsService {
       try {
         const session = await this.connection.startSession();
         await session.withTransaction(async () => {
-          const promises: Promise<any>[] = contribution.split.map(data => {
-            return this.membersService.updateContributed(
-              (data.member as MemberDocument)._id,
-              -data.duration,
-              -data.amount,
-              session,
-            ).exec();
+          const promises: Promise<any>[] = contribution.split.map((data) => {
+            return this.membersService
+              .updateContributed(
+                (data.member as MemberDocument)._id,
+                -data.duration,
+                -data.amount,
+                session,
+              )
+              .exec();
           });
-          promises.push(this.orgsService.updateMintedAmount(org._id, -contribution.lamportsEarned, session).exec());
+          promises.push(
+            this.orgsService
+              .updateMintedAmount(
+                org._id,
+                -contribution.lamportsEarned,
+                session,
+              )
+              .exec(),
+          );
           await Promise.all(promises);
         });
         await session.endSession();
@@ -239,20 +314,33 @@ export class ContributionsService {
     return contribution.save();
   }
 
-  async mintContributionTokens(org: OrgDocument, contribution: ContributionDocument, memo?: string) {
+  async mintContributionTokens(
+    org: OrgDocument,
+    contribution: ContributionDocument,
+    memo?: string,
+  ) {
     const orgPk = await this.apiService.getPK(org.wallet, org.password);
     return this.apiService.mintToken(org.mint, orgPk, contribution.split, memo);
   }
 
-  async _calculateAndUpdateInvestorsShares(org: OrgDocument, lamportsEarned: number) {
+  async _calculateAndUpdateInvestorsShares(
+    org: OrgDocument,
+    lamportsEarned: number,
+  ) {
     const receivers: ContributionSplit[] = [];
     let total = 0;
-    const investors = await this.membersService.getMembers({
-      org: org._id,
-      role: Role.Investor,
-    }, 'user');
-    investors.forEach(investor => {
-      const investorShare = Math.round(lamportsEarned * (investor.investorSettings.equityAllocation / 100));
+    const investors = await this.membersService.getMembers(
+      {
+        org: org._id,
+        role: Role.Investor,
+      },
+      'user',
+    );
+    investors.forEach((investor) => {
+      const investorShare = Math.round(
+        lamportsEarned *
+          ((investor.investorSettings.equityAllocation as number) / 100),
+      );
       total += investorShare;
       receivers.push({
         member: investor,

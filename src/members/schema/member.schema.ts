@@ -1,25 +1,32 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { ApiProperty } from '@nestjs/swagger';
-import mongoose, { HydratedDocument } from 'mongoose';
+import mongoose, { HydratedDocument, Types } from 'mongoose';
 import { OrgDocument } from '../../orgs/schema/org.schema';
 import { UserDocument } from '../../users/schema/user.schema';
 import { Role } from '../enum/roles.enum';
 import { EquityType } from '../enum/equity-type.enum';
 import { CompensationType } from '../enum/compensation-type.enum';
 import { PeriodType } from '../enum/period-type.enum';
+import { bigJsToNumber, decimal128ToNumber } from '../../utils/bigjs';
+import Bigjs from 'big.js';
 
 export type MemberDocument = HydratedDocument<Member>;
 export type InvestorSettingsDocument = HydratedDocument<InvestorSettings>;
 
-@Schema({ _id: false })
+@Schema({ _id: false, toJSON: { getters: true }, toObject: { getters: true } })
 export class InvestorSettings {
   @ApiProperty({ description: 'Investment amount', type: Number })
   @Prop({ type: Number, required: true })
   investmentAmount: number;
 
   @ApiProperty({ description: 'Equity allocation', type: Number })
-  @Prop({ type: Number, required: true })
-  equityAllocation: number;
+  @Prop({
+    type: mongoose.Schema.Types.Decimal128,
+    required: true,
+    get: decimal128ToNumber,
+    set: bigJsToNumber,
+  })
+  equityAllocation: Bigjs | number;
 }
 
 export const InvestorSettingsSchema =
@@ -38,11 +45,18 @@ export class Period {
 
 export const PeriodSchema = SchemaFactory.createForClass(Period);
 
-@Schema({ _id: false })
+@Schema({ _id: false, toJSON: { getters: true }, toObject: { getters: true } })
 export class Equity {
   @ApiProperty({ example: 50 })
-  @Prop({ type: Number, required: true, max: 100, min: 0 })
-  amount: number;
+  @Prop({
+    type: mongoose.Schema.Types.Decimal128,
+    required: true,
+    max: 100,
+    min: 0,
+    get: decimal128ToNumber,
+    set: bigJsToNumber,
+  })
+  amount: Bigjs | number;
 
   @ApiProperty({ example: 'Immediately' })
   @Prop({ enum: Object.keys(EquityType), required: true })

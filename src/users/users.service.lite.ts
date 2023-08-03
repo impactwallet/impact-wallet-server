@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import mongoose, { Model } from 'mongoose';
 import { ApiService } from 'src/api-service/api.service';
@@ -12,12 +16,12 @@ import { User, UserDocument } from './schema/user.schema';
 import { UsersServiceBase } from './users.service.base';
 import { EquityType } from '../members/enum/equity-type.enum';
 import { AccountModel } from '../auth/models/account.model';
+import { toBigJs } from '../utils/bigjs';
 
 @Injectable()
 export class UsersServiceLite extends UsersServiceBase {
-
   constructor(
-  @InjectModel(User.name) userRepository: Model<UserDocument>,
+    @InjectModel(User.name) userRepository: Model<UserDocument>,
     @InjectModel(Member.name) private memberRepository: Model<MemberDocument>,
     @InjectModel(Org.name) private orgRepository: Model<OrgDocument>,
     private apiService: ApiService,
@@ -25,7 +29,11 @@ export class UsersServiceLite extends UsersServiceBase {
     super(userRepository);
   }
 
-  async sendAssets(sendAssetsDto: SendAssetsDto, account: AccountModel, orgId: string) {
+  async sendAssets(
+    sendAssetsDto: SendAssetsDto,
+    account: AccountModel,
+    orgId: string,
+  ) {
     const orgObjectId = new mongoose.Types.ObjectId(orgId);
     let recipientAddress: string;
     let recipient: UserDocument | OrgDocument;
@@ -33,31 +41,46 @@ export class UsersServiceLite extends UsersServiceBase {
       recipient = await this.getByUserId(sendAssetsDto.recipientId);
       recipientAddress = recipient.wallet;
     } else if (!isNil(sendAssetsDto.recipientOrgId)) {
-      recipient = await this.orgRepository.findById(sendAssetsDto.recipientOrgId);
+      recipient = await this.orgRepository.findById(
+        sendAssetsDto.recipientOrgId,
+      );
       recipientAddress = recipient.wallet;
     } else {
       recipientAddress = sendAssetsDto.recipientAddress;
     }
     const senderPassword = await account.password;
-    const senderMember = await this.memberRepository.findOne({
-      $or: [
-        { user: account.id },
-        { orgUser: account.id },
-      ],
-      org: orgObjectId,
-    }).populate('org');
+    const senderMember = await this.memberRepository
+      .findOne({
+        $or: [{ user: account.id }, { orgUser: account.id }],
+        org: orgObjectId,
+      })
+      .populate('org');
 
     if (isNil(senderMember)) {
       throw new NotFoundException('Sender member not found');
     }
-    if (isNil(senderMember.equity) || senderMember.equity.amount < sendAssetsDto.amount) {
+    const amount = toBigJs(sendAssetsDto.amount);
+    if (
+      isNil(senderMember.equity) ||
+      toBigJs(senderMember.equity.amount).lt(amount)
+    ) {
       throw new BadRequestException('Not enough tokens to send');
     }
 
     const org = senderMember.org as OrgDocument;
-    const transferFn = this.transfer.bind(this, account, senderPassword, recipientAddress, org.mint, sendAssetsDto.amount);
+    const transferFn = this.transfer.bind(
+      this,
+      account,
+      senderPassword,
+      recipientAddress,
+      org.mint,
+      amount.toNumber(),
+    );
     let signature = await transferFn();
-    signature = await this.apiService.confirmTxnWithRetry(signature, transferFn);
+    signature = await this.apiService.confirmTxnWithRetry(
+      signature,
+      transferFn,
+    );
 
     if (!isNil(recipient)) {
       const memberQuery = {
@@ -77,33 +100,59 @@ export class UsersServiceLite extends UsersServiceBase {
           user: memberQuery['user'],
           orgUser: memberQuery['orgUser'],
           org: orgObjectId,
-          lamportsEarned: sendAssetsDto.amount * LAMPORTS_PER_SOL,
           equity: {
-            amount: sendAssetsDto.amount,
+            amount,
             type: EquityType.Immediately,
           },
         });
         await newMember.save();
       } else {
-        set(recepientMember, 'equity.amount', get(recepientMember, 'equity.amount', 0) + sendAssetsDto.amount);
-        set(recepientMember, 'equity.type', get(recepientMember, 'equity.type', EquityType.Immediately));
+        set(
+          recepientMember,
+          'equity.amount',
+          toBigJs(get(recepientMember, 'equity.amount', 0)).add(amount),
+        );
+        set(
+          recepientMember,
+          'equity.type',
+          get(recepientMember, 'equity.type', EquityType.Immediately),
+        );
         await recepientMember.save();
       }
     }
 
     await this.memberRepository.findOneAndUpdate(
       { _id: senderMember._id },
-      { $inc: {
-        'lamportsEarned': -sendAssetsDto.amount * LAMPORTS_PER_SOL,
-        'equity.amount': -sendAssetsDto.amount,
-      } },
+      {
+        $inc: {
+          'equity.amount': -amount.toNumber(),
+        },
+      },
     );
 
-    this.apiService.sendNotification(`User ${account.username} sent ${sendAssetsDto.amount}% of equity in ${org.name} to ${get(recipient, 'nickname', get(recipient, 'username', recipientAddress))}\n\n${signature}\n\n${this.apiService.buildExplorerLink('/tx/' + signature)}`);
+    this.apiService.sendNotification(
+      `User ${account.username} sent ${amount.toNumber()}% of equity in ${
+        org.name
+      } to ${get(
+        recipient,
+        'nickname',
+        get(recipient, 'username', recipientAddress),
+      )}\n\n${signature}\n\n${this.apiService.buildExplorerLink(
+        '/tx/' + signature,
+      )}`,
+    );
   }
 
-  async transfer(source: any, sourcePassword: string, recipientAddress: string, mint: string, amount: number) {
+  async transfer(
+    source: any,
+    sourcePassword: string,
+    recipientAddress: string,
+    mint: string,
+    amount: number,
+  ) {
     const senderPk = await this.apiService.getPK(source.wallet, sourcePassword);
-    return this.apiService.transfer(mint, [{ senderPk, wallet: recipientAddress, amount }]);
+    return this.apiService.transfer(mint, [
+      { senderPk, wallet: recipientAddress, amount },
+    ]);
   }
 }

@@ -28,6 +28,7 @@ import { Role } from '../members/enum/roles.enum';
 import { EquityType } from '../members/enum/equity-type.enum';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
+import { toBigJs } from '../utils/bigjs';
 
 @Injectable()
 export class PaymentService {
@@ -217,7 +218,7 @@ export class PaymentService {
     org: OrgDocument,
     payment: PaymentDocument,
     session?: ClientSession,
-  ): Promise<{ member: MemberDocument; memberBeforeUpdate: MemberDocument }> {
+  ) {
     const memberQuery = {
       org: org._id,
       user: payment.investor.user,
@@ -226,11 +227,6 @@ export class PaymentService {
     let member = await this.memberModel
       .findOne(pickBy(memberQuery, identity))
       .populate(['user', 'orgUser']);
-    let memberUser = defaultTo(
-      get(member, 'user') as UserDocument,
-      get(member, 'orgUser') as OrgDocument,
-    );
-    let memberBeforeUpdate: MemberDocument;
 
     if (isNil(member)) {
       member = new this.memberModel(payment.investor.toObject());
@@ -238,41 +234,24 @@ export class PaymentService {
         amount: payment.investor.investorSettings.equityAllocation,
         type: EquityType.Immediately,
       };
-      await member.save({ session });
-      await member.populate(['user', 'orgUser']);
-      memberUser = defaultTo(
-        get(member, 'user') as UserDocument,
-        get(member, 'orgUser') as OrgDocument,
-      );
     } else {
-      const newEquity =
-        get(member, 'equity.amount', 0) +
-        payment.investor.investorSettings.equityAllocation;
+      const newEquity = toBigJs(get(member, 'equity.amount', 0)).add(
+        payment.investor.investorSettings.equityAllocation,
+      );
       const newInvestmentAmount =
         get(member, 'investorSettings.investmentAmount', 0) +
         payment.investor.investorSettings.investmentAmount;
-      memberBeforeUpdate = await this.memberModel.findOneAndUpdate(
-        { _id: member._id },
-        {
-          $set: {
-            equity: {
-              amount: newEquity,
-              type: EquityType.Immediately,
-            },
-            investorSettings: {
-              investmentAmount: newInvestmentAmount,
-              equityAllocation: newEquity,
-            },
-          },
-        },
-        { session },
-      );
-      member = await this.memberModel
-        .findById(member._id)
-        .populate(['user', 'orgUser']);
+      member.equity = {
+        amount: newEquity,
+        type: EquityType.Immediately,
+      };
+      member.investorSettings = {
+        investmentAmount: newInvestmentAmount,
+        equityAllocation: newEquity,
+      };
     }
 
-    return { member, memberBeforeUpdate };
+    return member.save({ session });
   }
 
   async handleRegularPayment(
@@ -292,10 +271,10 @@ export class PaymentService {
       { wallet: process.env.ROOT_PUBKEY },
       '+password',
     );
-    const paymentAmount = body.payment_amount * LAMPORTS_PER_SOL;
-    const treasury = paymentAmount * (org.settings.treasury / 100);
-    const amountToSplit = paymentAmount - treasury;
-    if (amountToSplit <= 0) {
+    const paymentAmount = toBigJs(body.payment_amount);
+    const treasury = paymentAmount.mul(org.settings.treasury / 100);
+    const amountToSplit = paymentAmount.minus(treasury);
+    if (amountToSplit.lt(0)) {
       return;
     }
     const holders = await this.memberModel
@@ -312,9 +291,9 @@ export class PaymentService {
     const orgPk = await this.apiService.getPK(org.wallet, org.password);
 
     await mapSeries(holders, async (holder) => {
-      const equityAmount = holder.equity?.amount * LAMPORTS_PER_SOL;
-      const amount = amountToSplit * (equityAmount / org.lamportsMinted);
-      this.profitCalculationAndSave(holder, amount / LAMPORTS_PER_SOL);
+      const equityAmount = toBigJs(holder.equity?.amount);
+      const amount = amountToSplit.mul(equityAmount.div(100));
+      this.profitCalculationAndSave(holder, amount.toNumber());
       const wallet = defaultTo(
         (holder.user as UserDocument)?.wallet,
         (holder.orgUser as OrgDocument)?.wallet,
@@ -322,13 +301,13 @@ export class PaymentService {
       membersWithAmount.push({
         senderPk: orgPk,
         wallet,
-        amount: amount / LAMPORTS_PER_SOL,
+        amount: amount.toNumber(),
       });
       if (isNil(holder.user) && !isNil(holder.orgUser)) {
         const orgUser = holder.orgUser as OrgDocument;
         orgMembers.push({
           orgUser,
-          amount: amount / LAMPORTS_PER_SOL,
+          amount: amount.toNumber(),
           isWithCommission,
         });
       }
@@ -464,8 +443,9 @@ export class PaymentService {
     } else {
       buyerMember.lamportsEarned += lamportsAmount;
       buyerMember.equity = {
-        amount:
-          get(buyerMember, 'equity.amount', 0) + payment.sale.tokensAmount,
+        amount: toBigJs(get(buyerMember, 'equity.amount', 0)).add(
+          payment.sale.tokensAmount,
+        ),
         type: EquityType.Immediately,
       };
       await buyerMember.save({ session });
