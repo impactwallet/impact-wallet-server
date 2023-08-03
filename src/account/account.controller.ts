@@ -1,11 +1,12 @@
-import { Body, Controller, Get, Post, Req } from '@nestjs/common';
-import { ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { Body, Controller, Get, Post, Query, Req, ValidationPipe } from '@nestjs/common';
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 import { TxnHistoryItemDto } from '../common/dto/txn-history-item.dto';
 import { AuthService } from '../auth/auth.service';
 import { AccountService } from './account.service';
-import { SignaturesForAddressOptions } from '@solana/web3.js';
+import { TransactionHistoryPaginationDto } from './dto/transaction-history-pagination.dto';
 
+@ApiTags('Account')
 @Controller('account')
 export class AccountController {
   constructor(
@@ -16,23 +17,12 @@ export class AccountController {
   @ApiOperation({ summary: 'Get accounts USDC transactions history' })
   @ApiResponse({ status: 200, type: TxnHistoryItemDto })
   @Get('usdc/history')
-  async getUserUsdcHistory(@Req() req: Request) {
-    const account = await this.authService.getAccountFromToken(req);
-
-    return this.accountService.getUsdcHistory(account);
-  }
-
-  @ApiOperation({ summary: 'Get accounts USDC transactions history' })
-  @ApiResponse({ status: 200, type: TxnHistoryItemDto })
-  @Post('usdc/history')
-  async getUserUsdcHistoryWithPagination(
+  async getUserUsdcHistory(
     @Req() req: Request,
-    @Body() options?: SignaturesForAddressOptions,
+    @Query(new ValidationPipe({ transform: true })) query: TransactionHistoryPaginationDto,
   ) {
     const account = await this.authService.getAccountFromToken(req);
-    options = options ?? {};
-    const limit = options.limit ?? 10;
-    options = { ...options, limit };
-    return this.accountService.getUsdcHistory(account, options);
+
+    return this.accountService.getUsdcHistory(account, query);
   }
 }
