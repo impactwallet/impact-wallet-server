@@ -405,7 +405,10 @@ export class OffersLiteService extends OffersServiceBase {
     await map(
       membersIds,
       (memberId) => {
-        const { amount } = memberDataMap[memberId];
+        const { amount, error } = memberDataMap[memberId];
+        if (!isNil(error)) {
+          return;
+        }
         return this.memberRepository.findOneAndUpdate(
           { _id: new Types.ObjectId(memberId) },
           {

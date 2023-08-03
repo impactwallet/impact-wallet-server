@@ -55,7 +55,7 @@ export class ApiService {
   shyftBaseUrl = 'https://api.shyft.to/sol/v1';
   solscanBaseUrl = 'https://public-api.solscan.io';
   network: Cluster = process.env.NETWORK as Cluster;
-  connection = new Connection(clusterApiUrl(this.network), 'confirmed');
+  connection = new Connection(process.env.SOLANA_RPC_URL, 'confirmed');
   memoProgramId = 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr';
   explorerUrl = 'https://explorer.solana.com';
 
