@@ -11,7 +11,10 @@ import {
   LAMPORTS_PER_SOL,
   ParsedTransactionWithMeta,
   PublicKey,
+  sendAndConfirmRawTransaction,
+  sendAndConfirmTransaction,
   SignaturesForAddressOptions,
+  Signer,
   SystemProgram,
   Transaction,
   TransactionInstruction,
@@ -196,15 +199,18 @@ export class ApiService {
       const blockhash = await this.connection.getLatestBlockhash('finalized');
       txn.recentBlockhash = blockhash.blockhash;
       txn.feePayer = new PublicKey(process.env.FEE_PAYER);
-
-      const senderPks = recepients.map(({ senderPk }) => senderPk);
-      const serializedTxn = this.createSignedSerializedTxn(
-        txn,
-        senderPks,
-        false,
-        false,
+      const feePayerPk = await this.getPK(
+        process.env.FEE_PAYER,
+        process.env.FEE_PAYER_PWD,
       );
-      const signature = await this.sendTxn(serializedTxn);
+
+      const signers = recepients.map(({ senderPk }) =>
+        Keypair.fromSecretKey(decode(senderPk)),
+      );
+      const signature = await this.sendTxn(txn, [
+        ...signers,
+        Keypair.fromSecretKey(decode(feePayerPk)),
+      ]);
       return signature;
     } catch (err) {
       if (retries > 0) {
@@ -238,14 +244,15 @@ export class ApiService {
       const blockhash = await this.connection.getLatestBlockhash('finalized');
       txn.recentBlockhash = blockhash.blockhash;
       txn.feePayer = new PublicKey(process.env.FEE_PAYER);
-
-      const serializedTxn = this.createSignedSerializedTxn(
-        txn,
-        pks,
-        false,
-        false,
+      const feePayerPk = await this.getPK(
+        process.env.FEE_PAYER,
+        process.env.FEE_PAYER_PWD,
       );
-      const signature = await this.sendTxn(serializedTxn);
+      const signers = pks.map((pk) => Keypair.fromSecretKey(decode(pk)));
+      const signature = await this.sendTxn(
+        txn,
+        signers.concat(Keypair.fromSecretKey(decode(feePayerPk))),
+      );
       return signature;
     } catch (err) {
       if (retries > 0) {
@@ -328,12 +335,14 @@ export class ApiService {
       const blockhash = await this.connection.getLatestBlockhash('finalized');
       createAccountTxn.recentBlockhash = blockhash.blockhash;
       createAccountTxn.feePayer = new PublicKey(process.env.FEE_PAYER);
-      const serializedTxn = this.createSignedSerializedTxn(
-        createAccountTxn,
-        walletPk,
-        false,
+      const feePayerPk = await this.getPK(
+        process.env.FEE_PAYER,
+        process.env.FEE_PAYER_PWD,
       );
-      await this.sendTxn(serializedTxn);
+      await this.sendTxn(createAccountTxn, [
+        toKeypair,
+        Keypair.fromSecretKey(decode(feePayerPk)),
+      ]);
     } catch (err) {
       err.message = `Error creating account: ${err.message}`;
       throw err;
@@ -383,32 +392,16 @@ export class ApiService {
     }
   }
 
-  async sendTxn(txn: string, isRelay = true) {
-    const headers = this.commonHeaders;
-    headers.set('Content-Type', 'application/json');
-
-    const config: AxiosRequestConfig = {
-      headers: Object.fromEntries(headers.entries()),
-      timeout: REQUEST_TIMEOUT,
-    };
-
-    const body = JSON.stringify({
-      network: this.network,
-      encoded_transaction: txn,
-    });
+  async sendTxn(txn: Transaction, signers: Signer[]) {
     try {
-      const endpoint = isRelay ? '/txn_relayer/sign' : '/transaction/send_txn';
-      const response = await firstValueFrom(
-        this.http.post(`${this.shyftBaseUrl}${endpoint}`, body, config),
+      const txnHash = await sendAndConfirmTransaction(
+        this.connection,
+        txn,
+        signers,
       );
-      return get(
-        response,
-        'data.result.signature',
-        get(response, 'data.result.tx'),
-      );
+      return txnHash;
     } catch (err) {
       err.message = `Error sending transaction: ${err.message}`;
-      console.log(JSON.stringify(get(err, 'response.data', err)));
       throw err;
     }
   }
@@ -439,13 +432,24 @@ export class ApiService {
       const mint = get(response, 'data.result.mint');
       const txn = Transaction.from(Buffer.from(encodedTxn, 'base64'));
       const pk = await this.getPK(org.wallet, org.password);
-      const serializedTxn = this.createSignedSerializedTxn(
-        txn,
-        pk,
-        true,
-        false,
+      const feePayerPk = await this.getPK(
+        process.env.FEE_PAYER,
+        process.env.FEE_PAYER_PWD,
       );
-      const txnHash = await this.sendTxn(serializedTxn);
+      const serializedTxn = this.createSignedSerializedTxn(txn, [
+        pk,
+        feePayerPk,
+      ]);
+      const txnHash = await this.connection.sendRawTransaction(
+        Buffer.from(serializedTxn, 'base64'),
+      );
+      const latestBlockHash = await this.connection.getLatestBlockhash();
+      const confirmStrategy = {
+        blockhash: latestBlockHash.blockhash,
+        lastValidBlockHeight: latestBlockHash.lastValidBlockHeight,
+        signature: txnHash,
+      };
+      await this.connection.confirmTransaction(confirmStrategy);
       return { mint, txnHash };
     } catch (err) {
       err.message = `Error creating token: ${err.message}`;
@@ -512,13 +516,14 @@ export class ApiService {
       const blockhash = await this.connection.getLatestBlockhash('finalized');
       txn.recentBlockhash = blockhash.blockhash;
       txn.feePayer = payer;
-      const serializedTxn = this.createSignedSerializedTxn(
-        txn,
-        authorityPk,
-        true,
-        false,
+      const feePayerPk = await this.getPK(
+        process.env.FEE_PAYER,
+        process.env.FEE_PAYER_PWD,
       );
-      const txnHash = await this.sendTxn(serializedTxn);
+      const txnHash = await this.sendTxn(txn, [
+        authorityKeypair,
+        Keypair.fromSecretKey(decode(feePayerPk)),
+      ]);
       return txnHash;
     } catch (err) {
       err.message = `Error minting token: ${err.message}`;
@@ -527,21 +532,15 @@ export class ApiService {
   }
 
   async getUSDCBalance(wallet: string) {
-    const config: AxiosRequestConfig = {
-      headers: Object.fromEntries(this.commonHeaders),
-      timeout: REQUEST_TIMEOUT,
-      params: {
-        network: this.network,
-        wallet,
-        token: process.env.USDC_MINT,
-      },
-    };
-
     try {
-      const response = await firstValueFrom(
-        this.http.get(`${this.shyftBaseUrl}/wallet/token_balance`, config),
+      const associatedAddress = await getAssociatedTokenAddress(
+        new PublicKey(process.env.USDC_MINT),
+        new PublicKey(wallet),
       );
-      return get(response, 'data.result.balance');
+      const balance = await this.connection.getTokenAccountBalance(
+        associatedAddress,
+      );
+      return balance.value.uiAmount;
     } catch (err) {
       err.message = `Error getting USDC balance: ${err.message}`;
       console.log(JSON.stringify(get(err, 'response.data', err)));
@@ -557,11 +556,10 @@ export class ApiService {
       let txn: ParsedTransactionWithMeta;
       let error: any;
       try {
-        const connection = new Connection(clusterApiUrl(this.network), {
-          commitment: 'confirmed',
-          disableRetryOnRateLimit: true,
-        });
-        txn = await connection.getParsedTransaction(signature, 'confirmed');
+        txn = await this.connection.getParsedTransaction(
+          signature,
+          'confirmed',
+        );
       } catch (err) {
         error = err;
       }
@@ -694,13 +692,15 @@ export class ApiService {
     const blockhash = await this.connection.getLatestBlockhash('finalized');
     txn.recentBlockhash = blockhash.blockhash;
     txn.feePayer = payer;
-    const serializedTxn = this.createSignedSerializedTxn(
-      txn,
-      keys.map((key) => key.pk),
-      true,
-      false,
+    const feePayerPk = await this.getPK(
+      process.env.FEE_PAYER,
+      process.env.FEE_PAYER_PWD,
     );
-    const txnHash = await this.sendTxn(serializedTxn);
+    const signers = keys.map((key) => Keypair.fromSecretKey(decode(key.pk)));
+    const txnHash = await this.sendTxn(
+      txn,
+      signers.concat(Keypair.fromSecretKey(decode(feePayerPk))),
+    );
     return txnHash;
   }
 }
