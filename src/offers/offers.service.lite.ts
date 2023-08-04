@@ -44,6 +44,7 @@ import { OfferType } from './enum/offer-type.enum';
 import { areObjectIdsEqual } from '../utils/mongo';
 import { map, reduce } from 'bluebird';
 import Bigjs from 'big.js';
+import { toFixed } from '../utils/bigjs';
 
 @Injectable()
 export class OffersLiteService extends OffersServiceBase {
@@ -226,9 +227,12 @@ export class OffersLiteService extends OffersServiceBase {
         investedAmount,
       });
     }
-    const equityAllocation = new Bigjs(body.amount)
-      .mul(offer.investorSettings.equity)
-      .div(offer.investorSettings.amount);
+    const equityAllocation = toFixed(
+      new Bigjs(body.amount)
+        .mul(offer.investorSettings.equity)
+        .div(offer.investorSettings.amount),
+      9,
+    );
     const memberProspect = new this.memberProspectModel({
       occupation: 'Investor',
       role: Role.Investor,
@@ -459,8 +463,11 @@ export class OffersLiteService extends OffersServiceBase {
           member.user as UserDocument,
           member.orgUser as OrgDocument,
         );
-        const amount = new Bigjs(member.equity.amount).mul(
-          equityAllocation.div(new Bigjs(100).minus(skipAmount)),
+        const amount = toFixed(
+          new Bigjs(member.equity.amount).mul(
+            equityAllocation.div(new Bigjs(100).minus(skipAmount)),
+          ),
+          9,
         );
         const username = defaultTo(
           (memberUser as UserDocument).nickname,

@@ -45,3 +45,7 @@ const ensureNumber = (value: any) => {
   }
   return defaultTo(toNumber(value), 0);
 };
+
+export const toFixed = (value: bigjs, precision: number) => {
+  return new bigjs(value.toFixed(precision));
+};

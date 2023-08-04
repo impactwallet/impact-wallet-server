@@ -28,7 +28,7 @@ import { Role } from '../members/enum/roles.enum';
 import { EquityType } from '../members/enum/equity-type.enum';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
-import { toBigJs } from '../utils/bigjs';
+import { toBigJs, toFixed } from '../utils/bigjs';
 
 @Injectable()
 export class PaymentService {
@@ -272,7 +272,7 @@ export class PaymentService {
       '+password',
     );
     const paymentAmount = toBigJs(body.payment_amount);
-    const treasury = paymentAmount.mul(org.settings.treasury / 100);
+    const treasury = toFixed(paymentAmount.mul(org.settings.treasury / 100), 6);
     const amountToSplit = paymentAmount.minus(treasury);
     if (amountToSplit.lt(0)) {
       return;
@@ -292,7 +292,7 @@ export class PaymentService {
 
     await mapSeries(holders, async (holder) => {
       const equityAmount = toBigJs(holder.equity?.amount);
-      const amount = amountToSplit.mul(equityAmount.div(100));
+      const amount = toFixed(amountToSplit.mul(equityAmount.div(100)), 6);
       this.profitCalculationAndSave(holder, amount.toNumber());
       const wallet = defaultTo(
         (holder.user as UserDocument)?.wallet,
