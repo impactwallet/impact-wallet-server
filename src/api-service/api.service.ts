@@ -542,9 +542,8 @@ export class ApiService {
       );
       return balance.value.uiAmount;
     } catch (err) {
-      err.message = `Error getting USDC balance: ${err.message}`;
-      console.log(JSON.stringify(get(err, 'response.data', err)));
-      throw err;
+      console.log(`Error getting USDC balance: ${err}`);
+      return 0;
     }
   }
 
