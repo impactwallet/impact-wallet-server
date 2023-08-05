@@ -45,6 +45,7 @@ import { DeleteAvatarsRequestDto } from '../users/dto/delete-avatars.request.dto
 import { User } from '../users/schema/user.schema';
 import { UpdateUserDto } from '../users/dto/update-user.dto';
 import { DeleteLogosRequestDto } from './dto/delete-logos.request.dto';
+import { MembersFilterDto } from '../members/dto/members.filter.dto';
 
 @ApiTags('Orgs')
 @Controller('orgs')
@@ -256,8 +257,13 @@ export class OrgsController {
   @ApiOperation({ summary: 'Get org members' })
   @ApiResponse({ status: 200, type: [Member] })
   @Get(':orgId/members')
-  getOrgMembers(@Param('orgId') orgId: string, @Req() req: Request) {
-    return this.orgsService.getOrgMembers(orgId, req);
+  async getOrgMembers(
+    @Param('orgId') orgId: string,
+    @Query() params: MembersFilterDto,
+    @Req() req: Request,
+  ) {
+    await this.authService.getAccountFromToken(req);
+    return this.orgsService.getOrgMembers(orgId, params);
   }
 
   @ApiOperation({ summary: 'Get member equity info' })
@@ -269,7 +275,7 @@ export class OrgsController {
     @Req() req: Request,
   ) {
     await this.authService.getAccountFromToken(req);
-    return this.orgsService.getMemberEquity(orgId, memberId);
+    return this.orgsService.getMemberEquity(memberId);
   }
 
   @ApiOperation({ summary: 'Get orgs logo' })

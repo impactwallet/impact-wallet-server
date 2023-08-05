@@ -1,17 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import * as FormData from 'form-data';
-import { delay, firstValueFrom, of } from 'rxjs';
+import { firstValueFrom } from 'rxjs';
 import { AxiosRequestConfig } from 'axios';
 import {
   Cluster,
-  clusterApiUrl,
   Connection,
   Keypair,
   LAMPORTS_PER_SOL,
   ParsedTransactionWithMeta,
   PublicKey,
-  sendAndConfirmRawTransaction,
   sendAndConfirmTransaction,
   SignaturesForAddressOptions,
   Signer,
@@ -34,6 +32,7 @@ import { decode } from 'bs58';
 import { get, isEmpty, isNil } from 'lodash';
 import { Org } from '../orgs/schema/org.schema';
 import { ConfigService } from '@nestjs/config';
+import { delay } from 'bluebird';
 
 const REQUEST_TIMEOUT = 1000 * 60 * 60;
 const RETRIES = 5;
@@ -531,10 +530,11 @@ export class ApiService {
     }
   }
 
-  async getUSDCBalance(wallet: string) {
+  async getTokenBalance(mint: string, wallet: string) {
     try {
+      await delay(200);
       const associatedAddress = await getAssociatedTokenAddress(
-        new PublicKey(process.env.USDC_MINT),
+        new PublicKey(mint),
         new PublicKey(wallet),
       );
       const balance = await this.connection.getTokenAccountBalance(
@@ -542,9 +542,13 @@ export class ApiService {
       );
       return balance.value.uiAmount;
     } catch (err) {
-      console.log(`Error getting USDC balance: ${err}`);
+      console.log(`Error getting token balance: ${err}`);
       return 0;
     }
+  }
+
+  getUSDCBalance(wallet: string) {
+    return this.getTokenBalance(process.env.USDC_MINT, wallet);
   }
 
   async getParsedTransaction(
@@ -563,7 +567,7 @@ export class ApiService {
         error = err;
       }
       if ((isNil(txn) || !isNil(error)) && r > 0) {
-        await firstValueFrom(of(true).pipe(delay((retries - (r - 1)) * 10000)));
+        await delay((retries - (r - 1)) * 1000);
         console.log(`Retrying getting txn ${r}: ${error}`);
         return this.getParsedTransaction(signature, --r);
       }

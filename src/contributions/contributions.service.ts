@@ -329,7 +329,7 @@ export class ContributionsService {
   ) {
     const receivers: ContributionSplit[] = [];
     let total = 0;
-    const investors = await this.membersService.getMembers(
+    const { list: investors } = await this.membersService.getMembers(
       {
         org: org._id,
         role: Role.Investor,
