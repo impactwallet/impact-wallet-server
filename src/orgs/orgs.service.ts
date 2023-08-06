@@ -34,6 +34,7 @@ import { MintStatus } from './enum/mint-status.enum';
 import { OrgHistoryItemAction } from './enum/org-history-item-action.enum';
 import { Org, OrgDocument } from './schema/org.schema';
 import { MembersFilterDto } from '../members/dto/members.filter.dto';
+import { toBigJs } from '../utils/bigjs';
 
 const MINT_STATUS_RETRIES = 5;
 
@@ -378,7 +379,7 @@ export class OrgsService {
     const query = {
       ...params,
       org: new Types.ObjectId(orgId),
-      $or: [{ 'equity.amount': { $gt: 0 } }, { equity: null }],
+      equity: { gt: 0 },
     };
     return this.memberService.getMembers(query, 'user orgUser');
   }
@@ -412,9 +413,7 @@ export class OrgsService {
       'user.wallet',
       get(member, 'orgUser.wallet'),
     );
-    const equity = await this.apiService.getTokenBalance(mint, memberWallet);
-
-    return equity;
+    return this.apiService.getTokenBalance(mint, memberWallet);
   }
 
   updateMint(
@@ -501,8 +500,10 @@ export class OrgsService {
 
   async sendUsdc(orgId: string, sendUsdcDto: SendUsdcDto) {
     const org = await this.getByOrgId(orgId, '+password');
-    const balance: number = await this.apiService.getUSDCBalance(org.wallet);
-    if (balance < sendUsdcDto.amount) {
+    const balance = toBigJs(
+      (await this.apiService.getUSDCBalance(org.wallet)).uiAmount,
+    );
+    if (balance.lt(sendUsdcDto.amount)) {
       throw new BadRequestException('Not enough USDC to send');
     }
 
@@ -528,7 +529,7 @@ export class OrgsService {
   async getMemberships(orgId: string) {
     const filters = {
       orgUser: orgId,
-      $or: [{ 'equity.amount': { $gt: 0 } }, { equity: null }],
+      equity: { gt: 0 },
     };
     return this.memberService.getMembers(filters, 'org');
   }

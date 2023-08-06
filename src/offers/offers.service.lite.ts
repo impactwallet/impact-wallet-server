@@ -44,7 +44,7 @@ import { OfferType } from './enum/offer-type.enum';
 import { areObjectIdsEqual } from '../utils/mongo';
 import { map, reduce } from 'bluebird';
 import Bigjs from 'big.js';
-import { toFixed } from '../utils/bigjs';
+import { toBigJs, toFixed } from '../utils/bigjs';
 
 @Injectable()
 export class OffersLiteService extends OffersServiceBase {
@@ -117,8 +117,10 @@ export class OffersLiteService extends OffersServiceBase {
         });
       }
 
-      const balance = await this.apiService.getUSDCBalance(account.wallet);
-      if (balance < body.amount) {
+      const balance = toBigJs(
+        (await this.apiService.getUSDCBalance(account.wallet)).uiAmount,
+      );
+      if (balance.lt(body.amount)) {
         throw new BadRequestException({
           message: 'Insufficient funds',
         });
@@ -164,17 +166,16 @@ export class OffersLiteService extends OffersServiceBase {
             [],
           );
           if (
-            !isNil(newMember.equity) &&
-            newMember.equity.type === EquityType.Immediately
+            newMember.equityAmount !== 0 &&
+            newMember.equityType === EquityType.Immediately
           ) {
             memberDataMap = await this.calculateEquity(
               org,
               newMember,
-              new Bigjs(newMember.equity.amount),
+              new Bigjs(newMember.equityAmount),
               [],
             );
             txnHashes = await this.collectEquity(org, memberDataMap, account);
-            await this.updateEquity(memberDataMap, session);
           }
           await newMember.save({ session });
         });
@@ -310,8 +311,8 @@ export class OffersLiteService extends OffersServiceBase {
           existingMemberProspect.investorSettings.equityAllocation = new Bigjs(
             existingMemberProspect.investorSettings.equityAllocation,
           ).add(equityAllocation);
-          existingMemberProspect.equity.amount = new Bigjs(
-            existingMemberProspect.equity.amount,
+          existingMemberProspect.equityAmount = new Bigjs(
+            existingMemberProspect.equityAmount,
           ).add(equityAllocation);
         }
 
@@ -322,7 +323,6 @@ export class OffersLiteService extends OffersServiceBase {
             payment,
             session,
           );
-          await this.updateEquity(memberDataMap, session);
           await payment.save({ session });
           await offer.save({ session });
         });
@@ -404,29 +404,6 @@ export class OffersLiteService extends OffersServiceBase {
     );
   }
 
-  async updateEquity(memberDataMap: any, session?: ClientSession) {
-    const membersIds = Object.keys(memberDataMap);
-    await map(
-      membersIds,
-      (memberId) => {
-        const { amount, error } = memberDataMap[memberId];
-        if (!isNil(error)) {
-          return;
-        }
-        return this.memberRepository.findOneAndUpdate(
-          { _id: new Types.ObjectId(memberId) },
-          {
-            $inc: {
-              'equity.amount': -amount.toNumber(),
-            },
-          },
-          { session },
-        );
-      },
-      { concurrency: 10 },
-    );
-  }
-
   async calculateEquity(
     org: OrgDocument,
     member: MemberDocument,
@@ -439,14 +416,13 @@ export class OffersLiteService extends OffersServiceBase {
       identity,
     );
     const skipAmount = skipMembers.reduce(
-      (acc, mp) => acc.add(mp.equity.amount),
+      (acc, mp) => acc.add(mp.equityAmount),
       new Bigjs(0),
     );
     const queryParams = {
       user: { $nin: skipMembersIds },
       orgUser: { $nin: skipMembersIds },
       org: new Types.ObjectId(org._id),
-      $and: [{ equity: { $ne: null } }, { 'equity.amount': { $gt: 0 } }],
     };
     if (!isNil(member)) {
       queryParams['_id'] = { $ne: new Types.ObjectId(member._id) };
@@ -463,8 +439,15 @@ export class OffersLiteService extends OffersServiceBase {
           member.user as UserDocument,
           member.orgUser as OrgDocument,
         );
+        const memberEquity = toBigJs(
+          (await this.apiService.getTokenBalance(org.mint, memberUser.wallet))
+            .uiAmount,
+        );
+        if (memberEquity.eq(0)) {
+          return;
+        }
         const amount = toFixed(
-          new Bigjs(member.equity.amount).mul(
+          memberEquity.mul(
             equityAllocation.div(new Bigjs(100).minus(skipAmount)),
           ),
           9,
@@ -635,7 +618,9 @@ export class OffersLiteService extends OffersServiceBase {
             { path: 'user', select: '+password' },
             { path: 'orgUser', select: '+password' },
           ]);
-        const balance = await this.apiService.getUSDCBalance(buyer.wallet);
+        const balance = toBigJs(
+          (await this.apiService.getUSDCBalance(buyer.wallet)).uiAmount,
+        );
 
         offer.status = OfferStatus.Approved;
         offer.buyer = buyer._id;
@@ -643,17 +628,9 @@ export class OffersLiteService extends OffersServiceBase {
           info: `Selling ${offer.tokensAmount} impact shares for $${offer.price}`,
           price: offer.price,
         };
-        if (balance < paymentInfo.price) {
+        if (balance.lt(paymentInfo.price)) {
           throw new BadRequestException({
             message: 'Insufficient funds',
-          });
-        }
-        const equityAmountAvailable = new Bigjs(
-          get(member, 'equity.amount', 0),
-        );
-        if (equityAmountAvailable.lt(offer.tokensAmount)) {
-          throw new BadRequestException({
-            message: 'Not enough tokens to sell',
           });
         }
         const commissionAmount = new Bigjs(offer.price).mul(

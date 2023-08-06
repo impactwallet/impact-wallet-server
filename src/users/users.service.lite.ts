@@ -60,26 +60,14 @@ export class UsersServiceLite extends UsersServiceBase {
       throw new NotFoundException('Sender member not found');
     }
     const amount = toBigJs(sendAssetsDto.amount);
-    if (
-      isNil(senderMember.equity) ||
-      toBigJs(senderMember.equity.amount).lt(amount)
-    ) {
-      throw new BadRequestException('Not enough tokens to send');
-    }
 
     const org = senderMember.org as OrgDocument;
-    const transferFn = this.transfer.bind(
-      this,
+    let signature = await this.transfer(
       account,
       senderPassword,
       recipientAddress,
       org.mint,
       amount.toNumber(),
-    );
-    let signature = await transferFn();
-    signature = await this.apiService.confirmTxnWithRetry(
-      signature,
-      transferFn,
     );
 
     if (!isNil(recipient)) {
@@ -106,29 +94,8 @@ export class UsersServiceLite extends UsersServiceBase {
           },
         });
         await newMember.save();
-      } else {
-        set(
-          recepientMember,
-          'equity.amount',
-          toBigJs(get(recepientMember, 'equity.amount', 0)).add(amount),
-        );
-        set(
-          recepientMember,
-          'equity.type',
-          get(recepientMember, 'equity.type', EquityType.Immediately),
-        );
-        await recepientMember.save();
       }
     }
-
-    await this.memberRepository.findOneAndUpdate(
-      { _id: senderMember._id },
-      {
-        $inc: {
-          'equity.amount': -amount.toNumber(),
-        },
-      },
-    );
 
     this.apiService.sendNotification(
       `User ${account.username} sent ${amount.toNumber()}% of equity in ${

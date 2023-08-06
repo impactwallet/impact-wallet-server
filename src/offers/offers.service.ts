@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { get, isNil } from 'lodash';
+import { defaultTo, get, isNil } from 'lodash';
 import mongoose, { Model, Types } from 'mongoose';
 import { Role } from '../members/enum/roles.enum';
 import { Member, MemberDocument } from '../members/schema/member.schema';
@@ -28,6 +28,7 @@ import { OffersServiceBase } from './offers.service.base';
 import { AccountModel } from '../auth/models/account.model';
 import { OrgsService } from '../orgs/orgs.service';
 import Bigjs from 'big.js';
+import { toBigJs } from '../utils/bigjs';
 
 @Injectable()
 export class OffersService extends OffersServiceBase {
@@ -124,12 +125,14 @@ export class OffersService extends OffersServiceBase {
         offer.memberProspects[0].org = org._id.toString();
 
         if (offer.memberProspects[0].role === Role.Investor) {
-          const balance = await this.apiService.getUSDCBalance(user.wallet);
+          const balance = toBigJs(
+            (await this.apiService.getUSDCBalance(user.wallet)).uiAmount,
+          );
           const paymentInfo = {
             info: `Investing $${offer.memberProspects[0].investorSettings.investmentAmount} for ${offer.memberProspects[0].investorSettings.equityAllocation}% of equity allocation`,
             amount: offer.memberProspects[0].investorSettings.investmentAmount,
           };
-          if (balance < paymentInfo.amount) {
+          if (balance.lt(paymentInfo.amount)) {
             throw new BadRequestException({
               message: 'Insufficient funds',
             });
@@ -193,7 +196,9 @@ export class OffersService extends OffersServiceBase {
           user: seller._id,
           org: org._id,
         });
-        const balance = await this.apiService.getUSDCBalance(buyer.wallet);
+        const balance = toBigJs(
+          (await this.apiService.getUSDCBalance(buyer.wallet)).uiAmount,
+        );
         const lamportsAmount = offer.tokensAmount * LAMPORTS_PER_SOL;
 
         offer.status = OfferStatus.Approved;
@@ -202,7 +207,7 @@ export class OffersService extends OffersServiceBase {
           info: `Selling ${offer.tokensAmount} impact shares for $${offer.price}`,
           price: offer.price,
         };
-        if (balance < paymentInfo.price) {
+        if (balance.lt(paymentInfo.price)) {
           throw new BadRequestException({
             message: 'Insufficient funds',
           });
@@ -237,15 +242,25 @@ export class OffersService extends OffersServiceBase {
 
   async createSaleOffer(saleOfferDto: SaleOfferDto, account: AccountModel) {
     const orgObjectId = new mongoose.Types.ObjectId(saleOfferDto.orgId);
-    const member = await this.memberRepository.findOne({
-      $or: [{ user: account.id }, { orgUser: account.id }],
-      org: orgObjectId,
-    });
+    const member = await this.memberRepository
+      .findOne({
+        $or: [{ user: account.id }, { orgUser: account.id }],
+        org: orgObjectId,
+      })
+      .populate('org user orgUser');
     if (isNil(member)) {
       throw new NotFoundException('Member not found');
     }
-    const equityAmount = get(member, 'equity.amount', 0) as number;
-    if (equityAmount < saleOfferDto.tokensAmount) {
+    const org = member.org as OrgDocument;
+    const memberUser = defaultTo(
+      member.user as UserDocument,
+      member.orgUser as OrgDocument,
+    );
+    const equityAmount = toBigJs(
+      (await this.apiService.getTokenBalance(org.mint, memberUser.wallet))
+        .uiAmount,
+    );
+    if (equityAmount.lt(saleOfferDto.tokensAmount)) {
       throw new BadRequestException('Not enough tokens to sell');
     }
     const saleOffer = new this.saleOfferRepository(saleOfferDto);

@@ -109,7 +109,7 @@ export class AccountService {
           }
           if (!isNil(payment) && payment.type === PaymentType.Investment) {
             seller = payment.investor as MemberProspectDocument;
-            tokensAmount = seller.equity.amount as number;
+            tokensAmount = seller.equityAmount as number;
           }
           let soldOrganization: OrgDocument;
 

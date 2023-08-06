@@ -45,35 +45,6 @@ export class Period {
 
 export const PeriodSchema = SchemaFactory.createForClass(Period);
 
-@Schema({ _id: false, toJSON: { getters: true }, toObject: { getters: true } })
-export class Equity {
-  @ApiProperty({ example: 50 })
-  @Prop({
-    type: mongoose.Schema.Types.Decimal128,
-    required: true,
-    max: 100,
-    min: 0,
-    get: decimal128ToNumber,
-    set: bigJsToNumber,
-  })
-  amount: Bigjs | number;
-
-  @ApiProperty({ example: 'Immediately' })
-  @Prop({ enum: Object.keys(EquityType), required: true })
-  type: EquityType;
-
-  @ApiProperty({ example: 'Years' })
-  @Prop({
-    required: function () {
-      return this.type === EquityType.DuringPeriod;
-    },
-    type: PeriodSchema,
-  })
-  period?: Period;
-}
-
-export const EquitySchema = SchemaFactory.createForClass(Equity);
-
 @Schema({ _id: false })
 export class Compensation {
   @ApiProperty({ example: 3000 })
@@ -114,9 +85,21 @@ export class Member {
   @Prop({ default: 1 })
   impactRatio: number;
 
-  @ApiProperty({ type: Equity, description: 'Equity settings' })
-  @Prop({ type: EquitySchema })
-  equity?: Equity;
+  @ApiProperty({ type: Number, description: 'Equity amount' })
+  equityAmount: number;
+
+  @ApiProperty({ example: 'Immediately' })
+  @Prop({ enum: Object.keys(EquityType), required: true })
+  equityType: EquityType;
+
+  @ApiProperty({ example: 'Years' })
+  @Prop({
+    required: function () {
+      return this.equityType === EquityType.DuringPeriod;
+    },
+    type: PeriodSchema,
+  })
+  equityPeriod?: Period;
 
   @ApiProperty({ type: Compensation, description: 'Compensation settings' })
   @Prop({ type: CompensationSchema })

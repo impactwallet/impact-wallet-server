@@ -14,6 +14,7 @@ import {
   SignaturesForAddressOptions,
   Signer,
   SystemProgram,
+  TokenAmount,
   Transaction,
   TransactionInstruction,
   TransactionSignature,
@@ -33,6 +34,7 @@ import { get, isEmpty, isNil } from 'lodash';
 import { Org } from '../orgs/schema/org.schema';
 import { ConfigService } from '@nestjs/config';
 import { delay } from 'bluebird';
+import { toBigJs } from '../utils/bigjs';
 
 const REQUEST_TIMEOUT = 1000 * 60 * 60;
 const RETRIES = 5;
@@ -530,7 +532,7 @@ export class ApiService {
     }
   }
 
-  async getTokenBalance(mint: string, wallet: string) {
+  async getTokenBalance(mint: string, wallet: string): Promise<TokenAmount> {
     try {
       await delay(200);
       const associatedAddress = await getAssociatedTokenAddress(
@@ -540,10 +542,10 @@ export class ApiService {
       const balance = await this.connection.getTokenAccountBalance(
         associatedAddress,
       );
-      return balance.value.uiAmount;
+      return balance.value;
     } catch (err) {
       console.log(`Error getting token balance: ${err}`);
-      return 0;
+      return { amount: '0', decimals: 0, uiAmount: 0 };
     }
   }
 

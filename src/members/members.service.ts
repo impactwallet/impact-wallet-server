@@ -1,17 +1,21 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { get, isNil, isUndefined, omitBy, set } from 'lodash';
+import { defaultTo, get, isNil, isUndefined, omitBy, set } from 'lodash';
 import mongoose, { ClientSession, Model, PopulateOptions } from 'mongoose';
 import { MemberDto } from './dto/members.dto';
 import { MembersFilterDto } from './dto/members.filter.dto';
 import { Member, MemberDocument } from './schema/member.schema';
-import { map } from 'bluebird';
+import { filter, map } from 'bluebird';
 import { ApiService } from '../api-service/api.service';
+import { OrgDocument } from '../orgs/schema/org.schema';
+import { UserDocument } from '../users/schema/user.schema';
+import { toBigJs } from '../utils/bigjs';
 
 @Injectable()
 export class MembersService {
   constructor(
     @InjectModel(Member.name) private memberRepository: Model<MemberDocument>,
+    private apiService: ApiService,
   ) {}
 
   async createMember(memberDto: MemberDto, session?: ClientSession) {
@@ -20,12 +24,32 @@ export class MembersService {
   }
 
   async getMembers(filters: MembersFilterDto, populate?: any) {
-    const query = omitBy({ ...filters }, isUndefined);
+    const customFilterProps = ['limit', 'equity'];
+    const query = omitBy(filters, (filter) => {
+      return isUndefined(filter) || customFilterProps.includes(filter);
+    });
     const total = await this.memberRepository.find(query).count();
-    const members = await this.memberRepository
+    let members = await this.memberRepository
       .find(query)
       .limit(filters.limit)
-      .populate(populate);
+      .populate(populate)
+      .populate('user orgUser');
+    if (!isNil(filters.equity)) {
+      members = await filter(members, async (member) => {
+        await member.populate('org');
+        const org = member.org as OrgDocument;
+        const memberUser = defaultTo(
+          member.user as UserDocument,
+          member.orgUser as OrgDocument,
+        );
+        const equity = toBigJs(
+          (await this.apiService.getTokenBalance(org.mint, memberUser.wallet))
+            .uiAmount,
+        );
+        const { gt, lt } = filters.equity;
+        return (isNil(gt) || equity.gt(gt)) && (isNil(lt) || equity.lt(lt));
+      });
+    }
     return { list: members, total };
   }
 

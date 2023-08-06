@@ -5,10 +5,10 @@ import { Role } from '../../members/enum/roles.enum';
 import {
   Compensation,
   CompensationSchema,
-  Equity,
-  EquitySchema,
   InvestorSettingsSchema as MemberInvestorSettingsSchema,
   InvestorSettings as MemberInvestorSettings,
+  PeriodSchema,
+  Period,
 } from '../../members/schema/member.schema';
 import { Org } from '../../orgs/schema/org.schema';
 import { OfferStatus } from '../enum/statuses.enum';
@@ -16,11 +16,12 @@ import { OfferType } from '../enum/offer-type.enum';
 import { Min } from 'class-validator';
 import Bigjs from 'big.js';
 import { bigJsToNumber, decimal128ToNumber } from '../../utils/bigjs';
+import { EquityType } from '../../members/enum/equity-type.enum';
 
 export type OfferDocument = HydratedDocument<Offer>;
 export type MemberProspectDocument = HydratedDocument<MemberProspect>;
 
-@Schema({ _id: false })
+@Schema({ _id: false, toJSON: { getters: true }, toObject: { getters: true } })
 export class MemberProspect {
   @ApiProperty({ example: 'CEO' })
   @Prop({
@@ -38,9 +39,29 @@ export class MemberProspect {
   @Prop({ default: 1 })
   impactRatio: number;
 
-  @ApiProperty({ description: 'Equity settings' })
-  @Prop({ type: EquitySchema })
-  equity?: Equity;
+  @ApiProperty({ type: Number, description: 'Equity amount' })
+  @Prop({
+    type: mongoose.Schema.Types.Decimal128,
+    required: true,
+    max: 100,
+    min: 0,
+    get: decimal128ToNumber,
+    set: bigJsToNumber,
+  })
+  equityAmount: Bigjs | number;
+
+  @ApiProperty({ example: 'Immediately' })
+  @Prop({ enum: Object.keys(EquityType), required: true })
+  equityType: EquityType;
+
+  @ApiProperty({ example: 'Years' })
+  @Prop({
+    required: function () {
+      return this.equityType === EquityType.DuringPeriod;
+    },
+    type: PeriodSchema,
+  })
+  equityPeriod?: Period;
 
   @ApiProperty({ description: 'Compensation settings' })
   @Prop({ type: CompensationSchema })

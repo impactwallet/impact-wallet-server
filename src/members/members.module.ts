@@ -7,6 +7,7 @@ import { ApiServiceModule } from '../api-service/api.module';
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: Member.name, schema: MemberSchema }]),
+    ApiServiceModule,
   ],
   providers: [MembersService],
   exports: [MembersService],
