@@ -1,5 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import { IsNumber, IsOptional, IsString } from 'class-validator';
+
 
 export class TransactionHistoryPaginationDto {
   @ApiProperty({
@@ -24,6 +26,7 @@ export class TransactionHistoryPaginationDto {
   })
   @IsOptional()
   @IsNumber()
+  @Transform(({ value }) => parseInt(value))
   limit: number = 10;
 
   @ApiProperty({
@@ -32,5 +35,6 @@ export class TransactionHistoryPaginationDto {
   })
   @IsOptional()
   @IsNumber()
+  @Transform(({ value }) => parseInt(value))
   minContextSlot?: number;
 }

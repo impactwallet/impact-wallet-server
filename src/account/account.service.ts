@@ -72,8 +72,7 @@ export class AccountService {
         };
         count++;
         if (
-          transaction.description !== 'Commission' &&
-          transaction.description !== 'Sent'
+          transaction.description !== 'Commission' 
         ) {
           const inAppEntity = await this._getEntityFromTxn(account, txn);
           historyItem.addressOrUsername = get(inAppEntity, 'username');
