@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { defaultTo, get, isNil, isUndefined, omitBy } from 'lodash';
+import { defaultTo, get, isEmpty, isNil, isUndefined, omitBy } from 'lodash';
 import mongoose, { ClientSession, Model, PopulateOptions } from 'mongoose';
 import { MemberDto } from './dto/members.dto';
 import { MembersFilterDto } from './dto/members.filter.dto';
@@ -29,25 +29,26 @@ export class MembersService {
     const query = omitBy(filters, (filter) => {
       return isUndefined(filter) || customFilterProps.includes(filter);
     });
-    let total = await this.memberRepository.find(query).count();
     let members = await this.memberRepository
       .find(query)
-      .limit(filters.limit)
       .populate(populate)
       .populate('user orgUser');
+    let total = members.length;
     if (!isNil(filters.equity)) {
       const applyFilter = (equity: Bigjs) => {
         const { gt, lt } = filters.equity;
         return (isNil(gt) || equity.gt(gt)) && (isNil(lt) || equity.lt(lt));
       };
-      const allMembers = await this.memberRepository.find(query);
       const orgToHoldersMap = new Map<string, any>();
       await map(
-        allMembers,
+        members,
         async (member) => {
           await member.populate('org');
           const org = member.org as OrgDocument;
-          if (!isNil(orgToHoldersMap.get(org._id.toString()))) {
+          if (
+            isNil(org.mint) ||
+            !isNil(orgToHoldersMap.get(org._id.toString()))
+          ) {
             return;
           }
           await delay(1000);
@@ -80,6 +81,9 @@ export class MembersService {
           member.orgUser as OrgDocument,
         );
         const orgHolders = orgToHoldersMap.get(orgId.toString());
+        if (isEmpty(orgHolders)) {
+          return false;
+        }
         const holder = orgHolders.find((holder: any) => {
           return (
             get(holder, 'account.data.parsed.info.owner') === memberUser.wallet
@@ -90,6 +94,9 @@ export class MembersService {
         );
         return applyFilter(equity);
       });
+    }
+    if (!isNil(filters.limit)) {
+      members = members.slice(0, filters.limit);
     }
     return { list: members, total };
   }
