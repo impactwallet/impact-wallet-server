@@ -1,9 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Role } from '../enum/roles.enum';
 import { InvestorSettingsDto } from './investor-settings.dto';
-import { EquityDto } from './equity.dto';
 import { CompensationDto } from './compensation.dto';
 import { Prop } from '@nestjs/mongoose';
+import { EquityType } from '../enum/equity-type.enum';
+import { PeriodType } from '../enum/period-type.enum';
 
 export class MemberDto {
   @ApiProperty({ example: 'CEO', description: 'Occupation in organization' })
@@ -19,12 +20,14 @@ export class MemberDto {
   @ApiProperty({ example: '1.5', description: 'Impact ratio' })
   impactRatio: number;
 
-  @ApiProperty({
-    type: EquityDto,
-    description: 'Compensation settings',
-    required: false,
-  })
-  equity: EquityDto;
+  @ApiProperty({ example: 3000 })
+  equityAmount: number;
+
+  @ApiProperty({ example: 'Immediately', enum: Object.keys(EquityType) })
+  equityType: EquityType;
+
+  @ApiProperty({ example: 'Years', enum: Object.keys(PeriodType) })
+  equityPeriod?: PeriodType;
 
   @ApiProperty({ description: 'Compensation settings', required: false })
   compensation: CompensationDto;
