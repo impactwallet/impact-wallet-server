@@ -537,7 +537,7 @@ export class ApiService {
       return balance.value;
     } catch (err) {
       console.log(`Error getting token balance: ${err}`);
-      return { amount: '0', decimals: 0, uiAmount: 0 };
+      return { amount: '0', decimals: 0, uiAmount: 0, uiAmountString: '0' };
     }
   }
 
