@@ -26,6 +26,7 @@ import {
   getAccount,
   getAssociatedTokenAddress,
   getAssociatedTokenAddressSync,
+  TOKEN_PROGRAM_ID,
   TokenAccountNotFoundError,
   TokenInvalidAccountOwnerError,
 } from '@solana/spl-token';
@@ -90,26 +91,17 @@ export class ApiService {
   }
 
   async getTokenHolders(mint: string) {
-    const config: AxiosRequestConfig = {
-      headers: {
-        token: process.env.SOLSCAN_APIKEY,
-      },
-      params: {
-        tokenAddress: mint,
-        limit: 100,
-      },
-      timeout: REQUEST_TIMEOUT,
-    };
-    try {
-      const response = await firstValueFrom(
-        this.http.get(`${this.solscanBaseUrl}/token/holders`, config),
-      );
-      return get(response, 'data.data');
-    } catch (err) {
-      err.message = `Error fetching token holders: ${err.message}`;
-      console.log(JSON.stringify(get(err, 'response.data', err)));
-      throw err;
-    }
+    return this.connection.getParsedProgramAccounts(TOKEN_PROGRAM_ID, {
+      filters: [
+        { dataSize: 165 },
+        {
+          memcmp: {
+            offset: 0,
+            bytes: mint,
+          },
+        },
+      ],
+    });
   }
 
   async createTokenAccountInstruction(mint: string, owner: string) {

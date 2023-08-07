@@ -1,15 +1,16 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { defaultTo, get, isNil, isUndefined, omitBy, set } from 'lodash';
+import { defaultTo, get, isNil, isUndefined, omitBy } from 'lodash';
 import mongoose, { ClientSession, Model, PopulateOptions } from 'mongoose';
 import { MemberDto } from './dto/members.dto';
 import { MembersFilterDto } from './dto/members.filter.dto';
 import { Member, MemberDocument } from './schema/member.schema';
-import { filter, map } from 'bluebird';
+import { delay, map } from 'bluebird';
 import { ApiService } from '../api-service/api.service';
 import { OrgDocument } from '../orgs/schema/org.schema';
 import { UserDocument } from '../users/schema/user.schema';
 import { toBigJs } from '../utils/bigjs';
+import Bigjs from 'big.js';
 
 @Injectable()
 export class MembersService {
@@ -28,26 +29,66 @@ export class MembersService {
     const query = omitBy(filters, (filter) => {
       return isUndefined(filter) || customFilterProps.includes(filter);
     });
-    const total = await this.memberRepository.find(query).count();
+    let total = await this.memberRepository.find(query).count();
     let members = await this.memberRepository
       .find(query)
       .limit(filters.limit)
       .populate(populate)
       .populate('user orgUser');
     if (!isNil(filters.equity)) {
-      members = await filter(members, async (member) => {
-        await member.populate('org');
-        const org = member.org as OrgDocument;
+      const applyFilter = (equity: Bigjs) => {
+        const { gt, lt } = filters.equity;
+        return (isNil(gt) || equity.gt(gt)) && (isNil(lt) || equity.lt(lt));
+      };
+      const allMembers = await this.memberRepository.find(query);
+      const orgToHoldersMap = new Map<string, any>();
+      await map(
+        allMembers,
+        async (member) => {
+          await member.populate('org');
+          const org = member.org as OrgDocument;
+          if (!isNil(orgToHoldersMap.get(org._id.toString()))) {
+            return;
+          }
+          await delay(1000);
+          const orgHolders = await this.apiService.getTokenHolders(org.mint);
+          orgToHoldersMap.set(org._id.toString(), orgHolders);
+        },
+        { concurrency: 10 },
+      );
+      const allFilteredHolders = Array.from(orgToHoldersMap.values()).reduce(
+        (acc, holders) => {
+          const orgFilteredHolders = holders.filter((holder: any) => {
+            const equity = toBigJs(
+              get(
+                holder,
+                'account.data.parsed.info.tokenAmount.uiAmountString',
+              ),
+            );
+            return applyFilter(equity);
+          });
+          return acc.concat(orgFilteredHolders);
+        },
+        [],
+      );
+      total = allFilteredHolders.length;
+
+      members = members.filter((member) => {
+        const orgId = get(member, 'org._id', member.org);
         const memberUser = defaultTo(
           member.user as UserDocument,
           member.orgUser as OrgDocument,
         );
+        const orgHolders = orgToHoldersMap.get(orgId.toString());
+        const holder = orgHolders.find((holder: any) => {
+          return (
+            get(holder, 'account.data.parsed.info.owner') === memberUser.wallet
+          );
+        });
         const equity = toBigJs(
-          (await this.apiService.getTokenBalance(org.mint, memberUser.wallet))
-            .uiAmount,
+          get(holder, 'account.data.parsed.info.tokenAmount.uiAmountString'),
         );
-        const { gt, lt } = filters.equity;
-        return (isNil(gt) || equity.gt(gt)) && (isNil(lt) || equity.lt(lt));
+        return applyFilter(equity);
       });
     }
     return { list: members, total };
