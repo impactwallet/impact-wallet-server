@@ -236,19 +236,16 @@ export class PaymentService {
         member.user as UserDocument,
         member.orgUser as OrgDocument,
       );
-      const oldEquity = toBigJs(
+      const equityAllocation = toBigJs(
         (await this.apiService.getTokenBalance(org.mint, memberUser.wallet))
           .uiAmount,
-      );
-      const newEquity = oldEquity.add(
-        payment.investor.investorSettings.equityAllocation,
       );
       const newInvestmentAmount =
         get(member, 'investorSettings.investmentAmount', 0) +
         payment.investor.investorSettings.investmentAmount;
       member.investorSettings = {
         investmentAmount: newInvestmentAmount,
-        equityAllocation: newEquity,
+        equityAllocation,
       };
     }
 

@@ -10,13 +10,14 @@ import {
   PeriodSchema,
   Period,
 } from '../../members/schema/member.schema';
-import { Org } from '../../orgs/schema/org.schema';
+import { Org, OrgDocument } from '../../orgs/schema/org.schema';
 import { OfferStatus } from '../enum/statuses.enum';
 import { OfferType } from '../enum/offer-type.enum';
 import { Min } from 'class-validator';
 import Bigjs from 'big.js';
 import { bigJsToNumber, decimal128ToNumber } from '../../utils/bigjs';
 import { EquityType } from '../../members/enum/equity-type.enum';
+import { UserDocument } from '../../users/schema/user.schema';
 
 export type OfferDocument = HydratedDocument<Offer>;
 export type MemberProspectDocument = HydratedDocument<MemberProspect>;
@@ -51,7 +52,7 @@ export class MemberProspect {
   equityAmount: Bigjs | number;
 
   @ApiProperty({ example: 'Immediately' })
-  @Prop({ enum: Object.keys(EquityType), required: true })
+  @Prop({ enum: Object.keys(EquityType).concat(null) })
   equityType: EquityType;
 
   @ApiProperty({ example: 'Years' })
@@ -87,14 +88,14 @@ export class MemberProspect {
   })
   investorSettings: MemberInvestorSettings;
 
-  @Prop({ type: mongoose.Schema.Types.ObjectId })
-  org: string;
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Org' })
+  org: string | OrgDocument;
 
-  @Prop({ type: mongoose.Schema.Types.ObjectId })
-  user: string;
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
+  user: string | UserDocument;
 
-  @Prop({ type: mongoose.Schema.Types.ObjectId })
-  orgUser: string;
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Org' })
+  orgUser: string | OrgDocument;
 }
 
 export const MemberProspectSchema =

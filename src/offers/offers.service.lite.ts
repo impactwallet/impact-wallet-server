@@ -166,13 +166,13 @@ export class OffersLiteService extends OffersServiceBase {
             [],
           );
           if (
-            newMember.equityAmount !== 0 &&
-            newMember.equityType === EquityType.Immediately
+            memberProspect.equityAmount !== 0 &&
+            memberProspect.equityType === EquityType.Immediately
           ) {
             memberDataMap = await this.calculateEquity(
               org,
               newMember,
-              new Bigjs(newMember.equityAmount),
+              new Bigjs(memberProspect.equityAmount),
               [],
             );
             txnHashes = await this.collectEquity(org, memberDataMap, account);
@@ -209,7 +209,7 @@ export class OffersLiteService extends OffersServiceBase {
   ) {
     const memberField = account.isUser ? 'user' : 'orgUser';
 
-    const investedMembersMap = new Map<string, MemberProspectDocument>();
+    const investedMembersMap = new Map<string, MemberProspect>();
     offer.memberProspects.forEach((mp) => {
       investedMembersMap.set(
         mp[memberField].toString(),
@@ -237,10 +237,8 @@ export class OffersLiteService extends OffersServiceBase {
     const memberProspect = new this.memberProspectModel({
       occupation: 'Investor',
       role: Role.Investor,
-      equity: {
-        amount: equityAllocation,
-        type: EquityType.Immediately,
-      },
+      equityAmount: equityAllocation,
+      equityType: EquityType.Immediately,
       investorSettings: {
         investmentAmount: body.amount,
         equityAllocation,
@@ -279,9 +277,15 @@ export class OffersLiteService extends OffersServiceBase {
           pickBy(memberQuery, identity),
         );
         if (!isNil(member)) {
+          const memberEquity = await this.apiService.getTokenBalance(
+            org.mint,
+            account.wallet,
+          );
+          const memberObject = member.toObject<Member>();
+          memberObject.equityAmount = memberEquity.uiAmount;
           investedMembersMap.set(
             get(member[memberField], '_id', '').toString(),
-            member.toObject(),
+            memberObject,
           );
         }
         const memberDataMap = await this.calculateEquity(

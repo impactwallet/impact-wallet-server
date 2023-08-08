@@ -89,7 +89,7 @@ export class Member {
   equityAmount: number;
 
   @ApiProperty({ example: 'Immediately' })
-  @Prop({ enum: Object.keys(EquityType), required: true })
+  @Prop({ enum: Object.keys(EquityType) })
   equityType: EquityType;
 
   @ApiProperty({ example: 'Years' })
