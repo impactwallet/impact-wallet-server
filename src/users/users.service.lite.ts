@@ -62,14 +62,6 @@ export class UsersServiceLite extends UsersServiceBase {
     const amount = toBigJs(sendAssetsDto.amount);
 
     const org = senderMember.org as OrgDocument;
-    let signature = await this.transfer(
-      account,
-      senderPassword,
-      recipientAddress,
-      org.mint,
-      amount.toNumber(),
-    );
-
     if (!isNil(recipient)) {
       const memberQuery = {
         org: orgObjectId,
@@ -88,14 +80,19 @@ export class UsersServiceLite extends UsersServiceBase {
           user: memberQuery['user'],
           orgUser: memberQuery['orgUser'],
           org: orgObjectId,
-          equity: {
-            amount,
-            type: EquityType.Immediately,
-          },
+          equityType: EquityType.Immediately,
         });
         await newMember.save();
       }
     }
+
+    const signature = await this.transfer(
+      account,
+      senderPassword,
+      recipientAddress,
+      org.mint,
+      amount.toNumber(),
+    );
 
     this.apiService.sendNotification(
       `User ${account.username} sent ${amount.toNumber()}% of equity in ${

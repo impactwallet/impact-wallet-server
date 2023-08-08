@@ -35,7 +35,6 @@ import { get, isEmpty, isNil } from 'lodash';
 import { Org } from '../orgs/schema/org.schema';
 import { ConfigService } from '@nestjs/config';
 import { delay } from 'bluebird';
-import { toBigJs } from '../utils/bigjs';
 
 const REQUEST_TIMEOUT = 1000 * 60 * 60;
 const RETRIES = 5;
@@ -58,7 +57,6 @@ export class ApiService {
 
   tgBaseUrl: string;
   shyftBaseUrl = 'https://api.shyft.to/sol/v1';
-  solscanBaseUrl = 'https://public-api.solscan.io';
   network: Cluster = process.env.NETWORK as Cluster;
   connection = new Connection(process.env.SOLANA_RPC_URL, 'confirmed');
   memoProgramId = 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr';
