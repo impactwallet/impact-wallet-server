@@ -439,10 +439,7 @@ export class PaymentService {
         [buyerMemberField]: buyer._id,
         org: org._id,
         lamportsEarned: lamportsAmount,
-        equity: {
-          amount: payment.sale.tokensAmount,
-          type: EquityType.Immediately,
-        },
+        equityType: EquityType.Immediately,
       });
       await newMember.save({ session });
     }
