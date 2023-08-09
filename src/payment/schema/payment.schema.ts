@@ -14,6 +14,23 @@ import {
 
 export type PaymentDocument = HydratedDocument<Payment>;
 
+@Schema({ _id: false })
+export class PaymentItem {
+  @ApiProperty({ example: 'Service', description: 'Name of the item' })
+  @Prop({ type: String, required: true })
+  name: string;
+
+  @ApiProperty({ example: 10, description: 'Price for the item in USD' })
+  @Prop({ type: Number, required: true })
+  amount: number;
+
+  @ApiProperty({ description: 'Image of the item' })
+  @Prop({ type: String })
+  image: string;
+}
+
+export const PaymentItemSchema = SchemaFactory.createForClass(PaymentItem);
+
 @Schema({ timestamps: true })
 export class Payment {
   @ApiProperty({
@@ -81,6 +98,10 @@ export class Payment {
   @ApiProperty({ description: 'Organization payload' })
   @Prop({ type: mongoose.Schema.Types.Mixed })
   orgPayload: any;
+
+  @ApiProperty({ description: 'Payment items' })
+  @Prop({ type: [PaymentItemSchema] })
+  items: PaymentItem[];
 }
 
 export const PaymentSchema = SchemaFactory.createForClass(Payment);

@@ -6,7 +6,7 @@ import {
 import { BadRequestException, Injectable, Session } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { defaultTo, get, identity, isEmpty, isNil, pickBy } from 'lodash';
-import mongoose, { ClientSession, Model } from 'mongoose';
+import mongoose, { ClientSession, Model, PopulateOptions } from 'mongoose';
 import { ApiService } from '../api-service/api.service';
 import { CandyPayService } from '../api-service/candypay.service';
 import { Member, MemberDocument } from '../members/schema/member.schema';
@@ -29,6 +29,7 @@ import { EquityType } from '../members/enum/equity-type.enum';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { toBigJs, toFixed } from '../utils/bigjs';
+import { AccountModel } from '../auth/models/account.model';
 
 @Injectable()
 export class PaymentService {
@@ -44,36 +45,15 @@ export class PaymentService {
   ) {}
 
   async receivePayment(org: OrgDocument, body: ReceivePaymentDto) {
-    const session = await this.connection.startSession();
     const totalAmount = body.items.reduce((acc, item) => acc + item.amount, 0);
     const newPayment = new this.paymentModel({
       org: org._id,
       amount: totalAmount,
       orgPayload: body.customData,
+      items: body.items,
     });
-    await session.withTransaction(async () => {
-      const items: CheckoutItemEntity[] = body.items.map((item) => ({
-        name: item.name,
-        price: +item.amount,
-        image: defaultTo(item.image, `${process.env.SERVER_URL}${org.logo}`),
-        quantity: 1,
-      }));
-      const sessionData = await this.candypayService.createSession({
-        logo: org.logo,
-        receiver: org,
-        items,
-        successUrl: org.settings.successUrl,
-        cancelUrl: org.settings.cancelUrl,
-      });
-      newPayment.cpSessionId = sessionData.session_id;
-      newPayment.cpOrderId = sessionData.order_id;
-      newPayment.cpPaymentUrl = sessionData.payment_url;
 
-      await newPayment.save({ session });
-    });
-    await session.endSession();
-
-    return newPayment;
+    return newPayment.save();
   }
 
   async receiveInvestmentCandyPay(
@@ -458,5 +438,43 @@ export class PaymentService {
       this.http.post(org.settings.webhook, data),
     );
     return get(response, 'data');
+  }
+
+  getPaymentById(id: string, populate?: PopulateOptions | PopulateOptions[]) {
+    return this.paymentModel.findById(id).populate(populate);
+  }
+
+  async performPayment(paymentId: string, account: AccountModel) {
+    const payment = await this.getPaymentById(paymentId, { path: 'org' });
+    const org = await this.orgModel.findById(payment.org, '+password');
+    const senderPk = await this.apiService.getPK(
+      account.wallet,
+      await account.password,
+    );
+    const createUSDCAccountInstructions =
+      await this.apiService.createTokenAccountInstruction(
+        process.env.USDC_MINT,
+        org.wallet,
+      );
+    const transferUSDCInstructions =
+      await this.apiService.createTransferInstructions(process.env.USDC_MINT, [
+        { senderPk, wallet: org.wallet, amount: payment.amount },
+      ]);
+    const txnHash = await this.apiService.createAndSendTxn(
+      [createUSDCAccountInstructions, ...transferUSDCInstructions],
+      [senderPk],
+    );
+    payment.txnHash = txnHash;
+
+    this.handleRegularPayment(org, {
+      payment_amount: payment.amount,
+      custom_data: payment.orgPayload,
+    }).catch((err) => {
+      console.log(
+        `Error handling regular payment for ${org.name} during performPayment: ${err}`,
+      );
+    });
+
+    return payment.save();
   }
 }
