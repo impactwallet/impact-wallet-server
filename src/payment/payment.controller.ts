@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -40,6 +41,10 @@ export class PaymentController {
     @Req() req: Request,
   ) {
     const account = await this.authService.getAccountFromToken(req);
-    return this.paymentService.performPayment(paymentId, account);
+    try {
+      return await this.paymentService.performPayment(paymentId, account);
+    } catch (e) {
+      throw new BadRequestException(e.message);
+    }
   }
 }

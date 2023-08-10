@@ -254,11 +254,7 @@ export class PaymentService {
     return member.save({ session });
   }
 
-  async handleRegularPayment(
-    org: OrgDocument,
-    body: any,
-    isWithCommission = true,
-  ) {
+  async handleRegularPayment(org: OrgDocument, body: any) {
     if (org.mintStatus !== 'success') {
       return;
     }
@@ -267,10 +263,6 @@ export class PaymentService {
         console.log(`Error calling webhook for ${org.name}: ${err}`);
       });
     }
-    const rootOrg = await this.orgModel.findOne(
-      { wallet: process.env.ROOT_PUBKEY },
-      '+password',
-    );
     const paymentAmount = toBigJs(body.payment_amount);
     const treasury = toFixed(paymentAmount.mul(org.settings.treasury / 100), 6);
     const amountToSplit = paymentAmount.minus(treasury);
@@ -312,16 +304,8 @@ export class PaymentService {
         orgMembers.push({
           orgUser,
           amount: amount.toNumber(),
-          isWithCommission,
         });
       }
-      // } else if (isWithCommission) {
-      //   const user = holder.user as UserDocument;
-      //   const userPk = await this.apiService.getPK(user.wallet, user.password);
-      //   const commissionAmount = (amount * +process.env.COMMISSION) / LAMPORTS_PER_SOL;
-      //   membersWithAmount.push({ senderPk: userPk, wallet: process.env.ROOT_PUBKEY, amount: commissionAmount });
-      //   orgMembers.push({ orgUser: rootOrg, amount: commissionAmount, isWithCommission: false });
-      // }
     });
 
     const batchSize = 5;
@@ -377,14 +361,10 @@ export class PaymentService {
 
     await map(
       orgMembers,
-      async ({ orgUser, amount, isWithCommission }) => {
+      async ({ orgUser, amount }) => {
         try {
           await delay(2000);
-          await this.handleRegularPayment(
-            orgUser,
-            { payment_amount: amount },
-            isWithCommission,
-          );
+          await this.handleRegularPayment(orgUser, { payment_amount: amount });
         } catch (err) {
           console.log(
             `Error handling regular payment for ${orgUser.name}: ${err}`,
@@ -469,6 +449,14 @@ export class PaymentService {
   async performPayment(paymentId: string, account: AccountModel) {
     const payment = await this.getPaymentById(paymentId, { path: 'org' });
     const org = await this.orgModel.findById(payment.org, '+password');
+    const orgPk = await this.apiService.getPK(org.wallet, org.password);
+    const commissionAmount = toBigJs(payment.amount).mul(
+      +process.env.COMMISSION,
+    );
+    const rootOrg = await this.orgModel.findOne(
+      { wallet: process.env.ROOT_PUBKEY },
+      '+password',
+    );
     const senderPk = await this.apiService.getPK(
       account.wallet,
       await account.password,
@@ -481,10 +469,15 @@ export class PaymentService {
     const transferUSDCInstructions =
       await this.apiService.createTransferInstructions(process.env.USDC_MINT, [
         { senderPk, wallet: org.wallet, amount: payment.amount },
+        {
+          senderPk: orgPk,
+          wallet: rootOrg.wallet,
+          amount: commissionAmount.toNumber(),
+        },
       ]);
     const txnHash = await this.apiService.createAndSendTxn(
       [createUSDCAccountInstructions, ...transferUSDCInstructions],
-      [senderPk],
+      [senderPk, orgPk],
     );
     payment.txnHash = txnHash;
 
@@ -494,6 +487,14 @@ export class PaymentService {
     }).catch((err) => {
       console.log(
         `Error handling regular payment for ${org.name} during performPayment: ${err}`,
+      );
+    });
+
+    this.handleRegularPayment(rootOrg, {
+      payment_amount: commissionAmount.toNumber(),
+    }).catch((err) => {
+      console.log(
+        `Error handling comission from regular payment for ${org.name} during performPayment: ${err}`,
       );
     });
 
