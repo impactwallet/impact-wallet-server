@@ -321,7 +321,8 @@ export class OrgsController {
     }
 
     const payment = await this.paymentService.receivePayment(org, params);
-    res.redirect(payment.cpPaymentUrl);
+    const paymentUrl = `${process.env.APP_URL}/checkout/${payment._id}`;
+    res.redirect(paymentUrl);
   }
 
   @ApiOperation({ summary: 'Get orgs USDC balance' })
