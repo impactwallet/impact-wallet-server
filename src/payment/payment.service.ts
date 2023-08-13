@@ -3,13 +3,17 @@ import {
   CheckoutItemEntity,
   verifyWebhookSignature,
 } from '@candypay/checkout-sdk';
-import { BadRequestException, Injectable, Session } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { defaultTo, get, identity, isEmpty, isNil, pickBy } from 'lodash';
 import mongoose, { ClientSession, Model, PopulateOptions } from 'mongoose';
 import { ApiService } from '../api-service/api.service';
 import { CandyPayService } from '../api-service/candypay.service';
-import { Member, MemberDocument } from '../members/schema/member.schema';
+import {
+  Member,
+  MemberDocument,
+  TransactionHistory,
+} from '../members/schema/member.schema';
 import { MemberProspect } from '../offers/schema/offer.schema';
 import { Org, OrgDocument } from '../orgs/schema/org.schema';
 import { UserDocument } from '../users/schema/user.schema';
@@ -431,7 +435,10 @@ export class PaymentService {
     profit: number,
     session?: ClientSession,
   ) {
+    const transactionHistory = new TransactionHistory();
+    transactionHistory.amount = profit;
     member.profit += profit;
+    member.transactionsHistory.push(transactionHistory);
     await member.save({ session });
   }
 

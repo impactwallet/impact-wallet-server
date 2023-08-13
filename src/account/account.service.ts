@@ -5,6 +5,7 @@ import { ApiService } from '../api-service/api.service';
 import {
   ParsedInstruction,
   ParsedTransactionWithMeta,
+  PartiallyDecodedInstruction,
   PublicKey,
   SignaturesForAddressOptions,
 } from '@solana/web3.js';
@@ -51,6 +52,9 @@ export class AccountService {
     associatedAddress: PublicKey,
     parsedTxns: ParsedTransactionWithMeta[],
   ): Promise<TxnHistoryItemDto[]> {
+    const orgMain: OrgDocument = await this.orgModel.findOne({
+      wallet: process.env.ROOT_PUBKEY,
+    });
     const history: TxnHistoryItemDto[] = [];
     const rootAssociatedAddress =
       await this.apiService.getRootAssociatedAddress();
@@ -72,7 +76,8 @@ export class AccountService {
         };
         count++;
         if (
-          transaction.description !== 'Commission' 
+          transaction.description !== 'Commission' &&
+          transaction.description !== 'Sent'
         ) {
           const inAppEntity = await this._getEntityFromTxn(account, txn);
           historyItem.addressOrUsername = get(inAppEntity, 'username');
@@ -91,8 +96,9 @@ export class AccountService {
             historyItem.description = 'Received';
           }
         } else if (
-          transaction.description === 'Commission' &&
-          transactionHistory.length > 1
+          (transaction.description === 'Commission' &&
+            transactionHistory.length > 1) ||
+          transaction.description === 'Sent'
         ) {
           const regex = new RegExp(`${historyItem.transactionSignature}`, 'i');
           const payment = await this.paymentModel
@@ -117,17 +123,30 @@ export class AccountService {
               _id: seller.org,
             });
           }
+          const inAppEntity = await this._getEntityFromTxn(account, txn);
 
           sellerName = !isNil(soldOrganization)
             ? soldOrganization.username
-            : '';
+            : get(inAppEntity, 'username');
 
-          const org: OrgDocument = await this.orgModel.findOne({
-            wallet: process.env.ROOT_PUBKEY,
-          });
-          historyItem.addressOrUsername = org.name;
-          historyItem.img = org.logo;
-          historyItem.description = `Commission for selling ${tokensAmount}% of @${sellerName}`;
+          let sellerLogo = !isNil(soldOrganization)
+            ? soldOrganization.logo
+            : get(inAppEntity, 'img');
+
+          if (transaction.description === 'Commission') {
+            historyItem.addressOrUsername = orgMain.name;
+            historyItem.img = orgMain.logo;
+            historyItem.description = `Commission for selling ${tokensAmount}% of @${sellerName}`;
+          } else {
+            historyItem.addressOrUsername = sellerName;
+            historyItem.img = sellerLogo;
+            historyItem.description = `Sent`;
+            if (tokensAmount) {
+              historyItem.description = `Paid for ${tokensAmount}% of @${sellerName}`;
+            } else if (payment?.type === PaymentType.Investment) {
+              historyItem.description = `Invested`;
+            }
+          }
         }
         historyItem.processedAt = txn.blockTime * 1000;
         history.push(historyItem);
@@ -188,11 +207,18 @@ export class AccountService {
     account: AccountModel,
     txn: ParsedTransactionWithMeta,
   ): Promise<EntityFromTxnDto | null> {
+    const signatures = txn.transaction.signatures;
+    const regexList: RegExp[] = [];
+    for (const signature of signatures) {
+      const regex = new RegExp(`${signature}`, 'i');
+      regexList.push(regex);
+    }
     const payment = await this.paymentModel
       .findOne({
         $or: [
-          { 'cpResult.signature': { $in: txn.transaction.signatures } },
-          { txnHash: { $in: txn.transaction.signatures } },
+          { 'cpResult.signature': { $in: signatures } },
+          { txnHash: { $in: signatures } },
+          { txnHash: regexList },
         ],
       })
       .populate(['sale.org']);
@@ -219,6 +245,12 @@ export class AccountService {
       };
     }
     const instructions = txn.transaction.message.instructions;
+    return this.parseInstruction(account, instructions);
+  }
+  private async parseInstruction(
+    account: AccountModel,
+    instructions: (ParsedInstruction | PartiallyDecodedInstruction)[],
+  ) {
     return instructions.reduce<Promise<EntityFromTxnDto | null>>(
       async (entity, instruction: ParsedInstruction) => {
         if (!isNil(await entity)) {
