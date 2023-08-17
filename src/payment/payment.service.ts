@@ -34,6 +34,7 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { toBigJs, toFixed } from '../utils/bigjs';
 import { AccountModel } from '../auth/models/account.model';
+import Bigjs from 'big.js';
 
 @Injectable()
 export class PaymentService {
@@ -461,14 +462,50 @@ export class PaymentService {
       toBigJs(payment.amount).mul(+process.env.COMMISSION),
       6,
     );
+    const user = account?.user as UserDocument;
+    let bonusWallet = null;
+    let bonusBalance = new Bigjs(0);
     const rootOrg = await this.orgModel.findOne(
       { wallet: process.env.ROOT_PUBKEY },
       '+password',
     );
+    const balance = toBigJs(
+      (await this.apiService.getUSDCBalance(account.wallet)).uiAmount,
+    );
+
+    if (process.env.ONBOARDING_ENABLED === 'true') {
+      bonusWallet = user ? user?.bonusWallet : null;
+      if (bonusWallet) {
+        bonusBalance = toBigJs(
+          (await this.apiService.getUSDCBalance(bonusWallet)).uiAmount,
+        );
+      }
+
+      if (balance.lt(payment.amount) && bonusBalance.lt(payment.amount)) {
+        throw new BadRequestException({
+          message: 'Insufficient funds',
+        });
+      }
+    }
+
+    if (balance.lt(payment.amount)) {
+      throw new BadRequestException({
+        message: 'Insufficient funds',
+      });
+    }
+
+    let senderWallet = account.wallet;
+    if (process.env.ONBOARDING_ENABLED === 'true') {
+      senderWallet = bonusBalance.gte(payment.amount)
+        ? bonusWallet
+        : account.wallet;
+    }
+
     const senderPk = await this.apiService.getPK(
-      account.wallet,
+      senderWallet,
       await account.password,
     );
+
     const createUSDCAccountInstructions =
       await this.apiService.createTokenAccountInstruction(
         process.env.USDC_MINT,
