@@ -209,7 +209,7 @@ export class ApiService {
         console.log(`Retrying transfer, retries left: ${retries}`);
         return this.transfer(mint, recepients, --retries);
       }
-      err.message = `Error transfering tokens: ${err.message}`;
+      err.message = `Error transferring tokens: ${err.message}`;
       throw err;
     }
   }
