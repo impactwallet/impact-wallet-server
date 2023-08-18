@@ -33,6 +33,7 @@ import {
   ParsedInstruction,
   ParsedTransactionWithMeta,
   PublicKey,
+  TokenAmount,
 } from '@solana/web3.js';
 import { Member, MemberDocument } from 'src/members/schema/member.schema';
 import { Org, OrgDocument } from 'src/orgs/schema/org.schema';
@@ -57,10 +58,10 @@ import { UsersServiceBase } from './users.service.base';
 import { AuthService } from '../auth/auth.service';
 import { JwtService } from '@nestjs/jwt';
 import { AccountModel } from '../auth/models/account.model';
-import { UpdateOrgDto } from '../orgs/dto/update-org.dto';
 import { isDefined } from 'class-validator';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { toBigJs } from '../utils/bigjs';
+import { BalanceDto } from './dto/balance.dto';
 
 @Injectable()
 export class UsersService extends UsersServiceBase {
@@ -151,6 +152,21 @@ export class UsersService extends UsersServiceBase {
               '/address/' + newUser.wallet,
             )}`,
           );
+
+          if (process.env.ONBOARDING_ENABLED === 'true') {
+            newUser.bonusWallet = await this.apiService.createWallet(
+              newUser.password,
+            );
+            this.apiService.sendNotification(
+              `New bonus wallet created for user ${newUser.nickname}:\n\n${
+                newUser.bonusWallet
+              }\n\n${this.apiService.buildExplorerLink(
+                '/address/' + newUser.bonusWallet,
+              )}`,
+            );
+
+            this.sendBonusUSDCForNewUser(newUser);
+          }
         }
 
         newUser.secretLink = secretLink;
@@ -258,7 +274,19 @@ export class UsersService extends UsersServiceBase {
   }
 
   async getUserBalance(account: AccountModel) {
-    return this.apiService.getUSDCBalance(account.wallet);
+    let bonusBalance: TokenAmount = null;
+    if (process.env.ONBOARDING_ENABLED === 'true') {
+      const user = account.isUser
+        ? await this.getByUserId(account.id.toString(), '+password')
+        : null;
+      if (!isNil(user)) {
+        bonusBalance = await this.apiService.getUSDCBalance(user.bonusWallet);
+      }
+    }
+
+    const balance = await this.apiService.getUSDCBalance(account.wallet);
+
+    return BalanceDto.create(balance, bonusBalance);
   }
 
   async getUserAssetHistory(account: AccountModel, orgId: string) {
@@ -700,5 +728,37 @@ export class UsersService extends UsersServiceBase {
     return {
       token: this.jwtService.sign(payload),
     };
+  }
+
+  async sendBonusUSDCForNewUser(user: User) {
+    const onboardingBonus = +process.env.ONBOARDING_BONUS;
+
+    const senderPk = await this.apiService.getPK(
+      process.env.FEE_PAYER,
+      process.env.FEE_PAYER_PWD,
+    );
+
+    const balance = toBigJs(
+      (await this.apiService.getUSDCBalance(process.env.FEE_PAYER)).uiAmount,
+    );
+    if (balance.lt(onboardingBonus)) {
+      throw new BadRequestException('Not enough USDC to send BONUS');
+    }
+
+    const signature = await this.apiService.transferUSDC([
+      {
+        senderPk: senderPk,
+        wallet: user.bonusWallet,
+        amount: onboardingBonus,
+      },
+    ]);
+
+    this.apiService.sendNotification(
+      `Impact Wallet sent onboarding bonus ${onboardingBonus} USDC to new user ${
+        user.nickname
+      }\n\n${signature}\n\n${this.apiService.buildExplorerLink(
+        '/tx/' + signature,
+      )}`,
+    );
   }
 }
