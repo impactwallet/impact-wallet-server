@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { Connection, Model, Types } from 'mongoose';
+import { ClientSession, Connection, Model, Types } from 'mongoose';
 import { Member, MemberDocument } from '../members/schema/member.schema';
 import {
   MemberProspect,
@@ -42,7 +42,7 @@ import { AccountModel } from '../auth/models/account.model';
 import { OrgsService } from '../orgs/orgs.service';
 import { OfferType } from './enum/offer-type.enum';
 import { areObjectIdsEqual } from '../utils/mongo';
-import { reduce } from 'bluebird';
+import { map, reduce } from 'bluebird';
 import Bigjs from 'big.js';
 import { toBigJs, toFixed } from '../utils/bigjs';
 
@@ -600,134 +600,121 @@ export class OffersLiteService extends OffersServiceBase {
       ? await this.userService.getByUserId(account.id.toString(), '+password')
       : await this.orgService.getByOrgId(account.id.toString(), '+password');
     const seller = offer.seller as UserDocument | OrgDocument;
-    const buyerUser = defaultTo(buyer as UserDocument, null);
-    let bonusWallet = null;
-    let bonusBalance = new Bigjs(0);
     const org = offer.org as OrgDocument;
     let payment: PaymentDocument;
 
-    if (body.status === OfferStatusDto.accepted) {
-      const rootOrg = await this.orgRepository.findOne(
-        { wallet: process.env.ROOT_PUBKEY },
-        '+password',
-      );
+    switch (body.status) {
+      case OfferStatusDto.accepted:
+        const rootOrg = await this.orgRepository.findOne(
+          { wallet: process.env.ROOT_PUBKEY },
+          '+password',
+        );
+        const member = await this.memberRepository
+          .findOne({
+            org: org._id,
+            $or: [{ user: seller._id }, { orgUser: seller._id }],
+          })
+          .populate([
+            { path: 'user', select: '+password' },
+            { path: 'orgUser', select: '+password' },
+          ]);
+        const balance = toBigJs(
+          (await this.apiService.getUSDCBalance(buyer.wallet)).uiAmount,
+        );
 
-      const balance = toBigJs(
-        (await this.apiService.getUSDCBalance(buyer.wallet)).uiAmount,
-      );
-
-      if (process.env.ONBOARDING_ENABLED === 'true') {
-        bonusWallet = buyerUser ? buyerUser?.bonusWallet : null;
-        if (bonusWallet) {
-          bonusBalance = toBigJs(
-            (await this.apiService.getUSDCBalance(bonusWallet)).uiAmount,
-          );
-        }
-
-        if (balance.lt(offer.price) && bonusBalance.lt(offer.price)) {
+        offer.status = OfferStatus.Approved;
+        offer.buyer = buyer._id;
+        const paymentInfo = {
+          info: `Selling ${offer.tokensAmount} impact shares for $${offer.price}`,
+          price: offer.price,
+        };
+        if (balance.lt(paymentInfo.price)) {
           throw new BadRequestException({
             message: 'Insufficient funds',
           });
         }
-      }
-
-      offer.status = OfferStatus.Approved;
-      offer.buyer = buyer._id;
-      const paymentInfo = {
-        info: `Selling ${offer.tokensAmount} impact shares for $${offer.price}`,
-        price: offer.price,
-      };
-      if (balance.lt(paymentInfo.price)) {
-        throw new BadRequestException({
-          message: 'Insufficient funds',
-        });
-      }
-      const commissionAmount = new Bigjs(offer.price).mul(
-        +process.env.COMMISSION,
-      );
-      const session = await this.connection.startSession();
-      await session.withTransaction(async () => {
-        payment = await this.paymentService.sellAssetsInApp(
-          offer,
-          paymentInfo,
-          session,
+        const commissionAmount = new Bigjs(offer.price).mul(
+          +process.env.COMMISSION,
         );
-        let buyerWallet = buyer.wallet;
-        if (process.env.ONBOARDING_ENABLED === 'true') {
-          buyerWallet = bonusBalance.gte(paymentInfo.price)
-            ? bonusWallet
-            : buyer.wallet;
-        }
-        const buyerPk = await this.apiService.getPK(
-          buyerWallet,
-          buyer.password,
-        );
-        const sellerPk = await this.apiService.getPK(
-          seller.wallet,
-          seller.password,
-        );
-        const createUSDCAccountInstruction =
-          await this.apiService.createTokenAccountInstruction(
-            process.env.USDC_MINT,
-            seller.wallet,
+        const session = await this.connection.startSession();
+        await session.withTransaction(async () => {
+          payment = await this.paymentService.sellAssetsInApp(
+            offer,
+            paymentInfo,
+            session,
           );
-        const transferUSDCInstructions =
-          await this.apiService.createTransferInstructions(
-            process.env.USDC_MINT,
-            [
-              {
-                senderPk: buyerPk,
-                wallet: seller.wallet,
-                amount: payment.amount,
-              },
-              {
-                senderPk: sellerPk,
-                wallet: rootOrg.wallet,
-                amount: commissionAmount.toNumber(),
-              },
-            ],
-          );
-        const createTokenAccountInstruction =
-          await this.apiService.createTokenAccountInstruction(
-            org.mint,
+          const buyerPk = await this.apiService.getPK(
             buyer.wallet,
+            buyer.password,
           );
-        const transferTokenInstructions =
-          await this.paymentService.handleAssetsSale(payment, session);
-        const txnHash = await this.apiService.createAndSendTxn(
-          [
-            createUSDCAccountInstruction,
-            ...transferUSDCInstructions,
-            createTokenAccountInstruction,
-            ...transferTokenInstructions,
-          ],
-          [buyerPk, sellerPk],
-        );
-        payment.txnHash = offer.txnHash = txnHash;
-        await payment.save({ session });
-      });
-      await session.endSession();
+          const sellerPk = await this.apiService.getPK(
+            seller.wallet,
+            seller.password,
+          );
+          const createUSDCAccountInstruction =
+            await this.apiService.createTokenAccountInstruction(
+              process.env.USDC_MINT,
+              seller.wallet,
+            );
+          const transferUSDCInstructions =
+            await this.apiService.createTransferInstructions(
+              process.env.USDC_MINT,
+              [
+                {
+                  senderPk: buyerPk,
+                  wallet: seller.wallet,
+                  amount: payment.amount,
+                },
+                {
+                  senderPk: sellerPk,
+                  wallet: rootOrg.wallet,
+                  amount: commissionAmount.toNumber(),
+                },
+              ],
+            );
+          const createTokenAccountInstruction =
+            await this.apiService.createTokenAccountInstruction(
+              org.mint,
+              buyer.wallet,
+            );
+          const transferTokenInstructions =
+            await this.paymentService.handleAssetsSale(payment, session);
+          const txnHash = await this.apiService.createAndSendTxn(
+            [
+              createUSDCAccountInstruction,
+              ...transferUSDCInstructions,
+              createTokenAccountInstruction,
+              ...transferTokenInstructions,
+            ],
+            [buyerPk, sellerPk],
+          );
+          payment.txnHash = offer.txnHash = txnHash;
+          await payment.save({ session });
+        });
+        await session.endSession();
 
-      const buyerUsername = defaultTo(
-        (buyer as UserDocument).nickname,
-        (buyer as OrgDocument).username,
-      );
-      const sellerUsername = defaultTo(
-        (seller as UserDocument).nickname,
-        (seller as OrgDocument).username,
-      );
-      this.apiService.sendNotification(
-        `${buyerUsername} just bought ${payment.sale.tokensAmount} ${org.name} impact shares from ${sellerUsername} for ${payment.amount} USDC:\n\n${payment.txnHash}`,
-      );
-
-      // Our commission
-      this.paymentService
-        .handleRegularPayment(rootOrg, { payment_amount: commissionAmount })
-        .catch((error) =>
-          console.error(`Error while handling commission payment: ${error}`),
+        const buyerUsername = defaultTo(
+          (buyer as UserDocument).nickname,
+          (buyer as OrgDocument).username,
         );
-    } else if (body.status === OfferStatusDto.declined) {
-      offer.status = OfferStatus.Declined;
+        const sellerUsername = defaultTo(
+          (seller as UserDocument).nickname,
+          (seller as OrgDocument).username,
+        );
+        this.apiService.sendNotification(
+          `${buyerUsername} just bought ${payment.sale.tokensAmount} ${org.name} impact shares from ${sellerUsername} for ${payment.amount} USDC:\n\n${payment.txnHash}`,
+        );
+
+        // Our commission
+        this.paymentService
+          .handleRegularPayment(rootOrg, { payment_amount: commissionAmount })
+          .catch((error) =>
+            console.error(`Error while handling commission payment: ${error}`),
+          );
+        break;
+      case OfferStatusDto.declined:
+        offer.status = OfferStatus.Declined;
+        break;
     }
 
     await offer.save();
