@@ -91,8 +91,8 @@ export class OffersService extends OffersServiceBase {
     if (!isNil(filters.status)) {
       query['status'] = filters.status;
     }
-    if (!isNil(filters.role)) {
-      query['memberProspect.role'] = filters.role;
+    if (!isNil(filters.type)) {
+      query['type'] = filters.type;
     }
     return this.offerRepository.find(query);
   }
