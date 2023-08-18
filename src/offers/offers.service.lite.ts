@@ -592,7 +592,7 @@ export class OffersLiteService extends OffersServiceBase {
   ) {
     const offer = await this.getSaleOfferById(offerId, ['org']);
     await offer.populateSeller('+password');
-    if (offer.status !== OfferStatus.Pending) {
+    if (!offer.isLifeTime && offer.status !== OfferStatus.Pending) {
       throw new ForbiddenException('Offer already accepted/declined');
     }
 
