@@ -457,8 +457,9 @@ export class PaymentService {
     const payment = await this.getPaymentById(paymentId, { path: 'org' });
     const org = await this.orgModel.findById(payment.org, '+password');
     const orgPk = await this.apiService.getPK(org.wallet, org.password);
-    const commissionAmount = toBigJs(payment.amount).mul(
-      +process.env.COMMISSION,
+    const commissionAmount = toFixed(
+      toBigJs(payment.amount).mul(+process.env.COMMISSION),
+      6,
     );
     const rootOrg = await this.orgModel.findOne(
       { wallet: process.env.ROOT_PUBKEY },
@@ -489,7 +490,10 @@ export class PaymentService {
     payment.txnHash = txnHash;
 
     this.handleRegularPayment(org, {
-      payment_amount: payment.amount,
+      payment_amount: toFixed(
+        toBigJs(payment.amount).minus(commissionAmount),
+        6,
+      ).toNumber(),
       custom_data: payment.orgPayload,
     }).catch((err) => {
       console.log(

@@ -232,14 +232,15 @@ export class ApiService {
         return;
       }
 
-      const blockhash = await this.connection.getLatestBlockhash('finalized');
-      txn.recentBlockhash = blockhash.blockhash;
-      txn.feePayer = new PublicKey(process.env.FEE_PAYER);
       const feePayerPk = await this.getPK(
         process.env.FEE_PAYER,
         process.env.FEE_PAYER_PWD,
       );
+      txn.feePayer = new PublicKey(process.env.FEE_PAYER);
       const signers = pks.map((pk) => Keypair.fromSecretKey(decode(pk)));
+      const blockhash = await this.connection.getLatestBlockhash('finalized');
+      txn.recentBlockhash = blockhash.blockhash;
+
       const signature = await this.sendTxn(
         txn,
         signers.concat(Keypair.fromSecretKey(decode(feePayerPk))),
