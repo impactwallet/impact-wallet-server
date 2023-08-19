@@ -761,4 +761,68 @@ export class UsersService extends UsersServiceBase {
       )}`,
     );
   }
+
+  async findUsersWithExpiredBonusWallet(): Promise<User[]> {
+    const interval = +process.env.BONUS_WALLET_EXPIRATION_INTERVAL_MIN || 1440; // 24 hours
+    const currentDate = new Date();
+    currentDate.setHours(currentDate.getMinutes() - interval); // Subtract 'interval' minute from the current date
+
+    return this.userRepository
+      .find({
+        bonusWallet: { $ne: null }, // Ensure bonusWallet is not null
+        createdAt: { $lt: currentDate }, // Ensure createdAt is more than 24 hours ago
+      })
+      .select('+password')
+      .exec();
+  }
+
+  async sendBonusUsdcBack(user: User) {
+    const rootWallet = process.env.ROOT_PUBKEY;
+
+    const bonusBalance = (
+      await this.apiService.getUSDCBalance(user.bonusWallet)
+    ).uiAmount;
+
+    if (bonusBalance === 0) {
+      return;
+    }
+
+    const orgMain: OrgDocument = await this.orgRepository.findOne({
+      wallet: rootWallet,
+    });
+
+    const senderPassword = user.password;
+
+    const senderPk = await this.apiService.getPK(
+      user.bonusWallet,
+      senderPassword,
+    );
+    const recipients = [
+      {
+        senderPk,
+        wallet: rootWallet,
+        amount: bonusBalance,
+      },
+    ];
+
+    const signature = await this.apiService.transferUSDC(recipients);
+
+    this.apiService.sendNotification(
+      `User ${
+        user.nickname
+      } returned back unused bonuses ${bonusBalance} USDC to ${
+        orgMain.name
+      }\n\n${signature}\n\n${this.apiService.buildExplorerLink(
+        '/tx/' + signature,
+      )}`,
+    );
+  }
+
+  async returnBonusUSDC() {
+    console.log('Start returning unused bonus USDC');
+    const users = await this.findUsersWithExpiredBonusWallet();
+    for (const user of users) {
+      await this.sendBonusUsdcBack(user);
+    }
+  }
 }
