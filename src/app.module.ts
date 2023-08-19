@@ -12,6 +12,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ConfigurationModule } from './configuration/config.module';
 import { Connection } from 'mongoose';
 import { AccountModule } from './account/account.module';
+import { JobsModule } from './jobs-service/jobs.module';
 
 export let connection: Connection;
 
@@ -34,9 +35,7 @@ export let connection: Connection;
     ContributionsModule,
     ConfigurationModule,
     AccountModule,
+    JobsModule,
   ],
 })
-
-export class AppModule { }
-
-
+export class AppModule {}
