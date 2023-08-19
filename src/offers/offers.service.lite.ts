@@ -145,57 +145,53 @@ export class OffersLiteService extends OffersServiceBase {
     const memberField = account.isUser ? 'user' : 'orgUser';
     const memberProspect = first(offer.memberProspects);
 
-    switch (body.status) {
-      case OfferStatusDto.accepted:
-        memberProspect[memberField] = account.id.toString();
-        memberProspect.org = org._id.toString();
+    if (body.status === OfferStatusDto.accepted) {
+      memberProspect[memberField] = account.id.toString();
+      memberProspect.org = org._id.toString();
 
-        offer.status = OfferStatus.Approved;
-        let txnHashes = '';
-        let memberDataMap = {};
-        const newMember = new this.memberRepository(memberProspect.toObject());
-        const session = await this.connection.startSession();
-        await session.withTransaction(async () => {
-          const createTokenAccountInstruction =
-            await this.apiService.createTokenAccountInstruction(
-              org.mint,
-              account.wallet,
-            );
-          await this.apiService.createAndSendTxn(
-            [createTokenAccountInstruction],
+      offer.status = OfferStatus.Approved;
+      let txnHashes = '';
+      let memberDataMap = {};
+      const newMember = new this.memberRepository(memberProspect.toObject());
+      const session = await this.connection.startSession();
+      await session.withTransaction(async () => {
+        const createTokenAccountInstruction =
+          await this.apiService.createTokenAccountInstruction(
+            org.mint,
+            account.wallet,
+          );
+        await this.apiService.createAndSendTxn(
+          [createTokenAccountInstruction],
+          [],
+        );
+        if (
+          memberProspect.equityAmount !== 0 &&
+          memberProspect.equityType === EquityType.Immediately
+        ) {
+          memberDataMap = await this.calculateEquity(
+            org,
+            newMember,
+            new Bigjs(memberProspect.equityAmount),
             [],
           );
-          if (
-            memberProspect.equityAmount !== 0 &&
-            memberProspect.equityType === EquityType.Immediately
-          ) {
-            memberDataMap = await this.calculateEquity(
-              org,
-              newMember,
-              new Bigjs(memberProspect.equityAmount),
-              [],
-            );
-            txnHashes = await this.collectEquity(org, memberDataMap, account);
-          }
-          await newMember.save({ session });
-        });
-        await session.endSession();
+          txnHashes = await this.collectEquity(org, memberDataMap, account);
+        }
+        await newMember.save({ session });
+      });
+      await session.endSession();
 
-        this.sendMemberOfferNotification(
-          org,
-          memberDataMap,
-          txnHashes,
-          account,
-        ).catch((error) =>
-          console.error(
-            `Error while sending member offer notification: ${error}`,
-          ),
-        );
-
-        break;
-      case OfferStatusDto.declined:
-        offer.status = OfferStatus.Declined;
-        break;
+      this.sendMemberOfferNotification(
+        org,
+        memberDataMap,
+        txnHashes,
+        account,
+      ).catch((error) =>
+        console.error(
+          `Error while sending member offer notification: ${error}`,
+        ),
+      );
+    } else if (body.status === OfferStatusDto.declined) {
+      offer.status = OfferStatus.Declined;
     }
 
     return offer.save();
@@ -247,113 +243,106 @@ export class OffersLiteService extends OffersServiceBase {
       [memberField]: account.id,
     });
 
-    switch (body.status) {
-      case OfferStatusDto.accepted:
-        memberProspect[memberField] = account.id.toString();
-        memberProspect.org = org._id.toString();
+    if (body.status === OfferStatusDto.accepted) {
+      memberProspect[memberField] = account.id.toString();
+      memberProspect.org = org._id.toString();
 
-        if (investedAmount + body.amount >= offer.investorSettings.amount) {
-          offer.status = OfferStatus.Approved;
-        }
-        const rootOrg = await this.orgRepository.findOne(
-          { wallet: process.env.ROOT_PUBKEY },
-          '+password',
+      if (investedAmount + body.amount >= offer.investorSettings.amount) {
+        offer.status = OfferStatus.Approved;
+      }
+      const rootOrg = await this.orgRepository.findOne(
+        { wallet: process.env.ROOT_PUBKEY },
+        '+password',
+      );
+      const paymentInfo = {
+        info: `Investing $${body.amount} for ${equityAllocation}% of equity allocation`,
+        amount: body.amount,
+      };
+      const payment = await this.paymentService.receiveInvestmentInApp(
+        memberProspect,
+        org,
+        paymentInfo,
+      );
+      const memberQuery = {
+        org: org._id,
+        user: payment.investor.user,
+        orgUser: payment.investor.orgUser,
+      };
+      const member = await this.memberRepository.findOne(
+        pickBy(memberQuery, identity),
+      );
+      if (!isNil(member)) {
+        const memberEquity = await this.apiService.getTokenBalance(
+          org.mint,
+          account.wallet,
         );
-        const paymentInfo = {
-          info: `Investing $${body.amount} for ${equityAllocation}% of equity allocation`,
-          amount: body.amount,
-        };
-        const payment = await this.paymentService.receiveInvestmentInApp(
-          memberProspect,
-          org,
-          paymentInfo,
+        const memberObject = member.toObject<Member>();
+        memberObject.equityAmount = memberEquity.uiAmount;
+        investedMembersMap.set(
+          get(member[memberField], '_id', '').toString(),
+          memberObject,
         );
-        const memberQuery = {
-          org: org._id,
-          user: payment.investor.user,
-          orgUser: payment.investor.orgUser,
-        };
-        const member = await this.memberRepository.findOne(
-          pickBy(memberQuery, identity),
-        );
-        if (!isNil(member)) {
-          const memberEquity = await this.apiService.getTokenBalance(
-            org.mint,
-            account.wallet,
-          );
-          const memberObject = member.toObject<Member>();
-          memberObject.equityAmount = memberEquity.uiAmount;
-          investedMembersMap.set(
-            get(member[memberField], '_id', '').toString(),
-            memberObject,
-          );
-        }
-        const memberDataMap = await this.calculateEquity(
-          org,
-          member,
-          equityAllocation,
-          Array.from(investedMembersMap.values()),
-        );
-        const { txnHash, commissionAmount } =
-          await this.transferUSDCFromInvestor(org, payment, account);
-        payment.txnHash = txnHash;
-        const txnsHashes = await this.collectEquity(
-          org,
-          memberDataMap,
-          account,
-        );
-        payment.txnHash += `\n${txnsHashes}`;
+      }
+      const memberDataMap = await this.calculateEquity(
+        org,
+        member,
+        equityAllocation,
+        Array.from(investedMembersMap.values()),
+      );
+      const { txnHash, commissionAmount } = await this.transferUSDCFromInvestor(
+        org,
+        payment,
+        account,
+      );
+      payment.txnHash = txnHash;
+      const txnsHashes = await this.collectEquity(org, memberDataMap, account);
+      payment.txnHash += `\n${txnsHashes}`;
 
-        const existingMemberProspect = offer.memberProspects.find((mp) => {
-          return areObjectIdsEqual(mp[memberField], account.id);
-        });
-        if (isNil(existingMemberProspect)) {
-          offer.memberProspects.push(memberProspect);
-        } else {
-          existingMemberProspect.investorSettings.investmentAmount +=
-            body.amount;
-          existingMemberProspect.investorSettings.equityAllocation = new Bigjs(
-            existingMemberProspect.investorSettings.equityAllocation,
-          ).add(equityAllocation);
-          existingMemberProspect.equityAmount = new Bigjs(
-            existingMemberProspect.equityAmount,
-          ).add(equityAllocation);
-        }
+      const existingMemberProspect = offer.memberProspects.find((mp) => {
+        return areObjectIdsEqual(mp[memberField], account.id);
+      });
+      if (isNil(existingMemberProspect)) {
+        offer.memberProspects.push(memberProspect);
+      } else {
+        existingMemberProspect.investorSettings.investmentAmount += body.amount;
+        existingMemberProspect.investorSettings.equityAllocation = new Bigjs(
+          existingMemberProspect.investorSettings.equityAllocation,
+        ).add(equityAllocation);
+        existingMemberProspect.equityAmount = new Bigjs(
+          existingMemberProspect.equityAmount,
+        ).add(equityAllocation);
+      }
 
-        const session = await this.connection.startSession();
-        await session.withTransaction(async () => {
-          await this.paymentService.handleInvestmentPayment(
-            org,
-            payment,
-            session,
-          );
-          await payment.save({ session });
-          await offer.save({ session });
-        });
-        await session.endSession();
-
-        this.sendInvestmentNotification(
+      const session = await this.connection.startSession();
+      await session.withTransaction(async () => {
+        await this.paymentService.handleInvestmentPayment(
           org,
-          memberDataMap,
           payment,
-          account,
-        ).catch((error) =>
-          console.error(
-            `Error while sending investment notification: ${error}`,
-          ),
+          session,
         );
+        await payment.save({ session });
+        await offer.save({ session });
+      });
+      await session.endSession();
 
-        // Handle commission
-        this.paymentService
-          .handleRegularPayment(rootOrg, { payment_amount: commissionAmount })
-          .catch((error) =>
-            console.error(`Error while handling commission payment: ${error}`),
-          );
-        break;
-      case OfferStatusDto.declined:
-        offer.status = OfferStatus.Declined;
-        await offer.save();
-        break;
+      this.sendInvestmentNotification(
+        org,
+        memberDataMap,
+        payment,
+        account,
+      ).catch((error) =>
+        console.error(`Error while sending investment notification: ${error}`),
+      );
+
+      // Handle commission
+      this.paymentService
+        .handleRegularPayment(rootOrg, { payment_amount: commissionAmount })
+        .catch((error) =>
+          console.error(`Error while handling commission payment: ${error}`),
+        );
+    } else if (body.status === OfferStatusDto.declined) {
+      offer.status = OfferStatus.Declined;
+      await offer.save();
     }
 
     return offer;
