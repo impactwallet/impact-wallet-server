@@ -488,10 +488,12 @@ export class PaymentService {
       }
     }
 
-    if (balance.lt(payment.amount)) {
-      throw new BadRequestException({
-        message: 'Insufficient funds',
-      });
+    if (process.env.ONBOARDING_ENABLED !== 'true') {
+      if (balance.lt(payment.amount)) {
+        throw new BadRequestException({
+          message: 'Insufficient funds',
+        });
+      }
     }
 
     let senderWallet = account.wallet;

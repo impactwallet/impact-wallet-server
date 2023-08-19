@@ -626,10 +626,13 @@ export class OffersLiteService extends OffersServiceBase {
         info: `Selling ${offer.tokensAmount} impact shares for $${offer.price}`,
         price: offer.price,
       };
-      if (balance.lt(paymentInfo.price)) {
-        throw new BadRequestException({
-          message: 'Insufficient funds',
-        });
+
+      if (process.env.ONBOARDING_ENABLED !== 'true') {
+        if (balance.lt(paymentInfo.price)) {
+          throw new BadRequestException({
+            message: 'Insufficient funds',
+          });
+        }
       }
       const commissionAmount = new Bigjs(offer.price).mul(
         +process.env.COMMISSION,
