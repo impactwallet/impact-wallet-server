@@ -535,8 +535,12 @@ export class ApiService {
       );
       return balance.value;
     } catch (err) {
-      console.log(`Error getting token balance: ${err}`);
-      return { amount: '0', decimals: 0, uiAmount: 0, uiAmountString: '0' };
+      if (err.code === -32602) {
+        return { amount: '0', decimals: 0, uiAmount: 0, uiAmountString: '0' };
+      } else {
+        console.log(`Error getting token balance: ${err.message}`);
+        return { amount: '0', decimals: 0, uiAmount: 0, uiAmountString: '0' };
+      }
     }
   }
 

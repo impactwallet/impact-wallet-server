@@ -16,7 +16,7 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleInit() {
-    const isJobEnable = process.env.BONUS_RETURN_ENABLED || true;
+    const isJobEnable = process.env.BONUS_RETURN_ENABLED || false;
     this.agenda.define('Refund of unused bonuses USDC', async (job) => {
       await this.usersService.returnBonusUSDC();
     });
