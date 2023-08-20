@@ -6,23 +6,24 @@ import { ConfigurationDto } from './dto/configuration.dto';
 
 @Injectable()
 export class ConfigService {
-
   constructor(
     @InjectModel(Config.name) private configRepository: Model<ConfigDocument>,
-  ) { }
+  ) {}
 
   async getConfig() {
     const config = await this.configRepository.findOne({ id: 1 }, { _id: 0 });
-    if (!config) {
-      return {
-        mode: 'Lite',
-      };
-    }
-    return config;
+    const configObject = config.toObject();
+    configObject.bonusWalletExpiration =
+      +process.env.BONUS_WALLET_EXPIRATION_INTERVAL_MIN;
+    return configObject;
   }
 
   async updateConfig(configurationDto: ConfigurationDto) {
     const options = { upsert: true, new: true };
-    await this.configRepository.findOneAndUpdate({ id: 1 }, configurationDto, options);
+    await this.configRepository.findOneAndUpdate(
+      { id: 1 },
+      configurationDto,
+      options,
+    );
   }
 }
