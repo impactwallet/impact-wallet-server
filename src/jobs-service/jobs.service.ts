@@ -1,10 +1,10 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-const Agenda = require('agenda');
+import { Agenda } from 'agenda';
 import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class JobsService implements OnModuleInit, OnModuleDestroy {
-  private readonly agenda;
+  private readonly agenda: Agenda;
   constructor(private readonly usersService: UsersService) {
     this.agenda = new Agenda({
       db: { address: process.env.MONGODB_URI, collection: 'jobs' },
@@ -17,7 +17,8 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleInit() {
     const isJobEnable = process.env.BONUS_RETURN_ENABLED || false;
-    this.agenda.define('Refund of unused bonuses USDC', async (job) => {
+    this.agenda.define('Refund of unused bonuses USDC', async () => {
+      console.log('Start returning unused bonus USDC');
       await this.usersService.returnBonusUSDC();
     });
 

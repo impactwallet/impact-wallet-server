@@ -62,6 +62,7 @@ import { isDefined } from 'class-validator';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { toBigJs } from '../utils/bigjs';
 import { BalanceDto } from './dto/balance.dto';
+import * as moment from 'moment';
 
 @Injectable()
 export class UsersService extends UsersServiceBase {
@@ -764,13 +765,12 @@ export class UsersService extends UsersServiceBase {
 
   async findUsersWithExpiredBonusWallet(): Promise<User[]> {
     const interval = +process.env.BONUS_WALLET_EXPIRATION_INTERVAL_MIN || 1440; // 24 hours
-    const currentDate = new Date();
-    currentDate.setHours(currentDate.getMinutes() - interval); // Subtract 'interval' minute from the current date
+    const threshold = moment().subtract(interval, 'minutes').toDate();
 
     return this.userRepository
       .find({
-        bonusWallet: { $ne: null }, // Ensure bonusWallet is not null
-        createdAt: { $lt: currentDate }, // Ensure createdAt is more than 24 hours ago
+        bonusWallet: { $ne: null },
+        createdAt: { $lt: threshold },
       })
       .select('+password')
       .exec();
@@ -819,7 +819,6 @@ export class UsersService extends UsersServiceBase {
   }
 
   async returnBonusUSDC() {
-    console.log('Start returning unused bonus USDC');
     const users = await this.findUsersWithExpiredBonusWallet();
     for (const user of users) {
       await this.sendBonusUsdcBack(user);
