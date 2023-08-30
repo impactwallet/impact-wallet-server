@@ -16,7 +16,7 @@ import { delay, firstValueFrom, of } from 'rxjs';
 import { ApiService } from 'src/api-service/api.service';
 import { MemberDto } from 'src/members/dto/members.dto';
 import { MembersService } from 'src/members/members.service';
-import { MemberDocument } from 'src/members/schema/member.schema';
+import { Member, MemberDocument } from 'src/members/schema/member.schema';
 import { S3Service } from 'src/s3/s3.service';
 import { v4 as uuid } from 'uuid';
 import { AuthService } from '../auth/auth.service';
@@ -35,6 +35,9 @@ import { OrgHistoryItemAction } from './enum/org-history-item-action.enum';
 import { Org, OrgDocument } from './schema/org.schema';
 import { MembersFilterDto } from '../members/dto/members.filter.dto';
 import { toBigJs } from '../utils/bigjs';
+import { PaymentType } from '../payment/enum/payment-type.enum';
+import { Payment, PaymentDocument } from '../payment/schema/payment.schema';
+import * as moment from 'moment';
 
 const MINT_STATUS_RETRIES = 5;
 
@@ -42,7 +45,8 @@ const MINT_STATUS_RETRIES = 5;
 export class OrgsService {
   constructor(
     @InjectModel(Org.name) public orgRepository: Model<OrgDocument>,
-    @InjectModel(Org.name) public membersRepository: Model<MemberDocument>,
+    @InjectModel(Member.name) public membersRepository: Model<MemberDocument>,
+    @InjectModel(Payment.name) public paymentRepository: Model<PaymentDocument>,
     @InjectConnection() private readonly connection: mongoose.Connection,
     private memberService: MembersService,
     private authService: AuthService,
@@ -213,6 +217,99 @@ export class OrgsService {
       .session(session);
     if (!org) throw new NotFoundException('Organization not found');
     return org;
+  }
+
+  async getOrgRevenue(orgId: string) {
+    const pipelines: PipelineStage[] = [
+      {
+        $match: {
+          org: new Types.ObjectId(orgId),
+          type: PaymentType.Regular,
+          $or: [
+            {
+              $and: [
+                { cpResult: { $exists: true } },
+                { 'cpResult.event': 'transaction.successful' },
+              ],
+            },
+            { txnHash: { $exists: true } },
+          ],
+        },
+      },
+      {
+        $facet: {
+          total: [
+            {
+              $group: {
+                _id: null,
+                revenue: { $sum: '$amount' },
+              },
+            },
+            {
+              $project: {
+                _id: 0,
+              },
+            },
+          ],
+          monthly: [
+            {
+              $project: {
+                amount: 1,
+                year: { $year: '$updatedAt' },
+                month: { $month: '$updatedAt' },
+              },
+            },
+            {
+              $group: {
+                _id: {
+                  month: '$month',
+                  year: '$year',
+                },
+                revenue: { $sum: '$amount' },
+              },
+            },
+            {
+              $project: {
+                month: '$_id.month',
+                year: '$_id.year',
+                revenue: 1,
+                _id: 0,
+              },
+            },
+            {
+              $sort: {
+                year: 1,
+                month: 1,
+              },
+            },
+          ],
+          last30Days: [
+            {
+              $match: {
+                updatedAt: {
+                  $gte: moment().startOf('day').subtract(30, 'days').toDate(),
+                },
+              },
+            },
+            {
+              $group: {
+                _id: null,
+                revenue: { $sum: '$amount' },
+              },
+            },
+            {
+              $project: {
+                _id: 0,
+              },
+            },
+          ],
+        },
+      },
+    ];
+    const [result] = await this.paymentRepository.aggregate(pipelines);
+    result.total = get(result, 'total[0]', { revenue: 0 });
+    result.last30Days = get(result, 'last30Days[0]', { revenue: 0 });
+    return result;
   }
 
   async getOrgHistory(orgId: string) {

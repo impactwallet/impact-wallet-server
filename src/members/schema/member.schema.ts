@@ -46,19 +46,6 @@ export class Period {
 export const PeriodSchema = SchemaFactory.createForClass(Period);
 
 @Schema({ _id: false })
-export class TransactionHistory {
-  @ApiProperty({ example: 100.5, description: 'Amount of transaction' })
-  @Prop({ type: Number, required: true })
-  amount: number;
-
-  @ApiProperty({ example: '2023-03-20T15:43:10.898+00:00' })
-  @Prop({ type: Date, default: Date.now })
-  date: Date;
-}
-export const TransactionHistorySchema =
-  SchemaFactory.createForClass(TransactionHistory);
-
-@Schema({ _id: false })
 export class Compensation {
   @ApiProperty({ example: 3000 })
   @Prop({ type: Number, required: true })
@@ -161,13 +148,6 @@ export class Member {
   @ApiProperty({ example: 0 })
   @Prop({ type: Number, default: 0 })
   profit: number;
-
-  @ApiProperty({
-    type: [TransactionHistory],
-    description: 'Transaction history',
-  })
-  @Prop({ type: [TransactionHistorySchema] })
-  transactionsHistory: TransactionHistory[];
 }
 
 export const MemberSchema = SchemaFactory.createForClass(Member);

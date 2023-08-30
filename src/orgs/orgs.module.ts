@@ -12,10 +12,16 @@ import { OrgsLiteController } from './orgs.controller.lite';
 import { OrgsServiceLite } from './orgs.service.lite';
 import { AuthModule } from '../auth/auth.module';
 import { JwtModule } from '@nestjs/jwt';
+import { Member, MemberSchema } from '../members/schema/member.schema';
+import { Payment, PaymentSchema } from '../payment/schema/payment.schema';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: Org.name, schema: OrgSchema }]),
+    MongooseModule.forFeature([
+      { name: Org.name, schema: OrgSchema },
+      { name: Member.name, schema: MemberSchema },
+      { name: Payment.name, schema: PaymentSchema },
+    ]),
     UsersModule,
     MembersModule,
     ApiServiceModule,
@@ -30,4 +36,4 @@ import { JwtModule } from '@nestjs/jwt';
   exports: [OrgsService, OrgsServiceLite],
   controllers: [OrgsController, OrgsLiteController],
 })
-export class OrgsModule { }
+export class OrgsModule {}

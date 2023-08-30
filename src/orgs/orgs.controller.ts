@@ -240,6 +240,14 @@ export class OrgsController {
     return this.orgsService.getOrgHistory(orgId);
   }
 
+  @ApiOperation({ summary: 'Get organization events history' })
+  @ApiResponse({ status: 200, type: [Org] })
+  @Get(':orgId/revenue')
+  async getOrgRevenue(@Param('orgId') orgId: string, @Req() req: Request) {
+    await this.authService.getAccountFromToken(req);
+    return this.orgsService.getOrgRevenue(orgId);
+  }
+
   @ApiOperation({ summary: 'Add member to organization' })
   @ApiResponse({ status: 200, type: Member })
   @Post(':orgId/members')
