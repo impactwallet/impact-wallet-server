@@ -38,6 +38,14 @@ import { toBigJs } from '../utils/bigjs';
 import { PaymentType } from '../payment/enum/payment-type.enum';
 import { Payment, PaymentDocument } from '../payment/schema/payment.schema';
 import * as moment from 'moment';
+import { OrgRevenueFilterDto } from './dto/org-revenue.filter.dto';
+import { RevenuePeriod } from './enum/revenue-period';
+import {
+  dailyRevenuePipeline,
+  monthlyRevenuePipeline,
+  weeklyRevenuePipeline,
+  yearlyRevenuePipeline,
+} from './aggregation';
 
 const MINT_STATUS_RETRIES = 5;
 
@@ -219,7 +227,24 @@ export class OrgsService {
     return org;
   }
 
-  async getOrgRevenue(orgId: string) {
+  async getOrgRevenue(orgId: string, query: OrgRevenueFilterDto) {
+    let periodPipeline: PipelineStage[] = [];
+    switch (query.period) {
+      case RevenuePeriod.Yearly:
+        periodPipeline = yearlyRevenuePipeline();
+        break;
+      case RevenuePeriod.Weekly:
+        periodPipeline = weeklyRevenuePipeline();
+        break;
+      case RevenuePeriod.Daily:
+        periodPipeline = dailyRevenuePipeline();
+        break;
+      case RevenuePeriod.Monthly:
+      default:
+        periodPipeline = monthlyRevenuePipeline();
+        break;
+    }
+
     const pipelines: PipelineStage[] = [
       {
         $match: {
@@ -251,38 +276,7 @@ export class OrgsService {
               },
             },
           ],
-          monthly: [
-            {
-              $project: {
-                amount: 1,
-                year: { $year: '$updatedAt' },
-                month: { $month: '$updatedAt' },
-              },
-            },
-            {
-              $group: {
-                _id: {
-                  month: '$month',
-                  year: '$year',
-                },
-                revenue: { $sum: '$amount' },
-              },
-            },
-            {
-              $project: {
-                month: '$_id.month',
-                year: '$_id.year',
-                revenue: 1,
-                _id: 0,
-              },
-            },
-            {
-              $sort: {
-                year: 1,
-                month: 1,
-              },
-            },
-          ],
+          period: periodPipeline as PipelineStage.FacetPipelineStage[],
           last30Days: [
             {
               $match: {

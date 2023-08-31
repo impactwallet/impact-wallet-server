@@ -46,6 +46,7 @@ import { User } from '../users/schema/user.schema';
 import { UpdateUserDto } from '../users/dto/update-user.dto';
 import { DeleteLogosRequestDto } from './dto/delete-logos.request.dto';
 import { MembersFilterDto } from '../members/dto/members.filter.dto';
+import { OrgRevenueFilterDto } from './dto/org-revenue.filter.dto';
 
 @ApiTags('Orgs')
 @Controller('orgs')
@@ -243,9 +244,13 @@ export class OrgsController {
   @ApiOperation({ summary: 'Get organization events history' })
   @ApiResponse({ status: 200, type: [Org] })
   @Get(':orgId/revenue')
-  async getOrgRevenue(@Param('orgId') orgId: string, @Req() req: Request) {
+  async getOrgRevenue(
+    @Param('orgId') orgId: string,
+    @Req() req: Request,
+    @Query(new ValidationPipe({ transform: true })) query: OrgRevenueFilterDto,
+  ) {
     await this.authService.getAccountFromToken(req);
-    return this.orgsService.getOrgRevenue(orgId);
+    return this.orgsService.getOrgRevenue(orgId, query);
   }
 
   @ApiOperation({ summary: 'Add member to organization' })
