@@ -47,6 +47,7 @@ import { UpdateUserDto } from '../users/dto/update-user.dto';
 import { DeleteLogosRequestDto } from './dto/delete-logos.request.dto';
 import { MembersFilterDto } from '../members/dto/members.filter.dto';
 import { OrgRevenueFilterDto } from './dto/org-revenue.filter.dto';
+import { OrgSplitDto } from './dto/org-split.dto';
 
 @ApiTags('Orgs')
 @Controller('orgs')
@@ -251,6 +252,18 @@ export class OrgsController {
   ) {
     await this.authService.getAccountFromToken(req);
     return this.orgsService.getOrgRevenue(orgId, query);
+  }
+
+  @ApiOperation({ summary: 'Get organization split info' })
+  @ApiResponse({ status: 200, type: [Org] })
+  @Get(':orgId/split')
+  async getOrgSplit(
+    @Param('orgId') orgId: string,
+    @Req() req: Request,
+    @Query(new ValidationPipe({ transform: true })) query: OrgSplitDto,
+  ) {
+    await this.authService.getAccountFromToken(req);
+    return this.orgsService.getOrgSplit(orgId, query);
   }
 
   @ApiOperation({ summary: 'Add member to organization' })

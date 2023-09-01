@@ -10,7 +10,17 @@ import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { isDefined } from 'class-validator';
 import { Request } from 'express';
-import { eq, get, identity, isEmpty, isNil, pickBy, truncate } from 'lodash';
+import {
+  defaultTo,
+  eq,
+  get,
+  identity,
+  isEmpty,
+  isNil,
+  pick,
+  pickBy,
+  truncate,
+} from 'lodash';
 import mongoose, { ClientSession, Model, PipelineStage, Types } from 'mongoose';
 import { delay, firstValueFrom, of } from 'rxjs';
 import { ApiService } from 'src/api-service/api.service';
@@ -34,7 +44,7 @@ import { MintStatus } from './enum/mint-status.enum';
 import { OrgHistoryItemAction } from './enum/org-history-item-action.enum';
 import { Org, OrgDocument } from './schema/org.schema';
 import { MembersFilterDto } from '../members/dto/members.filter.dto';
-import { toBigJs } from '../utils/bigjs';
+import { bigJsToNumber, toBigJs } from '../utils/bigjs';
 import { PaymentType } from '../payment/enum/payment-type.enum';
 import { Payment, PaymentDocument } from '../payment/schema/payment.schema';
 import * as moment from 'moment';
@@ -46,6 +56,8 @@ import {
   weeklyRevenuePipeline,
   yearlyRevenuePipeline,
 } from './aggregation';
+import { OrgSplitDto } from './dto/org-split.dto';
+import { UserDocument } from '../users/schema/user.schema';
 
 const MINT_STATUS_RETRIES = 5;
 
@@ -225,6 +237,35 @@ export class OrgsService {
       .session(session);
     if (!org) throw new NotFoundException('Organization not found');
     return org;
+  }
+
+  async getOrgSplit(orgId: string, query: OrgSplitDto) {
+    const org = await this.getByOrgId(orgId);
+    const { list: members } = await this.memberService.getMembers({
+      org: org._id,
+    });
+    const orgHolders = await this.apiService.getTokenHolders(org.mint);
+    const membersObjs = members.map((member) => {
+      const memberUser = defaultTo(
+        member.user as UserDocument,
+        member.orgUser as OrgDocument,
+      );
+      const holder = orgHolders.find((holder: any) => {
+        return (
+          get(holder, 'account.data.parsed.info.owner') === memberUser.wallet
+        );
+      });
+      member.equityAmount = get(
+        holder,
+        'account.data.parsed.info.tokenAmount.uiAmountString',
+      );
+      const share = toBigJs(member.equityAmount).div(100).mul(query.amount);
+      return Object.assign(
+        pick(member, ['_id', 'equityAmount', 'user', 'orgUser']),
+        { share: share.toFixed() },
+      );
+    });
+    return membersObjs;
   }
 
   async getOrgRevenue(orgId: string, query: OrgRevenueFilterDto) {
