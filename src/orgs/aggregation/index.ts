@@ -37,6 +37,42 @@ export const yearlyRevenuePipeline = (): PipelineStage[] => {
   ];
 };
 
+export const quarterlyRevenuePipeline = (): PipelineStage[] => {
+  return [
+    {
+      $match: {
+        updatedAt: {
+          $gte: moment().startOf('quarter').subtract(9, 'quarters').toDate(),
+        },
+      },
+    },
+    {
+      $project: {
+        amount: 1,
+        date: { $dateToString: { format: '%Y-%m-01', date: '$updatedAt' } },
+      },
+    },
+    {
+      $group: {
+        _id: '$date',
+        revenue: { $sum: '$amount' },
+      },
+    },
+    {
+      $project: {
+        date: '$_id',
+        revenue: 1,
+        _id: 0,
+      },
+    },
+    {
+      $sort: {
+        date: 1,
+      },
+    },
+  ];
+};
+
 export const monthlyRevenuePipeline = (): PipelineStage[] => {
   return [
     {
@@ -158,6 +194,44 @@ export const dailyRevenuePipeline = (): PipelineStage[] => {
     {
       $project: {
         date: '$_id.date',
+        revenue: 1,
+        _id: 0,
+      },
+    },
+    {
+      $sort: {
+        date: 1,
+      },
+    },
+  ];
+};
+
+export const hourlyRevenuePipeline = (): PipelineStage[] => {
+  return [
+    {
+      $match: {
+        updatedAt: {
+          $gte: moment().startOf('hour').subtract(9, 'hours').toDate(),
+        },
+      },
+    },
+    {
+      $project: {
+        amount: 1,
+        date: {
+          $dateToString: { format: '%Y-%m-%d %H:00:00%z', date: '$updatedAt' },
+        },
+      },
+    },
+    {
+      $group: {
+        _id: '$date',
+        revenue: { $sum: '$amount' },
+      },
+    },
+    {
+      $project: {
+        date: '$_id',
         revenue: 1,
         _id: 0,
       },

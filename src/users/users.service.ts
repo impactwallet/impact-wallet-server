@@ -267,7 +267,7 @@ export class UsersService extends UsersServiceBase {
       user,
       equity: { gt: 0 },
     };
-    return this.membersService.getMembers(filters, 'org');
+    return this.membersService.getMembers(filters, 'org', { createdAt: -1 });
   }
 
   async getAvatar(fileName: string) {

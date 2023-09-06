@@ -52,7 +52,9 @@ import { OrgRevenueFilterDto } from './dto/org-revenue.filter.dto';
 import { RevenuePeriod } from './enum/revenue-period';
 import {
   dailyRevenuePipeline,
+  hourlyRevenuePipeline,
   monthlyRevenuePipeline,
+  quarterlyRevenuePipeline,
   weeklyRevenuePipeline,
   yearlyRevenuePipeline,
 } from './aggregation';
@@ -274,11 +276,17 @@ export class OrgsService {
       case RevenuePeriod.Yearly:
         periodPipeline = yearlyRevenuePipeline();
         break;
+      case RevenuePeriod.Quarterly:
+        periodPipeline = quarterlyRevenuePipeline();
+        break;
       case RevenuePeriod.Weekly:
         periodPipeline = weeklyRevenuePipeline();
         break;
       case RevenuePeriod.Daily:
         periodPipeline = dailyRevenuePipeline();
+        break;
+      case RevenuePeriod.Hourly:
+        periodPipeline = hourlyRevenuePipeline();
         break;
       case RevenuePeriod.Monthly:
       default:
@@ -663,7 +671,7 @@ export class OrgsService {
       orgUser: orgId,
       equity: { gt: 0 },
     };
-    return this.memberService.getMembers(filters, 'org');
+    return this.memberService.getMembers(filters, 'org', { createdAt: -1 });
   }
 
   async loginAsOrg(orgId: string, account: AccountModel) {

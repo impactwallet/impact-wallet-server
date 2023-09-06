@@ -24,13 +24,14 @@ export class MembersService {
     return member.save({ session });
   }
 
-  async getMembers(filters: MembersFilterDto, populate?: any) {
+  async getMembers(filters: MembersFilterDto, populate?: any, sort: any = {}) {
     const customFilterProps = ['limit', 'equity'];
     const query = omitBy(filters, (filter) => {
       return isUndefined(filter) || customFilterProps.includes(filter);
     });
     let members = await this.memberRepository
       .find(query)
+      .sort(sort)
       .populate(populate)
       .populate('user orgUser');
     let total = members.length;
