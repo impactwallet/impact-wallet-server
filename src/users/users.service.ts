@@ -166,7 +166,9 @@ export class UsersService extends UsersServiceBase {
               )}`,
             );
 
-            this.sendBonusUSDCForNewUser(newUser);
+            this.sendBonusUSDCForNewUser(newUser).catch((e) => {
+              console.error(e);
+            });
           }
         }
 
