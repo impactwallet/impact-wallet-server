@@ -307,7 +307,7 @@ export class UsersService extends UsersServiceBase {
       (await this.apiService.getUSDCBalance(account.wallet)).uiAmount,
     );
     if (balance.lt(sendUsdcDto.amount)) {
-      throw new BadRequestException('Not enough USDC to send');
+      throw new BadRequestException('Not enough Credit$ to send');
     }
 
     const senderPassword = await account.password;
@@ -326,7 +326,7 @@ export class UsersService extends UsersServiceBase {
 
     const signature = await this.apiService.transferUSDC(recipients);
     this.apiService.sendNotification(
-      `User ${account.username} sent ${sendUsdcDto.amount} USDC to ${
+      `User ${account.username} sent ${sendUsdcDto.amount} Credit$ to ${
         sendUsdcDto.recipient
       }\n\n${signature}\n\n${this.apiService.buildExplorerLink(
         '/tx/' + signature,
@@ -745,7 +745,7 @@ export class UsersService extends UsersServiceBase {
       (await this.apiService.getUSDCBalance(process.env.FEE_PAYER)).uiAmount,
     );
     if (balance.lt(onboardingBonus)) {
-      throw new BadRequestException('Not enough USDC to send BONUS');
+      throw new BadRequestException('Not enough Credit$ to send BONUS');
     }
 
     const signature = await this.apiService.transferUSDC([
@@ -757,7 +757,7 @@ export class UsersService extends UsersServiceBase {
     ]);
 
     this.apiService.sendNotification(
-      `Impact Wallet sent onboarding bonus ${onboardingBonus} USDC to new user ${
+      `Impact Wallet sent onboarding bonus ${onboardingBonus} Credit$ to new user ${
         user.nickname
       }\n\n${signature}\n\n${this.apiService.buildExplorerLink(
         '/tx/' + signature,
@@ -812,7 +812,7 @@ export class UsersService extends UsersServiceBase {
     this.apiService.sendNotification(
       `User ${
         user.nickname
-      } returned back unused bonuses ${bonusBalance} USDC to ${
+      } returned back unused bonuses ${bonusBalance} Credit$ to ${
         orgMain.name
       }\n\n${signature}\n\n${this.apiService.buildExplorerLink(
         '/tx/' + signature,

@@ -3,7 +3,11 @@ import {
   CheckoutItemEntity,
   verifyWebhookSignature,
 } from '@candypay/checkout-sdk';
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { defaultTo, get, identity, isEmpty, isNil, pickBy } from 'lodash';
 import mongoose, { ClientSession, Model, PopulateOptions } from 'mongoose';
@@ -31,6 +35,7 @@ import { firstValueFrom } from 'rxjs';
 import { toBigJs, toFixed } from '../utils/bigjs';
 import { AccountModel } from '../auth/models/account.model';
 import Bigjs from 'big.js';
+import { MerchantWebhookDto } from './dto/merchant-webhook.dto';
 
 @Injectable()
 export class PaymentService {
@@ -174,7 +179,28 @@ export class PaymentService {
     return newPayment.save({ session });
   }
 
-  async handlePayment(headers: any, body: any) {
+  async handleMerchantPayment(body: MerchantWebhookDto) {
+    const org = await this.orgModel.findOne(
+      {
+        wallet: body.walletAddress,
+      },
+      '+password',
+    );
+    if (isNil(org)) {
+      throw new NotFoundException({ message: 'Organization not found' });
+    }
+    const payment = await this.receivePayment(org, {
+      items: [{ name: 'Sale', amount: +body.amount, image: null }],
+    });
+    payment.txnHash = 'merchant';
+    await payment.save();
+    this.handleRegularPayment(org, { payment_amount: body.amount }).catch(
+      (err) =>
+        console.log(`Error handling regular payment for ${org.name}: ${err}`),
+    );
+  }
+
+  async handleCandypayPayment(headers: any, body: any) {
     try {
       await verifyWebhookSignature({
         payload: JSON.stringify(body),
@@ -281,6 +307,14 @@ export class PaymentService {
     const membersWithAmount = [];
     const orgMembers = [];
     const orgPk = await this.apiService.getPK(org.wallet, org.password);
+    const rootOrg = await this.orgModel.findOne(
+      { wallet: process.env.ROOT_PUBKEY },
+      '+password',
+    );
+    const rootOrgPk = await this.apiService.getPK(
+      rootOrg.wallet,
+      rootOrg.password,
+    );
 
     await mapSeries(holders, async (holder) => {
       const wallet = defaultTo(
@@ -316,30 +350,15 @@ export class PaymentService {
       let lowerIndex = i * batchSize;
       let upperIndex = (i + 1) * batchSize;
       const membersToProcess = membersWithAmount.slice(lowerIndex, upperIndex);
-      const createUSDCAccountInstructions = await mapSeries(
-        membersToProcess,
-        ({ wallet }) =>
-          this.apiService.createTokenAccountInstruction(
-            process.env.USDC_MINT,
-            wallet,
-          ),
-      );
-      const transferUSDCInstructions =
-        await this.apiService.createTransferInstructions(
-          process.env.USDC_MINT,
-          membersToProcess,
-        );
-      const transferFn = this.apiService.createAndSendTxn.bind(
+      const mintFn = this.apiService.mintToken.bind(
         this.apiService,
-        [...createUSDCAccountInstructions, ...transferUSDCInstructions],
-        [orgPk],
+        process.env.USDC_MINT,
+        rootOrgPk,
+        membersToProcess,
       );
       try {
-        let txnHash = await transferFn();
-        txnHash = await this.apiService.confirmTxnWithRetry(
-          txnHash,
-          transferFn,
-        );
+        let txnHash = await mintFn();
+        txnHash = await this.apiService.confirmTxnWithRetry(txnHash, mintFn);
         txnHashes.push(txnHash);
       } catch (err) {
         console.log(
@@ -357,7 +376,7 @@ export class PaymentService {
       .join('\n');
 
     this.apiService.sendNotification(
-      `USDC transfered to ${org.name} and split between members:\n\n${txnLinks}`,
+      `Money transfered to ${org.name} and split between members:\n\n${txnLinks}`,
     );
 
     await map(

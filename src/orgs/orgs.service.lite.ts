@@ -5,7 +5,6 @@ import { Request } from 'express';
 import { Model } from 'mongoose';
 import { CreateOrgDto } from './dto/create-org.dto';
 import { OrgsService } from './orgs.service';
-import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { EquityType } from '../members/enum/equity-type.enum';
 import { AuthService } from '../auth/auth.service';
 import { Role } from '../members/enum/roles.enum';
@@ -39,7 +38,7 @@ export class OrgsServiceLite {
     );
     const initialMint = {
       wallet: account.wallet,
-      amount: 100 * LAMPORTS_PER_SOL,
+      amount: 100,
     };
     this.orgsService.createToken(org, initialMint).catch((err) => {
       console.log('Error creating token', err);

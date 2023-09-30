@@ -36,5 +36,5 @@ export class ReceivePaymentDto {
   })
   @IsObject()
   @IsOptional()
-  customData: any;
+  customData?: any;
 }

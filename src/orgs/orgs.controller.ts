@@ -351,7 +351,7 @@ export class OrgsController {
     res.redirect(paymentUrl);
   }
 
-  @ApiOperation({ summary: 'Get orgs USDC balance' })
+  @ApiOperation({ summary: 'Get orgs Credit$ balance' })
   @ApiResponse({ status: 200, type: Number })
   @Get(':orgId/usdc/balance')
   async getOrgBalance(@Param('orgId') orgId: string, @Req() req: Request) {
@@ -362,7 +362,7 @@ export class OrgsController {
     };
   }
 
-  @ApiOperation({ summary: 'Send USDC from org' })
+  @ApiOperation({ summary: 'Send Credit$ from org' })
   @ApiResponse({ status: 200 })
   @Post(':orgId/usdc/send')
   @HttpCode(HttpStatus.OK)

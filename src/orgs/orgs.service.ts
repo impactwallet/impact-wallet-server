@@ -12,7 +12,6 @@ import { isDefined } from 'class-validator';
 import { Request } from 'express';
 import {
   defaultTo,
-  eq,
   get,
   identity,
   isEmpty,
@@ -31,7 +30,6 @@ import { S3Service } from 'src/s3/s3.service';
 import { v4 as uuid } from 'uuid';
 import { AuthService } from '../auth/auth.service';
 import { AccountModel } from '../auth/models/account.model';
-import { MemberEquityDto } from '../members/dto/member-equity.dto';
 import { Role } from '../members/enum/roles.enum';
 import { SendUsdcDto } from '../users/dto/send-usdc.dto';
 import { resizeBuffer } from '../utils/images';
@@ -44,7 +42,7 @@ import { MintStatus } from './enum/mint-status.enum';
 import { OrgHistoryItemAction } from './enum/org-history-item-action.enum';
 import { Org, OrgDocument } from './schema/org.schema';
 import { MembersFilterDto } from '../members/dto/members.filter.dto';
-import { bigJsToNumber, toBigJs } from '../utils/bigjs';
+import { toBigJs } from '../utils/bigjs';
 import { PaymentType } from '../payment/enum/payment-type.enum';
 import { Payment, PaymentDocument } from '../payment/schema/payment.schema';
 import * as moment from 'moment';
@@ -644,7 +642,7 @@ export class OrgsService {
       (await this.apiService.getUSDCBalance(org.wallet)).uiAmount,
     );
     if (balance.lt(sendUsdcDto.amount)) {
-      throw new BadRequestException('Not enough USDC to send');
+      throw new BadRequestException('Not enough Credit$ to send');
     }
 
     const senderPk = await this.apiService.getPK(org.wallet, org.password);
@@ -658,7 +656,7 @@ export class OrgsService {
 
     const signature = await this.apiService.transferUSDC(recipients);
     this.apiService.sendNotification(
-      `Org ${org.username} sent ${sendUsdcDto.amount} USDC to ${
+      `Org ${org.username} sent ${sendUsdcDto.amount} Credit$ to ${
         sendUsdcDto.recipient
       }\n\n${signature}\n\n${this.apiService.buildExplorerLink(
         '/tx/' + signature,

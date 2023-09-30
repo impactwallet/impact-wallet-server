@@ -18,8 +18,8 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     const isJobEnable = process.env.BONUS_RETURN_ENABLED === 'true';
     if (isJobEnable) {
-      this.agenda.define('Refund of unused bonuses USDC', async () => {
-        console.log('Start returning unused bonus USDC');
+      this.agenda.define('Refund of unused bonuses Credit$', async () => {
+        console.log('Start returning unused bonus Credit$');
         await this.usersService.returnBonusUSDC();
       });
     }
@@ -28,7 +28,7 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
     const frequency =
       this.formatFrequency(process.env.BONUS_RETURN_FREQUENCY) || '1minute';
     if (isJobEnable) {
-      await this.agenda.every(frequency, 'Refund of unused bonuses USDC');
+      await this.agenda.every(frequency, 'Refund of unused bonuses Credit$');
     }
   }
 

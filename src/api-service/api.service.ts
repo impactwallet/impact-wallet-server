@@ -267,7 +267,7 @@ export class ApiService {
       const signature = await this.transfer(process.env.USDC_MINT, recepients);
       return signature;
     } catch (err) {
-      err.message = `Error transfering USDC: ${err.message}`;
+      err.message = `Error transfering Credit$: ${err.message}`;
       throw err;
     }
   }
@@ -458,6 +458,10 @@ export class ApiService {
       const authorityKeypair = Keypair.fromSecretKey(decode(authorityPk));
       const payer = new PublicKey(process.env.FEE_PAYER);
       const txn = new Transaction();
+      const info = await this.connection.getParsedAccountInfo(
+        new PublicKey(mint),
+      );
+      const decimals = get(info, 'value.data.parsed.info.decimals', 9);
       const promises = receivers.map(async ({ wallet, amount }) => {
         const associatedTokenAddress = getAssociatedTokenAddressSync(
           new PublicKey(mint),
@@ -485,7 +489,7 @@ export class ApiService {
             new PublicKey(mint),
             associatedTokenAddress,
             new PublicKey(authorityKeypair.publicKey),
-            amount,
+            amount * 10 ** decimals,
           ),
         );
         if (!isNil(memo)) {

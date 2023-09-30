@@ -366,7 +366,7 @@ export class OffersLiteService extends OffersServiceBase {
       })
       .join('\n');
     return this.apiService.sendNotification(
-      `${account.username} just invested ${payment.amount} USDC into ${org.name} and received the equity from:\n\n${equitySources}\n\n${txnLinks}`,
+      `${account.username} just invested ${payment.amount} Credit$ into ${org.name} and received the equity from:\n\n${equitySources}\n\n${txnLinks}`,
     );
   }
 
@@ -709,7 +709,7 @@ export class OffersLiteService extends OffersServiceBase {
         (seller as OrgDocument).username,
       );
       this.apiService.sendNotification(
-        `${buyerUsername} just bought ${payment.sale.tokensAmount} ${org.name} impact shares from ${sellerUsername} for ${payment.amount} USDC:\n\n${payment.txnHash}`,
+        `${buyerUsername} just bought ${payment.sale.tokensAmount} ${org.name} impact shares from ${sellerUsername} for ${payment.amount} Credit$:\n\n${payment.txnHash}`,
       );
 
       // Our commission
