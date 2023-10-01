@@ -281,7 +281,11 @@ export class PaymentService {
     return member.save({ session });
   }
 
-  async handleRegularPayment(org: OrgDocument, body: any) {
+  async handleRegularPayment(
+    org: OrgDocument,
+    body: any,
+    { shouldMint = true } = {},
+  ) {
     if (org.mintStatus !== 'success') {
       return;
     }
@@ -350,15 +354,37 @@ export class PaymentService {
       let lowerIndex = i * batchSize;
       let upperIndex = (i + 1) * batchSize;
       const membersToProcess = membersWithAmount.slice(lowerIndex, upperIndex);
-      const mintFn = this.apiService.mintToken.bind(
-        this.apiService,
-        process.env.USDC_MINT,
-        rootOrgPk,
-        membersToProcess,
-      );
+      let txnFn: any;
+      if (shouldMint) {
+        txnFn = this.apiService.mintToken.bind(
+          this.apiService,
+          process.env.USDC_MINT,
+          rootOrgPk,
+          membersToProcess,
+        );
+      } else {
+        const createUSDCAccountInstructions = await mapSeries(
+          membersToProcess,
+          ({ wallet }) =>
+            this.apiService.createTokenAccountInstruction(
+              process.env.USDC_MINT,
+              wallet,
+            ),
+        );
+        const transferUSDCInstructions =
+          await this.apiService.createTransferInstructions(
+            process.env.USDC_MINT,
+            membersToProcess,
+          );
+        txnFn = this.apiService.createAndSendTxn.bind(
+          this.apiService,
+          [...createUSDCAccountInstructions, ...transferUSDCInstructions],
+          [orgPk],
+        );
+      }
       try {
-        let txnHash = await mintFn();
-        txnHash = await this.apiService.confirmTxnWithRetry(txnHash, mintFn);
+        let txnHash = await txnFn();
+        txnHash = await this.apiService.confirmTxnWithRetry(txnHash, txnFn);
         txnHashes.push(txnHash);
       } catch (err) {
         console.log(
@@ -384,7 +410,11 @@ export class PaymentService {
       async ({ orgUser, amount }) => {
         try {
           await delay(2000);
-          await this.handleRegularPayment(orgUser, { payment_amount: amount });
+          await this.handleRegularPayment(
+            orgUser,
+            { payment_amount: amount },
+            { shouldMint },
+          );
         } catch (err) {
           console.log(
             `Error handling regular payment for ${orgUser.name}: ${err}`,
@@ -552,9 +582,13 @@ export class PaymentService {
       );
     });
 
-    this.handleRegularPayment(rootOrg, {
-      payment_amount: commissionAmount.toNumber(),
-    }).catch((err) => {
+    this.handleRegularPayment(
+      rootOrg,
+      {
+        payment_amount: commissionAmount.toNumber(),
+      },
+      { shouldMint: false },
+    ).catch((err) => {
       console.log(
         `Error handling comission from regular payment for ${org.name} during performPayment: ${err}`,
       );
