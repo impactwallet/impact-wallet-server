@@ -22,6 +22,7 @@ import {
 import {
   createAssociatedTokenAccountInstruction,
   createMintToInstruction,
+  createBurnInstruction,
   createTransferInstruction,
   getAccount,
   getAssociatedTokenAddress,
@@ -131,8 +132,10 @@ export class ApiService {
     mint: string,
     recepients: { senderPk: string; wallet: string; amount: number }[],
   ): Promise<TransactionInstruction[]> {
-    const multiplier =
-      mint === process.env.USDC_MINT ? 1000000 : LAMPORTS_PER_SOL;
+    const info = await this.connection.getParsedAccountInfo(
+      new PublicKey(mint),
+    );
+    const decimals = get(info, 'value.data.parsed.info.decimals', 9);
     const mintPublicKey = new PublicKey(mint);
     const instructionsPromises = recepients.map(
       async ({ senderPk, wallet, amount }) => {
@@ -154,7 +157,7 @@ export class ApiService {
           senderAssociatedTokenAddress,
           recipientAssociatedTokenAddress,
           senderKeypair.publicKey,
-          Math.round(amount * multiplier),
+          Math.round(amount * 10 ** decimals),
         );
       },
     );
@@ -264,7 +267,10 @@ export class ApiService {
       return;
     }
     try {
-      const signature = await this.transfer(process.env.USDC_MINT, recepients);
+      const signature = await this.transfer(
+        process.env.CREDITS_MINT,
+        recepients,
+      );
       return signature;
     } catch (err) {
       err.message = `Error transfering Credit$: ${err.message}`;
@@ -300,7 +306,7 @@ export class ApiService {
       const toKeypair = Keypair.fromSecretKey(decode(walletPk));
       const rentExemptionAmount =
         await this.connection.getMinimumBalanceForRentExemption(space);
-      const USDCMintPublicKey = new PublicKey(process.env.USDC_MINT);
+      const USDCMintPublicKey = new PublicKey(process.env.CREDITS_MINT);
 
       const createAccountParams = {
         fromPubkey: new PublicKey(process.env.FEE_PAYER),
@@ -448,6 +454,28 @@ export class ApiService {
       throw err;
     }
   }
+
+  async createBurnTokenInstruction(
+    mint: string,
+    ownerWallet: string,
+    amount: number,
+  ) {
+    const info = await this.connection.getParsedAccountInfo(
+      new PublicKey(mint),
+    );
+    const decimals = get(info, 'value.data.parsed.info.decimals', 9);
+    const associatedTokenAddress = getAssociatedTokenAddressSync(
+      new PublicKey(mint),
+      new PublicKey(ownerWallet),
+    );
+    return createBurnInstruction(
+      associatedTokenAddress,
+      new PublicKey(mint),
+      new PublicKey(ownerWallet),
+      amount * 10 ** decimals,
+    );
+  }
+
   async mintToken(
     mint: string,
     authorityPk: string,
@@ -549,7 +577,7 @@ export class ApiService {
   }
 
   getUSDCBalance(wallet: string) {
-    return this.getTokenBalance(process.env.USDC_MINT, wallet);
+    return this.getTokenBalance(process.env.CREDITS_MINT, wallet);
   }
 
   async getParsedTransaction(
@@ -601,7 +629,7 @@ export class ApiService {
 
   async getRootAssociatedAddress(): Promise<PublicKey> {
     const rootWallet = process.env.ROOT_PUBKEY;
-    const mintPublicKey = new PublicKey(process.env.USDC_MINT);
+    const mintPublicKey = new PublicKey(process.env.CREDITS_MINT);
     return await getAssociatedTokenAddress(
       mintPublicKey,
       new PublicKey(rootWallet),
@@ -615,7 +643,7 @@ export class ApiService {
     associatedAddress: PublicKey;
     parsedTxns: ParsedTransactionWithMeta[];
   }> {
-    return this.getTokenHistory(wallet, process.env.USDC_MINT, options);
+    return this.getTokenHistory(wallet, process.env.CREDITS_MINT, options);
   }
 
   async getAccountInfo(address: string) {

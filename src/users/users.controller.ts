@@ -9,6 +9,7 @@ import {
   UploadedFile,
   UseInterceptors,
   Put,
+  ValidationPipe,
 } from '@nestjs/common';
 import { HttpCode, Req, Headers, Res } from '@nestjs/common/decorators';
 import {
@@ -34,6 +35,7 @@ import { TxnHistoryItemDto } from '../common/dto/txn-history-item.dto';
 import { AuthService } from '../auth/auth.service';
 import { DeleteAvatarsRequestDto } from './dto/delete-avatars.request.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { CreditsWithdrawDto } from './dto/credits-withdraw.dto';
 
 @ApiTags('Users')
 @Controller('users')
@@ -192,7 +194,20 @@ export class UsersController {
   async sendUsdc(@Body() sendUsdcDto: SendUsdcDto, @Req() req: Request) {
     const account = await this.authService.getAccountFromToken(req);
 
-    return await this.userService.sendUsdc(account, sendUsdcDto);
+    return this.userService.sendUsdc(account, sendUsdcDto);
+  }
+
+  @ApiOperation({ summary: 'Withdraw Credit$' })
+  @ApiResponse({ status: 200 })
+  @Post('credits/withdraw')
+  @HttpCode(HttpStatus.OK)
+  async withdrawCredits(
+    @Body(new ValidationPipe()) body: CreditsWithdrawDto,
+    @Req() req: Request,
+  ) {
+    const account = await this.authService.getAccountFromToken(req);
+
+    return this.userService.withdrawCredits(account, body);
   }
 
   @ApiOperation({ summary: 'Restore user' })

@@ -228,8 +228,11 @@ export class PaymentService {
     try {
       if (payment.type === PaymentType.Regular) {
         body.custom_data = payment.orgPayload;
-        this.handleRegularPayment(org, body).catch((err) =>
-          console.log(`Error handling regular payment for ${org.name}: ${err}`),
+        this.handleRegularPayment(org, body, { shouldMint: false }).catch(
+          (err) =>
+            console.log(
+              `Error handling regular payment for ${org.name}: ${err}`,
+            ),
         );
       } else if (payment.type === PaymentType.Investment) {
         await this.handleInvestmentPayment(org, payment, body);
@@ -358,7 +361,7 @@ export class PaymentService {
       if (shouldMint) {
         txnFn = this.apiService.mintToken.bind(
           this.apiService,
-          process.env.USDC_MINT,
+          process.env.CREDITS_MINT,
           rootOrgPk,
           membersToProcess,
         );
@@ -367,13 +370,13 @@ export class PaymentService {
           membersToProcess,
           ({ wallet }) =>
             this.apiService.createTokenAccountInstruction(
-              process.env.USDC_MINT,
+              process.env.CREDITS_MINT,
               wallet,
             ),
         );
         const transferUSDCInstructions =
           await this.apiService.createTransferInstructions(
-            process.env.USDC_MINT,
+            process.env.CREDITS_MINT,
             membersToProcess,
           );
         txnFn = this.apiService.createAndSendTxn.bind(
@@ -552,31 +555,38 @@ export class PaymentService {
 
     const createUSDCAccountInstructions =
       await this.apiService.createTokenAccountInstruction(
-        process.env.USDC_MINT,
+        process.env.CREDITS_MINT,
         org.wallet,
       );
     const transferUSDCInstructions =
-      await this.apiService.createTransferInstructions(process.env.USDC_MINT, [
-        { senderPk, wallet: org.wallet, amount: payment.amount },
-        {
-          senderPk: orgPk,
-          wallet: rootOrg.wallet,
-          amount: commissionAmount.toNumber(),
-        },
-      ]);
+      await this.apiService.createTransferInstructions(
+        process.env.CREDITS_MINT,
+        [
+          { senderPk, wallet: org.wallet, amount: payment.amount },
+          {
+            senderPk: orgPk,
+            wallet: rootOrg.wallet,
+            amount: commissionAmount.toNumber(),
+          },
+        ],
+      );
     const txnHash = await this.apiService.createAndSendTxn(
       [createUSDCAccountInstructions, ...transferUSDCInstructions],
       [senderPk, orgPk],
     );
     payment.txnHash = txnHash;
 
-    this.handleRegularPayment(org, {
-      payment_amount: toFixed(
-        toBigJs(payment.amount).minus(commissionAmount),
-        6,
-      ).toNumber(),
-      custom_data: payment.orgPayload,
-    }).catch((err) => {
+    this.handleRegularPayment(
+      org,
+      {
+        payment_amount: toFixed(
+          toBigJs(payment.amount).minus(commissionAmount),
+          6,
+        ).toNumber(),
+        custom_data: payment.orgPayload,
+      },
+      { shouldMint: false },
+    ).catch((err) => {
       console.log(
         `Error handling regular payment for ${org.name} during performPayment: ${err}`,
       );

@@ -160,7 +160,7 @@ export class OrgsService {
     await this.updateMint(org._id, mintInfo, null);
 
     this.apiService.sendNotification(
-      `${initialMint.amount / LAMPORTS_PER_SOL} ${org.username
+      `${initialMint.amount} ${org.username
         .toUpperCase()
         .substring(0, 10)} minted to ${
         initialMint.wallet
