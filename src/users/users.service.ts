@@ -64,6 +64,7 @@ import { toBigJs } from '../utils/bigjs';
 import { BalanceDto } from './dto/balance.dto';
 import * as moment from 'moment';
 import { CreditsWithdrawDto } from './dto/credits-withdraw.dto';
+import { CreditsBurnDto } from './dto/credits-burn.dto';
 
 @Injectable()
 export class UsersService extends UsersServiceBase {
@@ -386,6 +387,38 @@ export class UsersService extends UsersServiceBase {
 
     this.apiService.sendNotification(
       `User ${account.username} has succesfuly withdrawn ${
+        body.amount
+      } credits:\n\n${this.apiService.buildExplorerLink('/tx/' + txnHash)}`,
+    );
+  }
+
+  async burnCredits(account: AccountModel, body: CreditsBurnDto) {
+    const balance = toBigJs(
+      (await this.apiService.getUSDCBalance(account.wallet)).uiAmount,
+    );
+    if (balance.lt(body.amount)) {
+      throw new BadRequestException('Not enough Credit$ to burn');
+    }
+    const accountPk = await this.apiService.getPK(
+      account.wallet,
+      await account.password,
+    );
+    const burnCreditsInstruction =
+      await this.apiService.createBurnTokenInstruction(
+        process.env.CREDITS_MINT,
+        account.wallet,
+        body.amount,
+      );
+    const txnFn = this.apiService.createAndSendTxn.bind(
+      this.apiService,
+      [burnCreditsInstruction],
+      [accountPk],
+    );
+    let txnHash = await txnFn();
+    txnHash = await this.apiService.confirmTxnWithRetry(txnHash, txnFn);
+
+    this.apiService.sendNotification(
+      `User ${account.username} has succesfuly burnt ${
         body.amount
       } credits:\n\n${this.apiService.buildExplorerLink('/tx/' + txnHash)}`,
     );

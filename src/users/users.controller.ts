@@ -36,6 +36,7 @@ import { AuthService } from '../auth/auth.service';
 import { DeleteAvatarsRequestDto } from './dto/delete-avatars.request.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { CreditsWithdrawDto } from './dto/credits-withdraw.dto';
+import { CreditsBurnDto } from './dto/credits-burn.dto';
 
 @ApiTags('Users')
 @Controller('users')
@@ -208,6 +209,19 @@ export class UsersController {
     const account = await this.authService.getAccountFromToken(req);
 
     return this.userService.withdrawCredits(account, body);
+  }
+
+  @ApiOperation({ summary: 'Burn Credit$' })
+  @ApiResponse({ status: 200 })
+  @Post('credits/burn')
+  @HttpCode(HttpStatus.OK)
+  async burnCredits(
+    @Body(new ValidationPipe()) body: CreditsBurnDto,
+    @Req() req: Request,
+  ) {
+    const account = await this.authService.getAccountFromToken(req);
+
+    return this.userService.burnCredits(account, body);
   }
 
   @ApiOperation({ summary: 'Restore user' })
