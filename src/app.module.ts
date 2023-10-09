@@ -13,6 +13,7 @@ import { ConfigurationModule } from './configuration/config.module';
 import { Connection } from 'mongoose';
 import { AccountModule } from './account/account.module';
 import { JobsModule } from './jobs-service/jobs.module';
+import { DepositModule } from './deposit/deposit.module';
 
 export let connection: Connection;
 
@@ -36,6 +37,7 @@ export let connection: Connection;
     ConfigurationModule,
     AccountModule,
     JobsModule,
+    DepositModule,
   ],
 })
 export class AppModule {}

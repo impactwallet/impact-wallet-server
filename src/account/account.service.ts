@@ -12,7 +12,7 @@ import {
 import { get, isEmpty, isEqual, isNil, toNumber } from 'lodash';
 import { Org, OrgDocument } from '../orgs/schema/org.schema';
 import { EntityFromTxnDto } from '../common/dto/entity-from-txn.dto';
-import { Model } from 'mongoose';
+import mongoose, { Model } from 'mongoose';
 import { Payment, PaymentDocument } from '../payment/schema/payment.schema';
 import {
   SaleOffer,
@@ -22,14 +22,21 @@ import {
 import { PaymentType } from '../payment/enum/payment-type.enum';
 import { User, UserDocument } from '../users/schema/user.schema';
 import { Account } from '@solana/spl-token';
-import { InjectModel } from '@nestjs/mongoose';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { TransactionHistoryDto } from './dto/transaction-history.dto';
 import { MemberProspectDocument } from '../offers/schema/offer.schema';
+import { StripeService } from '../api-service/stripe.service';
+import { DepositCreditsDto } from './dto/deposit.dto';
+import { Deposit, DepositDocument } from '../deposit/schema/deposit.schema';
 
 @Injectable()
 export class AccountService {
   constructor(
     private readonly apiService: ApiService,
+    private readonly stripeService: StripeService,
+    @InjectConnection() private readonly connection: mongoose.Connection,
+    @InjectModel(Deposit.name)
+    private readonly depositModel: Model<DepositDocument>,
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @InjectModel(Org.name) private readonly orgModel: Model<OrgDocument>,
     @InjectModel(Payment.name)
@@ -309,5 +316,43 @@ export class AccountService {
       },
       null,
     );
+  }
+
+  async depositCredits(account: AccountModel, body: DepositCreditsDto) {
+    let paymentLink: any;
+    const session = await this.connection.startSession();
+    await session.withTransaction(async () => {
+      const userField = account.isUser ? 'user' : 'orgUser';
+      const newDeposit = new this.depositModel({
+        amount: body.amount,
+      });
+      newDeposit[userField] = account.id.toString();
+      await newDeposit.save({ session });
+
+      const metadata = {
+        depositId: newDeposit._id.toString(),
+      };
+      paymentLink = await this.stripeService.createPaymentLink({
+        line_items: [
+          {
+            price: process.env.STRIPE_CREDIT_PRICE,
+            quantity: body.amount,
+            adjustable_quantity: { enabled: true, maximum: 999 },
+          },
+        ],
+        metadata,
+        payment_intent_data: {
+          metadata,
+        },
+        after_completion: {
+          type: 'redirect',
+          redirect: {
+            url: process.env.APP_URL,
+          },
+        },
+      });
+    });
+    await session.endSession();
+    return paymentLink;
   }
 }

@@ -13,6 +13,7 @@ import { TxnHistoryItemDto } from '../common/dto/txn-history-item.dto';
 import { AuthService } from '../auth/auth.service';
 import { AccountService } from './account.service';
 import { TransactionHistoryPaginationDto } from './dto/transaction-history-pagination.dto';
+import { DepositCreditsDto } from './dto/deposit.dto';
 
 @ApiTags('Account')
 @Controller('account')
@@ -33,5 +34,16 @@ export class AccountController {
     const account = await this.authService.getAccountFromToken(req);
 
     return this.accountService.getUsdcHistory(account, query);
+  }
+
+  @ApiOperation({ summary: 'Deposit credits' })
+  @ApiResponse({ status: 200 })
+  @Post('credits/deposit')
+  async depositCredits(
+    @Req() req: Request,
+    @Body(new ValidationPipe()) body: DepositCreditsDto,
+  ) {
+    const account = await this.authService.getAccountFromToken(req);
+    return this.accountService.depositCredits(account, body);
   }
 }

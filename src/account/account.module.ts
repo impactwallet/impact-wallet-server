@@ -8,6 +8,7 @@ import { Org, OrgSchema } from '../orgs/schema/org.schema';
 import { Payment, PaymentSchema } from '../payment/schema/payment.schema';
 import { User, UserSchema } from '../users/schema/user.schema';
 import { AuthModule } from '../auth/auth.module';
+import { Deposit, DepositSchema } from '../deposit/schema/deposit.schema';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { AuthModule } from '../auth/auth.module';
       { name: Org.name, schema: OrgSchema },
       { name: Payment.name, schema: PaymentSchema },
       { name: SaleOffer.name, schema: SaleOfferSchema },
+      { name: Deposit.name, schema: DepositSchema },
     ]),
     ApiServiceModule,
     AuthModule,

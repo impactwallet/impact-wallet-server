@@ -9,6 +9,7 @@ import { SaleOffer, SaleOfferSchema } from '../offers/schema/sale-offer.schema';
 import { Org, OrgSchema } from '../orgs/schema/org.schema';
 import { HttpModule } from '@nestjs/axios';
 import { AuthModule } from '../auth/auth.module';
+import { DepositModule } from '../deposit/deposit.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { AuthModule } from '../auth/auth.module';
     ApiServiceModule,
     HttpModule,
     AuthModule,
+    DepositModule,
   ],
   providers: [PaymentService],
   controllers: [PaymentController],

@@ -61,7 +61,7 @@ export class ApiService {
   network: Cluster = process.env.NETWORK as Cluster;
   connection = new Connection(process.env.SOLANA_RPC_URL, 'confirmed');
   memoProgramId = 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr';
-  explorerUrl = 'https://explorer.solana.com';
+  explorerUrl = 'https://solscan.io';
 
   get commonHeaders() {
     const headers = new Map();

@@ -36,6 +36,9 @@ import { toBigJs, toFixed } from '../utils/bigjs';
 import { AccountModel } from '../auth/models/account.model';
 import Bigjs from 'big.js';
 import { MerchantWebhookDto } from './dto/merchant-webhook.dto';
+import { StripeService } from '../api-service/stripe.service';
+import Stripe from 'stripe';
+import { DepositService } from '../deposit/deposit.service';
 
 @Injectable()
 export class PaymentService {
@@ -48,6 +51,8 @@ export class PaymentService {
     private candypayService: CandyPayService,
     private apiService: ApiService,
     private http: HttpService,
+    private stripeService: StripeService,
+    private depositService: DepositService,
   ) {}
 
   async receivePayment(org: OrgDocument, body: ReceivePaymentDto) {
@@ -198,6 +203,30 @@ export class PaymentService {
       (err) =>
         console.log(`Error handling regular payment for ${org.name}: ${err}`),
     );
+  }
+
+  handleStripeEvent(body: any, headers: any) {
+    const sig = headers['stripe-signature'];
+
+    let event: Stripe.Event;
+
+    try {
+      event = this.stripeService.constructEvent(body, sig);
+    } catch (err) {
+      throw new BadRequestException(`Webhook Error: ${err.message}`);
+    }
+    switch (event.type) {
+      case 'payment_intent.succeeded':
+        const depositId = get(event, 'data.object.metadata.depositId');
+        const object = event.data.object as Stripe.PaymentIntent;
+        const amount = object.amount_received / 100;
+        this.depositService.handleDeposit(depositId, amount).catch((err) => {
+          console.error(`Error handling deposit: ${err.message}`);
+        });
+        break;
+      default:
+        break;
+    }
   }
 
   async handleCandypayPayment(headers: any, body: any) {

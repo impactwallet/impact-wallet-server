@@ -6,6 +6,7 @@ import {
   Headers,
   Param,
   Post,
+  RawBodyRequest,
   Req,
   ValidationPipe,
 } from '@nestjs/common';
@@ -33,6 +34,15 @@ export class PaymentController {
   @Post('merchant-webhook')
   handleMerchantPayment(@Body(new ValidationPipe()) body: MerchantWebhookDto) {
     return this.paymentService.handleMerchantPayment(body);
+  }
+
+  @ApiResponse({ status: 200 })
+  @Post('stripe-webhook')
+  handleStripeEvent(
+    @Req() req: RawBodyRequest<Request>,
+    @Headers() headers: any,
+  ) {
+    return this.paymentService.handleStripeEvent(req.rawBody, headers);
   }
 
   @ApiResponse({ status: 200 })

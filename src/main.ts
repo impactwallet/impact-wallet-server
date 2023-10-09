@@ -4,7 +4,10 @@ import { AppModule } from './app.module';
 
 async function start() {
   const PORT = process.env.PORT || 9898;
-  const app = await NestFactory.create(AppModule, { cors: true });
+  const app = await NestFactory.create(AppModule, {
+    cors: true,
+    rawBody: true,
+  });
   const config = new DocumentBuilder()
     .setTitle('Equity Wallet')
     .setDescription('Documentation REST API')
@@ -14,7 +17,9 @@ async function start() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('/docs', app, document);
 
-  const server = await app.listen(PORT, () => console.log(`Server started on port:  ${PORT}`));
+  const server = await app.listen(PORT, () =>
+    console.log(`Server started on port:  ${PORT}`),
+  );
   server.setTimeout(1000 * 60 * 10);
 }
 start();
