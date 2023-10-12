@@ -199,9 +199,11 @@ export class PaymentService {
     });
     payment.txnHash = 'merchant';
     await payment.save();
-    this.handleRegularPayment(org, { payment_amount: body.amount }).catch(
-      (err) =>
-        console.log(`Error handling regular payment for ${org.name}: ${err}`),
+    this.handleRegularPayment(org, {
+      payment_amount: body.amount,
+      memo: body.memo,
+    }).catch((err) =>
+      console.log(`Error handling regular payment for ${org.name}: ${err}`),
     );
   }
 
@@ -379,41 +381,44 @@ export class PaymentService {
       }
     });
 
+    const txnHashes = [];
+    if (shouldMint) {
+      const txnFn = this.apiService.mintToken.bind(
+        this.apiService,
+        process.env.CREDITS_MINT,
+        rootOrgPk,
+        [{ wallet: org.wallet, amount: paymentAmount.toNumber() }],
+        !isEmpty(body.memo) ? body.memo.trim() : null,
+      );
+      let txnHash = await txnFn();
+      txnHash = await this.apiService.confirmTxnWithRetry(txnHash, txnFn);
+      txnHashes.push(txnHash);
+    }
+
     const batchSize = 5;
     const numBatches = Math.ceil(membersWithAmount.length / batchSize);
-    const txnHashes = [];
     for (let i = 0; i < numBatches; i++) {
       let lowerIndex = i * batchSize;
       let upperIndex = (i + 1) * batchSize;
       const membersToProcess = membersWithAmount.slice(lowerIndex, upperIndex);
-      let txnFn: any;
-      if (shouldMint) {
-        txnFn = this.apiService.mintToken.bind(
-          this.apiService,
-          process.env.CREDITS_MINT,
-          rootOrgPk,
-          membersToProcess,
-        );
-      } else {
-        const createUSDCAccountInstructions = await mapSeries(
-          membersToProcess,
-          ({ wallet }) =>
-            this.apiService.createTokenAccountInstruction(
-              process.env.CREDITS_MINT,
-              wallet,
-            ),
-        );
-        const transferUSDCInstructions =
-          await this.apiService.createTransferInstructions(
+      const createCreditsAccountInstructions = await mapSeries(
+        membersToProcess,
+        ({ wallet }) =>
+          this.apiService.createTokenAccountInstruction(
             process.env.CREDITS_MINT,
-            membersToProcess,
-          );
-        txnFn = this.apiService.createAndSendTxn.bind(
-          this.apiService,
-          [...createUSDCAccountInstructions, ...transferUSDCInstructions],
-          [orgPk],
+            wallet,
+          ),
+      );
+      const transferUSDCInstructions =
+        await this.apiService.createTransferInstructions(
+          process.env.CREDITS_MINT,
+          membersToProcess,
         );
-      }
+      const txnFn = this.apiService.createAndSendTxn.bind(
+        this.apiService,
+        [...createCreditsAccountInstructions, ...transferUSDCInstructions],
+        [orgPk],
+      );
       try {
         let txnHash = await txnFn();
         txnHash = await this.apiService.confirmTxnWithRetry(txnHash, txnFn);

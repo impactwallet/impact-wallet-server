@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNumberString, IsString } from 'class-validator';
+import { IsNumberString, IsOptional, IsString } from 'class-validator';
 
 export class MerchantWebhookDto {
   @ApiProperty({ description: 'Wallet address of the organization' })
@@ -9,4 +9,9 @@ export class MerchantWebhookDto {
   @IsNumberString()
   @ApiProperty({ description: 'Payment amount' })
   amount: string;
+
+  @ApiProperty({ description: 'Memo of the transaction' })
+  @IsString()
+  @IsOptional()
+  memo: string;
 }
