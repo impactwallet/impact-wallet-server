@@ -1,4 +1,18 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, NotFoundException, Param, Patch, Post, Query, Req, ValidationPipe } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  NotFoundException,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  ValidationPipe,
+} from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 import { OfferStatusBodyDto } from './dto/offer-status.dto';
@@ -21,24 +35,21 @@ export class OffersController {
     private readonly orgsService: OrgsService,
   ) {}
 
-  @ApiOperation({ summary: 'Create sale offer'})
+  @ApiOperation({ summary: 'Create sale offer' })
   @ApiResponse({ status: 201, type: SaleOffer })
   @Post('offers/sale')
   @HttpCode(HttpStatus.CREATED)
-  async saleAssets(
-  @Body() saleOfferDto: SaleOfferDto,
-    @Req() req: Request,
-  ) {
+  async saleAssets(@Body() saleOfferDto: SaleOfferDto, @Req() req: Request) {
     const account = await this.authService.getAccountFromToken(req);
 
     return this.offerService.createSaleOffer(saleOfferDto, account);
   }
-  
+
   @ApiOperation({ summary: 'Get sale offer by ID' })
   @ApiResponse({ status: 200, type: SaleOffer })
   @Get('offers/sale/:offerId')
   async getSaleOfferById(
-  @Param('offerId') offerId: string,
+    @Param('offerId') offerId: string,
     @Req() req: Request,
   ) {
     await this.authService.getAccountFromToken(req);
@@ -52,7 +63,7 @@ export class OffersController {
   @ApiResponse({ status: 403, description: 'Offer already accepted/declined' })
   @Patch('offers/sale/:offerId')
   async updateSaleOfferStatus(
-  @Param('offerId') offerId: string,
+    @Param('offerId') offerId: string,
     @Body(new ValidationPipe()) body: OfferStatusBodyDto,
     @Req() req: Request,
   ) {
@@ -67,7 +78,7 @@ export class OffersController {
   @Post('orgs/:orgId/offers')
   @HttpCode(HttpStatus.CREATED)
   async createOffer(
-  @Param('orgId') orgId: string,
+    @Param('orgId') orgId: string,
     @Body() offer: OfferDto,
     @Req() req: Request,
   ) {
@@ -82,11 +93,30 @@ export class OffersController {
     return this.offerService.createOffer(orgId, offer);
   }
 
+  @ApiOperation({ summary: 'Revoke offer' })
+  @ApiResponse({ status: 200, type: Offer })
+  @ApiTags('Orgs')
+  @Delete('orgs/:orgId/offers/:offerId')
+  async revokeOffer(
+    @Param('orgId') orgId: string,
+    @Param('offerId') offerId: string,
+    @Req() req: Request,
+  ) {
+    const account = await this.authService.getAccountFromToken(req);
+    await this.authService.permissionCheck(orgId, account);
+
+    return this.offerService.revokeOffer(orgId, offerId);
+  }
+
   @ApiOperation({ summary: 'Get org offers' })
   @ApiResponse({ status: 200, type: [Offer] })
   @ApiTags('Orgs')
   @Get('orgs/:orgId/offers')
-  async getOrgOffers(@Param('orgId') orgId: string, @Query() filters: OfferFiltersDto, @Req() req: Request) {
+  async getOrgOffers(
+    @Param('orgId') orgId: string,
+    @Query() filters: OfferFiltersDto,
+    @Req() req: Request,
+  ) {
     await this.authService.getAccountFromToken(req);
     return this.offerService.getOrgOffers(orgId, filters);
   }
@@ -96,7 +126,7 @@ export class OffersController {
   @ApiTags('Orgs')
   @Get('orgs/:orgId/offers/:offerId')
   async getOrgOfferById(
-  @Param('orgId') orgId: string,
+    @Param('orgId') orgId: string,
     @Param('offerId') offerId: string,
     @Req() req: Request,
   ) {
@@ -105,12 +135,15 @@ export class OffersController {
   }
 
   @ApiOperation({ summary: 'Accept/decline offer' })
-  @ApiResponse({ status: 200, description: 'Offer status updated and new member added to the org' })
+  @ApiResponse({
+    status: 200,
+    description: 'Offer status updated and new member added to the org',
+  })
   @ApiResponse({ status: 403, description: 'Offer already accepted/declined' })
   @ApiTags('Orgs')
   @Patch('orgs/:orgId/offers/:offerId')
   async updateOfferStatus(
-  @Param('orgId') orgId: string,
+    @Param('orgId') orgId: string,
     @Param('offerId') offerId: string,
     @Body(new ValidationPipe()) body: OfferStatusBodyDto,
     @Req() req: Request,

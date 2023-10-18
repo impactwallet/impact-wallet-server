@@ -8,6 +8,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { defaultTo, get, isNil } from 'lodash';
 import mongoose, { Model, Types } from 'mongoose';
+import { SoftDeleteModel } from 'mongoose-delete';
 import { Role } from '../members/enum/roles.enum';
 import { Member, MemberDocument } from '../members/schema/member.schema';
 import { OrgDocument } from '../orgs/schema/org.schema';
@@ -33,7 +34,7 @@ import { toBigJs } from '../utils/bigjs';
 @Injectable()
 export class OffersService extends OffersServiceBase {
   constructor(
-    @InjectModel(Offer.name) offerRepository: Model<OfferDocument>,
+    @InjectModel(Offer.name) offerRepository: SoftDeleteModel<OfferDocument>,
     @InjectModel(Member.name)
     private memberRepository: Model<MemberDocument>,
     @InjectModel(SaleOffer.name)
@@ -82,6 +83,21 @@ export class OffersService extends OffersServiceBase {
     } catch (error) {
       throw new HttpException(error, 400);
     }
+  }
+
+  async revokeOffer(orgId: string, offerId: string) {
+    const offer = await this.offerRepository.findOne({
+      _id: new mongoose.Types.ObjectId(offerId),
+      org: new mongoose.Types.ObjectId(orgId),
+    });
+
+    if (isNil(offer)) {
+      throw new NotFoundException('Offer was not found');
+    }
+
+    await offer.delete();
+
+    return offer;
   }
 
   getOrgOffers(orgId: string, filters: OfferFiltersDto) {

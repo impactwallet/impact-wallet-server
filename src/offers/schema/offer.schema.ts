@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { ApiProperty } from '@nestjs/swagger';
-import mongoose, { HydratedDocument, Types } from 'mongoose';
+import * as MongooseDelete from 'mongoose-delete';
+import mongoose, { HydratedDocument } from 'mongoose';
 import { Role } from '../../members/enum/roles.enum';
 import {
   Compensation,
@@ -171,3 +172,5 @@ export class Offer {
 }
 
 export const OfferSchema = SchemaFactory.createForClass(Offer);
+
+OfferSchema.plugin(MongooseDelete, { overrideMethods: 'all' });
