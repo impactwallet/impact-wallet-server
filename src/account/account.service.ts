@@ -29,6 +29,10 @@ import { StripeService } from '../api-service/stripe.service';
 import { DepositCreditsDto } from './dto/deposit.dto';
 import { Deposit, DepositDocument } from '../deposit/schema/deposit.schema';
 
+const TXN_TYPE_MINTTO = 'mintTo';
+const TXN_TYPE_BURN = 'burn';
+const TXN_TYPE_TRANSFER = 'transfer';
+
 @Injectable()
 export class AccountService {
   constructor(
@@ -84,7 +88,10 @@ export class AccountService {
         count++;
         if (
           transaction.description !== 'Commission' &&
-          transaction.description !== 'Sent'
+          transaction.description !== 'Sent' &&
+          transaction.description !== 'Deposited' &&
+          transaction.description !== 'Burnt' &&
+          transaction.description !== 'Withdrawn'
         ) {
           const inAppEntity = await this._getEntityFromTxn(account, txn);
           historyItem.addressOrUsername = get(inAppEntity, 'username');
@@ -154,6 +161,13 @@ export class AccountService {
               historyItem.description = `Invested`;
             }
           }
+        } else if (
+          transaction.description === 'Deposited' ||
+          transaction.description === 'Burnt' ||
+          transaction.description === 'Withdrawn'
+        ) {
+          historyItem.addressOrUsername = account.username;
+          historyItem.img = account.image;
         }
         historyItem.processedAt = txn.blockTime * 1000;
         history.push(historyItem);
@@ -175,6 +189,8 @@ export class AccountService {
       const authority = get(instruction, 'parsed.info.authority', '');
       const source = get(instruction, 'parsed.info.source', '');
       const destination = get(instruction, 'parsed.info.destination', '');
+      const account = get(instruction, 'parsed.info.account', '');
+      const type = get(instruction, 'parsed.type', '');
       const isSent = isEqual(source.toString(), associatedAddress.toString());
       const isReceived = isEqual(
         destination.toString(),
@@ -183,8 +199,14 @@ export class AccountService {
       const isSentCommision =
         isEqual(destination.toString(), rootAssociatedAddress.toString()) &&
         isEqual(source.toString(), associatedAddress.toString());
+      const isDeposit =
+        type === TXN_TYPE_MINTTO &&
+        isEqual(account.toString(), associatedAddress.toString());
+      const isBurn =
+        type === TXN_TYPE_BURN &&
+        isEqual(account.toString(), associatedAddress.toString());
 
-      if (!isSent && !isReceived && !isSentCommision) {
+      if (!isSent && !isReceived && !isSentCommision && !isDeposit && !isBurn) {
         continue;
       }
       let amount = 0;
@@ -202,6 +224,19 @@ export class AccountService {
       if (!isSentCommision && isSent) {
         amount = -amount;
         description = 'Sent';
+      }
+      if (isDeposit) {
+        description = 'Deposited';
+      }
+      if (isBurn) {
+        amount = -amount;
+        description = 'Burnt';
+        const transferInst = instructions.find(
+          (inst) => get(inst, 'parsed.type') === TXN_TYPE_TRANSFER,
+        );
+        if (!isNil(transferInst)) {
+          description = 'Withdrawn';
+        }
       }
       if (amount !== 0) {
         historyItem.push({ amount, description, authority });
