@@ -454,6 +454,47 @@ export class OrgsService {
         },
       },
       {
+        $unionWith: {
+          coll: 'payments',
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    {
+                      $eq: ['$org', new Types.ObjectId(orgId)],
+                    },
+                    {
+                      $eq: ['$type', PaymentType.Regular],
+                    },
+                  ],
+                },
+              },
+            },
+            {
+              $lookup: {
+                from: 'orgs',
+                localField: 'org',
+                foreignField: '_id',
+                as: 'orgUser',
+              },
+            },
+            {
+              $addFields: {
+                orgUser: { $arrayElemAt: ['$orgUser', 0] },
+                action: OrgHistoryItemAction.Received,
+                memo: {
+                  $getField: {
+                    field: 'name',
+                    input: { $arrayElemAt: ['$items', 0] },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+      {
         $project: {
           'user.nickname': 1,
           'user.avatar': 1,
@@ -462,6 +503,8 @@ export class OrgsService {
           createdAt: 1,
           stoppedAt: 1,
           action: 1,
+          amount: 1,
+          memo: 1,
           date: { $ifNull: ['$stoppedAt', '$createdAt'] },
         },
       },

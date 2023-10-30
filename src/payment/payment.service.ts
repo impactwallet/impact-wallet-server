@@ -195,7 +195,7 @@ export class PaymentService {
       throw new NotFoundException({ message: 'Organization not found' });
     }
     const payment = await this.receivePayment(org, {
-      items: [{ name: 'Sale', amount: +body.amount, image: null }],
+      items: [{ name: body.memo, amount: +body.amount, image: null }],
     });
     payment.txnHash = 'merchant';
     await payment.save();
