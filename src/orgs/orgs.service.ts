@@ -505,6 +505,7 @@ export class OrgsService {
           action: 1,
           amount: 1,
           memo: 1,
+          txnHash: 1,
           date: { $ifNull: ['$stoppedAt', '$createdAt'] },
         },
       },

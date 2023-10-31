@@ -336,11 +336,7 @@ export class OffersLiteService extends OffersServiceBase {
 
       // Handle commission
       this.paymentService
-        .handleRegularPayment(
-          rootOrg,
-          { payment_amount: commissionAmount },
-          { shouldMint: false },
-        )
+        .handleRegularPayment(rootOrg, { payment_amount: commissionAmount })
         .catch((error) =>
           console.error(`Error while handling commission payment: ${error}`),
         );
@@ -721,11 +717,7 @@ export class OffersLiteService extends OffersServiceBase {
 
       // Our commission
       this.paymentService
-        .handleRegularPayment(
-          rootOrg,
-          { payment_amount: commissionAmount },
-          { shouldMint: false },
-        )
+        .handleRegularPayment(rootOrg, { payment_amount: commissionAmount })
         .catch((error) =>
           console.error(`Error while handling commission payment: ${error}`),
         );

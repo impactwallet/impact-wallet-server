@@ -197,14 +197,38 @@ export class PaymentService {
     const payment = await this.receivePayment(org, {
       items: [{ name: body.memo, amount: +body.amount, image: null }],
     });
-    payment.txnHash = 'merchant';
-    await payment.save();
-    this.handleRegularPayment(org, {
-      payment_amount: body.amount,
-      memo: body.memo,
-    }).catch((err) =>
-      console.log(`Error handling regular payment for ${org.name}: ${err}`),
+    const rootOrg = await this.orgModel.findOne(
+      { wallet: process.env.ROOT_PUBKEY },
+      '+password',
     );
+    const rootOrgPk = await this.apiService.getPK(
+      rootOrg.wallet,
+      rootOrg.password,
+    );
+    const mintTxnFn = this.apiService.mintToken.bind(
+      this.apiService,
+      process.env.CREDITS_MINT,
+      rootOrgPk,
+      [{ wallet: org.wallet, amount: body.amount }],
+      !isEmpty(body.memo) ? body.memo.trim() : null,
+    );
+    mintTxnFn()
+      .then((mintTxnHash: string) => {
+        return this.apiService.confirmTxnWithRetry(mintTxnHash, mintTxnFn);
+      })
+      .then((mintTxnHash: string) => {
+        payment.txnHash = mintTxnHash;
+        return payment.save();
+      })
+      .then(() => {
+        return this.handleRegularPayment(org, {
+          payment_amount: body.amount,
+          memo: body.memo,
+        });
+      })
+      .catch((err: any) =>
+        console.log(`Error handling regular payment for ${org.name}: ${err}`),
+      );
   }
 
   handleStripeEvent(body: any, headers: any) {
@@ -259,11 +283,8 @@ export class PaymentService {
     try {
       if (payment.type === PaymentType.Regular) {
         body.custom_data = payment.orgPayload;
-        this.handleRegularPayment(org, body, { shouldMint: false }).catch(
-          (err) =>
-            console.log(
-              `Error handling regular payment for ${org.name}: ${err}`,
-            ),
+        this.handleRegularPayment(org, body).catch((err) =>
+          console.log(`Error handling regular payment for ${org.name}: ${err}`),
         );
       } else if (payment.type === PaymentType.Investment) {
         await this.handleInvestmentPayment(org, payment, body);
@@ -315,11 +336,7 @@ export class PaymentService {
     return member.save({ session });
   }
 
-  async handleRegularPayment(
-    org: OrgDocument,
-    body: any,
-    { shouldMint = true } = {},
-  ) {
+  async handleRegularPayment(org: OrgDocument, body: any) {
     if (org.mintStatus !== 'success') {
       return;
     }
@@ -345,14 +362,6 @@ export class PaymentService {
     const membersWithAmount = [];
     const orgMembers = [];
     const orgPk = await this.apiService.getPK(org.wallet, org.password);
-    const rootOrg = await this.orgModel.findOne(
-      { wallet: process.env.ROOT_PUBKEY },
-      '+password',
-    );
-    const rootOrgPk = await this.apiService.getPK(
-      rootOrg.wallet,
-      rootOrg.password,
-    );
 
     await mapSeries(holders, async (holder) => {
       const wallet = defaultTo(
@@ -382,19 +391,6 @@ export class PaymentService {
     });
 
     const txnHashes = [];
-    if (shouldMint) {
-      const txnFn = this.apiService.mintToken.bind(
-        this.apiService,
-        process.env.CREDITS_MINT,
-        rootOrgPk,
-        [{ wallet: org.wallet, amount: paymentAmount.toNumber() }],
-        !isEmpty(body.memo) ? body.memo.trim() : null,
-      );
-      let txnHash = await txnFn();
-      txnHash = await this.apiService.confirmTxnWithRetry(txnHash, txnFn);
-      txnHashes.push(txnHash);
-    }
-
     const batchSize = 5;
     const numBatches = Math.ceil(membersWithAmount.length / batchSize);
     for (let i = 0; i < numBatches; i++) {
@@ -447,11 +443,7 @@ export class PaymentService {
       async ({ orgUser, amount }) => {
         try {
           await delay(2000);
-          await this.handleRegularPayment(
-            orgUser,
-            { payment_amount: amount },
-            { shouldMint },
-          );
+          await this.handleRegularPayment(orgUser, { payment_amount: amount });
         } catch (err) {
           console.log(
             `Error handling regular payment for ${orgUser.name}: ${err}`,
@@ -610,29 +602,21 @@ export class PaymentService {
     );
     payment.txnHash = txnHash;
 
-    this.handleRegularPayment(
-      org,
-      {
-        payment_amount: toFixed(
-          toBigJs(payment.amount).minus(commissionAmount),
-          6,
-        ).toNumber(),
-        custom_data: payment.orgPayload,
-      },
-      { shouldMint: false },
-    ).catch((err) => {
+    this.handleRegularPayment(org, {
+      payment_amount: toFixed(
+        toBigJs(payment.amount).minus(commissionAmount),
+        6,
+      ).toNumber(),
+      custom_data: payment.orgPayload,
+    }).catch((err) => {
       console.log(
         `Error handling regular payment for ${org.name} during performPayment: ${err}`,
       );
     });
 
-    this.handleRegularPayment(
-      rootOrg,
-      {
-        payment_amount: commissionAmount.toNumber(),
-      },
-      { shouldMint: false },
-    ).catch((err) => {
+    this.handleRegularPayment(rootOrg, {
+      payment_amount: commissionAmount.toNumber(),
+    }).catch((err) => {
       console.log(
         `Error handling comission from regular payment for ${org.name} during performPayment: ${err}`,
       );
