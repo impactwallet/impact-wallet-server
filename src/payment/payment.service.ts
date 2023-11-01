@@ -217,6 +217,14 @@ export class PaymentService {
         return this.apiService.confirmTxnWithRetry(mintTxnHash, mintTxnFn);
       })
       .then((mintTxnHash: string) => {
+        this.apiService
+          .sendNotification(
+            `New Credits minted by organization ${
+              org.name
+            }:\n\n${this.apiService.buildExplorerLink(`/tx/${mintTxnHash}`)}`,
+          )
+          .catch(() => {});
+
         payment.txnHash = mintTxnHash;
         return payment.save();
       })
