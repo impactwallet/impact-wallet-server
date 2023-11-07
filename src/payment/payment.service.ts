@@ -56,7 +56,6 @@ export class PaymentService {
   ) {}
 
   async receivePayment(org: OrgDocument, body: ReceivePaymentDto) {
-    const session = await this.connection.startSession();
     const totalAmount = body.items.reduce((acc, item) => acc + item.amount, 0);
     const newPayment = new this.paymentModel({
       org: org._id,
@@ -64,27 +63,7 @@ export class PaymentService {
       orgPayload: body.customData,
       items: body.items,
     });
-    await session.withTransaction(async () => {
-      const items: CheckoutItemEntity[] = body.items.map((item) => ({
-        name: item.name,
-        price: +item.amount,
-        image: defaultTo(item.image, `${process.env.SERVER_URL}${org.logo}`),
-        quantity: 1,
-      }));
-      const sessionData = await this.candypayService.createSession({
-        logo: org.logo,
-        receiver: org,
-        items,
-        successUrl: org.settings.successUrl,
-        cancelUrl: org.settings.cancelUrl,
-      });
-      newPayment.cpSessionId = sessionData.session_id;
-      newPayment.cpOrderId = sessionData.order_id;
-      newPayment.cpPaymentUrl = sessionData.payment_url;
-
-      await newPayment.save({ session });
-    });
-    await session.endSession();
+    await newPayment.save();
 
     return newPayment;
   }
