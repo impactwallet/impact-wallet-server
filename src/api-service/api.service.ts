@@ -35,7 +35,7 @@ import { decode } from 'bs58';
 import { get, isEmpty, isNil } from 'lodash';
 import { Org } from '../orgs/schema/org.schema';
 import { ConfigService } from '@nestjs/config';
-import { delay } from 'bluebird';
+import { delay, map } from 'bluebird';
 
 const REQUEST_TIMEOUT = 1000 * 60 * 60;
 const RETRIES = 5;
@@ -623,7 +623,13 @@ export class ApiService {
       options,
     );
     const signatures = txns.map((txn) => txn.signature);
-    const parsedTxns = await this.connection.getParsedTransactions(signatures);
+    const parsedTxns = await map(
+      signatures,
+      (signature) => {
+        return this.connection.getParsedTransaction(signature);
+      },
+      { concurrency: 2 },
+    );
     return { associatedAddress, parsedTxns };
   }
 
