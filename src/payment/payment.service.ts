@@ -218,6 +218,20 @@ export class PaymentService {
       );
   }
 
+  async handleDeplanPayment(body: MerchantWebhookDto) {
+    const org = await this.orgModel.findOne(
+      {
+        wallet: body.walletAddress,
+      },
+      '+password',
+    );
+    this.handleRegularPayment(org, {
+      payment_amount: body.amount,
+    }).catch((err: any) =>
+      console.log(`Error handling regular payment for ${org.name}: ${err}`),
+    );
+  }
+
   handleStripeEvent(body: any, headers: any) {
     const sig = headers['stripe-signature'];
 

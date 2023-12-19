@@ -37,6 +37,12 @@ export class PaymentController {
   }
 
   @ApiResponse({ status: 200 })
+  @Post('deplan-webhook')
+  handleDeplanPayment(@Body(new ValidationPipe()) body: MerchantWebhookDto) {
+    return this.paymentService.handleDeplanPayment(body);
+  }
+
+  @ApiResponse({ status: 200 })
   @Post('stripe-webhook')
   handleStripeEvent(
     @Req() req: RawBodyRequest<Request>,
