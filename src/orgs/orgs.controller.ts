@@ -254,16 +254,12 @@ export class OrgsController {
     return this.orgsService.getOrgRevenue(orgId, query);
   }
 
-  @ApiOperation({ summary: 'Get organization split info' })
-  @ApiResponse({ status: 200, type: [Org] })
-  @Get(':orgId/split')
-  async getOrgSplit(
-    @Param('orgId') orgId: string,
-    @Req() req: Request,
-    @Query(new ValidationPipe({ transform: true })) query: OrgSplitDto,
-  ) {
+  @ApiOperation({ summary: 'Split now' })
+  @ApiResponse({ status: 200 })
+  @Post(':orgId/split')
+  async splitNow(@Param('orgId') orgId: string, @Req() req: Request) {
     await this.authService.getAccountFromToken(req);
-    return this.orgsService.getOrgSplit(orgId, query);
+    return this.orgsService.splitNow(orgId);
   }
 
   @ApiOperation({ summary: 'Add member to organization' })

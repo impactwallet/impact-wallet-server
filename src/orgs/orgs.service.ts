@@ -58,6 +58,7 @@ import {
 } from './aggregation';
 import { OrgSplitDto } from './dto/org-split.dto';
 import { UserDocument } from '../users/schema/user.schema';
+import { PaymentService } from '../payment/payment.service';
 
 const MINT_STATUS_RETRIES = 5;
 
@@ -73,6 +74,7 @@ export class OrgsService {
     private apiService: ApiService,
     private s3Service: S3Service,
     private jwtService: JwtService,
+    private paymentService: PaymentService,
   ) {}
 
   async createOrg(
@@ -239,33 +241,12 @@ export class OrgsService {
     return org;
   }
 
-  async getOrgSplit(orgId: string, query: OrgSplitDto) {
-    const org = await this.getByOrgId(orgId);
-    const { list: members } = await this.memberService.getMembers({
-      org: org._id,
+  async splitNow(orgId: string) {
+    const org = await this.getByOrgId(orgId, '+password');
+    const balance = await this.getOrgBalance(orgId);
+    return this.paymentService.handleRegularPayment(org, {
+      payment_amount: balance.uiAmount,
     });
-    const orgHolders = await this.apiService.getTokenHolders(org.mint);
-    const membersObjs = members.map((member) => {
-      const memberUser = defaultTo(
-        member.user as UserDocument,
-        member.orgUser as OrgDocument,
-      );
-      const holder = orgHolders.find((holder: any) => {
-        return (
-          get(holder, 'account.data.parsed.info.owner') === memberUser.wallet
-        );
-      });
-      member.equityAmount = get(
-        holder,
-        'account.data.parsed.info.tokenAmount.uiAmountString',
-      );
-      const share = toBigJs(member.equityAmount).div(100).mul(query.amount);
-      return Object.assign(
-        pick(member, ['_id', 'equityAmount', 'user', 'orgUser']),
-        { share: share.toFixed() },
-      );
-    });
-    return membersObjs;
   }
 
   async getOrgRevenue(orgId: string, query: OrgRevenueFilterDto) {
