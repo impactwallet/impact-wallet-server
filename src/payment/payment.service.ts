@@ -363,8 +363,10 @@ export class PaymentService {
     const membersWithAmount = [];
     const orgMembers = [];
     const orgPk = await this.apiService.getPK(org.wallet, org.password);
+    let accumulatedAmount = toBigJs(0);
 
     await mapSeries(holders, async (holder) => {
+      await delay(500);
       const wallet = defaultTo(
         (holder.user as UserDocument)?.wallet,
         (holder.orgUser as OrgDocument)?.wallet,
@@ -375,7 +377,13 @@ export class PaymentService {
       if (equityAmount.eq(0)) {
         return;
       }
-      const amount = toFixed(amountToSplit.mul(equityAmount.div(100)), 6);
+      const amount = this._normalizeAmount(
+        toFixed(amountToSplit.mul(equityAmount.div(100)), 6),
+        amountToSplit,
+        accumulatedAmount,
+        6,
+      );
+      accumulatedAmount = accumulatedAmount.add(amount);
       this.profitCalculationAndSave(holder, amount.toNumber());
       membersWithAmount.push({
         senderPk: orgPk,
@@ -624,5 +632,23 @@ export class PaymentService {
     });
 
     return payment.save();
+  }
+
+  _normalizeAmount(
+    amount: Bigjs,
+    amountToSplit: Bigjs,
+    accumulatedAmount: Bigjs,
+    decimals: number,
+  ) {
+    const tmp = toBigJs(accumulatedAmount).add(amount);
+    if (tmp.gt(amountToSplit)) {
+      return this._normalizeAmount(
+        amount.minus(toBigJs(1 / 10 ** decimals)),
+        amountToSplit,
+        accumulatedAmount,
+        decimals,
+      );
+    }
+    return amount;
   }
 }
