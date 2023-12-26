@@ -761,4 +761,12 @@ export class OrgsService {
       throw new HttpException({ error }, 500);
     }
   }
+
+  getContent() {
+    return this.orgRepository
+      .find({
+        'settings.isContent': true,
+      })
+      .select('username name link description logo wallet');
+  }
 }

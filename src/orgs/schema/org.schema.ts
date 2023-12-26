@@ -33,6 +33,10 @@ export class OrgSettings {
   })
   @Prop()
   cancelUrl: string;
+
+  @ApiProperty({ description: 'Specifies if the org is content based' })
+  @Prop({ default: false })
+  isContent: boolean;
 }
 
 export const OrgSettingsSchema = SchemaFactory.createForClass(OrgSettings);

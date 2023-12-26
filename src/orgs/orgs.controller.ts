@@ -226,6 +226,12 @@ export class OrgsController {
     return this.orgsService.getOrgsByQuery(query, req);
   }
 
+  @ApiOperation({ summary: 'Get content' })
+  @Get('/content')
+  getContent() {
+    return this.orgsService.getContent();
+  }
+
   @ApiOperation({ summary: 'Get organization by id' })
   @ApiResponse({ status: 200, type: Org })
   @Get(':orgId')
