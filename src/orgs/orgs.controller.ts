@@ -232,6 +232,12 @@ export class OrgsController {
     return this.orgsService.getContent();
   }
 
+  @ApiOperation({ summary: 'Get content' })
+  @Get('/apps')
+  getApps() {
+    return this.orgsService.getApps();
+  }
+
   @ApiOperation({ summary: 'Get organization by id' })
   @ApiResponse({ status: 200, type: Org })
   @Get(':orgId')

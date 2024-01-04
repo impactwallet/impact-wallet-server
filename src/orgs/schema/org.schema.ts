@@ -37,6 +37,18 @@ export class OrgSettings {
   @ApiProperty({ description: 'Specifies if the org is content based' })
   @Prop({ default: false })
   isContent: boolean;
+
+  @ApiProperty({ description: 'Specifies if the org is an app' })
+  @Prop({ default: false })
+  isApp: boolean;
+
+  @ApiProperty({ description: 'Price per month for app usage' })
+  @Prop({
+    required: function () {
+      return this.isApp;
+    },
+  })
+  pricePerMonth: number;
 }
 
 export const OrgSettingsSchema = SchemaFactory.createForClass(OrgSettings);

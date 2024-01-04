@@ -734,6 +734,8 @@ export class OrgsService {
     org.settings.treasury = isDefined(updateOrgDto.settings?.treasury)
       ? updateOrgDto.settings?.treasury
       : org.settings.treasury;
+    org.settings.isApp = updateOrgDto.settings.isApp;
+    org.settings.pricePerMonth = updateOrgDto.settings.pricePerMonth;
 
     return this.orgRepository.findOneAndUpdate(
       { _id: org._id },
@@ -768,5 +770,15 @@ export class OrgsService {
         'settings.isContent': true,
       })
       .select('username name link description logo wallet');
+  }
+
+  getApps() {
+    return this.orgRepository
+      .find({
+        'settings.isApp': true,
+      })
+      .select(
+        'username name link description logo wallet settings.pricePerMonth',
+      );
   }
 }
