@@ -5,7 +5,7 @@ import mongoose, { ClientSession, Model, PopulateOptions } from 'mongoose';
 import { MemberDto } from './dto/members.dto';
 import { MembersFilterDto } from './dto/members.filter.dto';
 import { Member, MemberDocument } from './schema/member.schema';
-import { delay, map } from 'bluebird';
+import { mapSeries } from 'bluebird';
 import { ApiService } from '../api-service/api.service';
 import { OrgDocument } from '../orgs/schema/org.schema';
 import { UserDocument } from '../users/schema/user.schema';
@@ -41,23 +41,18 @@ export class MembersService {
         return (isNil(gt) || equity.gt(gt)) && (isNil(lt) || equity.lt(lt));
       };
       const orgToHoldersMap = new Map<string, any>();
-      await map(
-        members,
-        async (member) => {
-          await member.populate('org');
-          const org = member.org as OrgDocument;
-          if (
-            isNil(org.mint) ||
-            !isNil(orgToHoldersMap.get(org._id.toString()))
-          ) {
-            return;
-          }
-          await delay(1000);
-          const orgHolders = await this.apiService.getTokenHolders(org.mint);
-          orgToHoldersMap.set(org._id.toString(), orgHolders);
-        },
-        { concurrency: 10 },
-      );
+      await mapSeries(members, async (member) => {
+        await member.populate('org');
+        const org = member.org as OrgDocument;
+        if (
+          isNil(org.mint) ||
+          !isNil(orgToHoldersMap.get(org._id.toString()))
+        ) {
+          return;
+        }
+        const orgHolders = await this.apiService.getTokenHolders(org.mint);
+        orgToHoldersMap.set(org._id.toString(), orgHolders);
+      });
       const allFilteredHolders = Array.from(orgToHoldersMap.values()).reduce(
         (acc, holders) => {
           const orgFilteredHolders = holders.filter((holder: any) => {
