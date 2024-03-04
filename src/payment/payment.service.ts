@@ -423,6 +423,7 @@ export class PaymentService {
         this.apiService,
         [...createCreditsAccountInstructions, ...transferUSDCInstructions],
         [orgPk],
+        3,
       );
       try {
         let txnHash = await txnFn();
