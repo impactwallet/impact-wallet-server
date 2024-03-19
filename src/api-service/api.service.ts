@@ -223,6 +223,10 @@ export class ApiService {
     retries = 0,
   ) {
     try {
+      const connection = new Connection(
+        process.env.SOLANA_RPC_URL_WRITE,
+        'confirmed',
+      );
       const txn = new Transaction();
 
       instructions.forEach((instruction) => {
@@ -241,7 +245,7 @@ export class ApiService {
       );
       txn.feePayer = new PublicKey(process.env.FEE_PAYER);
       const signers = pks.map((pk) => Keypair.fromSecretKey(decode(pk)));
-      const blockhash = await this.connection.getLatestBlockhash('finalized');
+      const blockhash = await connection.getLatestBlockhash('finalized');
       txn.recentBlockhash = blockhash.blockhash;
 
       const signature = await this.sendTxn(
@@ -302,10 +306,14 @@ export class ApiService {
 
   async createAccount(walletPk: string) {
     try {
+      const connection = new Connection(
+        process.env.SOLANA_RPC_URL_WRITE,
+        'confirmed',
+      );
       const space = 0;
       const toKeypair = Keypair.fromSecretKey(decode(walletPk));
       const rentExemptionAmount =
-        await this.connection.getMinimumBalanceForRentExemption(space);
+        await connection.getMinimumBalanceForRentExemption(space);
       const USDCMintPublicKey = new PublicKey(process.env.CREDITS_MINT);
 
       const createAccountParams = {
@@ -330,7 +338,7 @@ export class ApiService {
           USDCMintPublicKey,
         ),
       );
-      const blockhash = await this.connection.getLatestBlockhash('finalized');
+      const blockhash = await connection.getLatestBlockhash('finalized');
       createAccountTxn.recentBlockhash = blockhash.blockhash;
       createAccountTxn.feePayer = new PublicKey(process.env.FEE_PAYER);
       const feePayerPk = await this.getPK(
@@ -392,11 +400,11 @@ export class ApiService {
 
   async sendTxn(txn: Transaction, signers: Signer[]) {
     try {
-      const txnHash = await sendAndConfirmTransaction(
-        this.connection,
-        txn,
-        signers,
+      const connection = new Connection(
+        process.env.SOLANA_RPC_URL_WRITE,
+        'confirmed',
       );
+      const txnHash = await sendAndConfirmTransaction(connection, txn, signers);
       return txnHash;
     } catch (err) {
       err.message = `Error sending transaction: ${err.message}`;
@@ -419,6 +427,10 @@ export class ApiService {
     };
 
     try {
+      const connection = new Connection(
+        process.env.SOLANA_RPC_URL_WRITE,
+        'confirmed',
+      );
       const response = await firstValueFrom(
         this.http.post(
           `${this.shyftBaseUrl}/token/create_detach`,
@@ -438,16 +450,16 @@ export class ApiService {
         pk,
         feePayerPk,
       ]);
-      const txnHash = await this.connection.sendRawTransaction(
+      const txnHash = await connection.sendRawTransaction(
         Buffer.from(serializedTxn, 'base64'),
       );
-      const latestBlockHash = await this.connection.getLatestBlockhash();
+      const latestBlockHash = await connection.getLatestBlockhash();
       const confirmStrategy = {
         blockhash: latestBlockHash.blockhash,
         lastValidBlockHeight: latestBlockHash.lastValidBlockHeight,
         signature: txnHash,
       };
-      await this.connection.confirmTransaction(confirmStrategy);
+      await connection.confirmTransaction(confirmStrategy);
       return { mint, txnHash };
     } catch (err) {
       err.message = `Error creating token: ${err.message}`;
@@ -483,12 +495,14 @@ export class ApiService {
     memo?: string,
   ) {
     try {
+      const connection = new Connection(
+        process.env.SOLANA_RPC_URL_WRITE,
+        'confirmed',
+      );
       const authorityKeypair = Keypair.fromSecretKey(decode(authorityPk));
       const payer = new PublicKey(process.env.FEE_PAYER);
       const txn = new Transaction();
-      const info = await this.connection.getParsedAccountInfo(
-        new PublicKey(mint),
-      );
+      const info = await connection.getParsedAccountInfo(new PublicKey(mint));
       const decimals = get(info, 'value.data.parsed.info.decimals', 9);
       const promises = receivers.map(async ({ wallet, amount }) => {
         const associatedTokenAddress = getAssociatedTokenAddressSync(
@@ -496,7 +510,7 @@ export class ApiService {
           new PublicKey(wallet),
         );
         try {
-          await getAccount(this.connection, associatedTokenAddress);
+          await getAccount(connection, associatedTokenAddress);
         } catch (error) {
           if (
             error instanceof TokenAccountNotFoundError ||
@@ -537,7 +551,7 @@ export class ApiService {
         }
       });
       await Promise.all(promises);
-      const blockhash = await this.connection.getLatestBlockhash('finalized');
+      const blockhash = await connection.getLatestBlockhash('finalized');
       txn.recentBlockhash = blockhash.blockhash;
       txn.feePayer = payer;
       const feePayerPk = await this.getPK(
@@ -715,6 +729,10 @@ export class ApiService {
 
   async recordMemo(memo: string, keys: { pubKey: string; pk: string }[]) {
     const payer = new PublicKey(process.env.FEE_PAYER);
+    const connection = new Connection(
+      process.env.SOLANA_RPC_URL_WRITE,
+      'confirmed',
+    );
     const txn = new Transaction().add(
       new TransactionInstruction({
         keys: keys.map((key) => ({
@@ -727,7 +745,7 @@ export class ApiService {
       }),
     );
 
-    const blockhash = await this.connection.getLatestBlockhash('finalized');
+    const blockhash = await connection.getLatestBlockhash('finalized');
     txn.recentBlockhash = blockhash.blockhash;
     txn.feePayer = payer;
     const feePayerPk = await this.getPK(
