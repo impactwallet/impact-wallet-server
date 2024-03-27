@@ -427,6 +427,7 @@ export class PaymentService {
       );
       try {
         let txnHash = await txnFn();
+        console.log('txnHash:', txnHash);
         txnHash = await this.apiService.confirmTxnWithRetry(txnHash, txnFn);
         txnHashes.push(txnHash);
       } catch (err) {

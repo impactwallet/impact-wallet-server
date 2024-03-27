@@ -5,6 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import { AxiosRequestConfig } from 'axios';
 import {
   Cluster,
+  ComputeBudgetProgram,
   Connection,
   Keypair,
   LAMPORTS_PER_SOL,
@@ -17,7 +18,9 @@ import {
   TokenAmount,
   Transaction,
   TransactionInstruction,
+  TransactionMessage,
   TransactionSignature,
+  VersionedTransaction,
 } from '@solana/web3.js';
 import {
   createAssociatedTokenAccountInstruction,
@@ -237,6 +240,23 @@ export class ApiService {
 
       if (isEmpty(txn.instructions)) {
         return;
+      }
+
+      const priorityFee = +process.env.PRIORITY_FEE_MICRO_LAMPORTS;
+      const priorityFeeInstruction = ComputeBudgetProgram.setComputeUnitPrice({
+        microLamports: priorityFee,
+      });
+      txn.add(priorityFeeInstruction);
+
+      let units = await this.getSimulationUnits(
+        this.connection,
+        txn.instructions,
+        new PublicKey(process.env.FEE_PAYER),
+      );
+      console.log('units:', units);
+      if (units) {
+        units = Math.ceil(units * 1.05); // margin of error
+        txn.add(ComputeBudgetProgram.setComputeUnitLimit({ units }));
       }
 
       const feePayerPk = await this.getPK(
@@ -758,5 +778,35 @@ export class ApiService {
       signers.concat(Keypair.fromSecretKey(decode(feePayerPk))),
     );
     return txnHash;
+  }
+
+  async getSimulationUnits(
+    connection: Connection,
+    instructions: TransactionInstruction[],
+    payer: PublicKey,
+  ): Promise<number | undefined> {
+    const testInstructions = [
+      ComputeBudgetProgram.setComputeUnitLimit({ units: 1_400_000 }),
+      ...instructions,
+    ];
+
+    const testVersionedTxn = new VersionedTransaction(
+      new TransactionMessage({
+        instructions: testInstructions,
+        payerKey: payer,
+        recentBlockhash: PublicKey.default.toString(),
+      }).compileToV0Message(),
+    );
+
+    const simulation = await connection.simulateTransaction(testVersionedTxn, {
+      replaceRecentBlockhash: true,
+      sigVerify: false,
+    });
+
+    if (simulation.value.err) {
+      return undefined;
+    }
+
+    return simulation.value.unitsConsumed;
   }
 }
