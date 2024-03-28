@@ -190,8 +190,7 @@ export class UsersService extends UsersServiceBase {
       userId: newUser._id,
     };
     return {
-      //TODO: return endpoint
-      secretLink: `https://app.equitywallet.org/restore/${secretLink}`,
+      secretLink: `https://product.deplan.xyz/restore/${secretLink}`,
       token: this.jwtService.sign(payload),
     };
   }
@@ -249,7 +248,7 @@ export class UsersService extends UsersServiceBase {
       userId: user._id,
     };
     return {
-      secretLink: `https://app.equitywallet.org/restore/${user.secretLink}`,
+      secretLink: `https://product.deplan.xyz/restore/${user.secretLink}`,
       token: this.jwtService.sign(payload),
     };
   }
