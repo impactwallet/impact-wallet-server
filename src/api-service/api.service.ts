@@ -193,6 +193,23 @@ export class ApiService {
         txn.add(instruction);
       });
 
+      const priorityFee = +process.env.PRIORITY_FEE_MICRO_LAMPORTS;
+      const priorityFeeInstruction = ComputeBudgetProgram.setComputeUnitPrice({
+        microLamports: priorityFee,
+      });
+      txn.add(priorityFeeInstruction);
+
+      let units = await this.getSimulationUnits(
+        this.connection,
+        txn.instructions,
+        new PublicKey(process.env.FEE_PAYER),
+      );
+      console.log('units:', units);
+      if (units) {
+        units = Math.ceil(units * 1.05); // margin of error
+        txn.add(ComputeBudgetProgram.setComputeUnitLimit({ units }));
+      }
+
       const blockhash = await this.connection.getLatestBlockhash('finalized');
       txn.recentBlockhash = blockhash.blockhash;
       txn.feePayer = new PublicKey(process.env.FEE_PAYER);
