@@ -116,7 +116,7 @@ export class OrgsService {
           Buffer.from(file),
         );
       const { mint, txnHash } = await createTokenFn();
-      await this.apiService.confirmTxnWithRetry(txnHash, createTokenFn);
+      await this.apiService.confirmTxnWithRetry(txnHash, createTokenFn, 0);
       this.apiService.sendNotification(
         `New ${org.username
           .toUpperCase()

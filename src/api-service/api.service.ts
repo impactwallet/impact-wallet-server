@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
-import * as FormData from 'form-data';
 import { firstValueFrom } from 'rxjs';
 import { AxiosRequestConfig } from 'axios';
 import {
@@ -34,11 +33,20 @@ import {
   TokenAccountNotFoundError,
   TokenInvalidAccountOwnerError,
 } from '@solana/spl-token';
-import { decode } from 'bs58';
+import { decode, encode } from 'bs58';
 import { get, isEmpty, isNil } from 'lodash';
 import { Org } from '../orgs/schema/org.schema';
 import { ConfigService } from '@nestjs/config';
 import { delay, map } from 'bluebird';
+import {
+  createSignerFromKeypair,
+  generateSigner,
+  percentAmount,
+  signerIdentity,
+} from '@metaplex-foundation/umi';
+import { createFungible } from '@metaplex-foundation/mpl-token-metadata';
+import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
+import { setComputeUnitPrice } from '@metaplex-foundation/mpl-toolbox';
 
 const REQUEST_TIMEOUT = 1000 * 60 * 60;
 const RETRIES = 5;
@@ -450,54 +458,51 @@ export class ApiService {
   }
 
   async createFungibleTokensForOrganization(org: Org, logo: Buffer) {
-    const body = new FormData();
-    body.append('network', this.network);
-    body.append('wallet', org.wallet);
-    body.append('name', org.name.substring(0, 32));
-    body.append('symbol', org.username.toUpperCase().substring(0, 10));
-    body.append('fee_payer', process.env.FEE_PAYER);
-    body.append('file', logo, 'logo');
-
-    const config: AxiosRequestConfig = {
-      headers: Object.fromEntries(this.commonHeaders.entries()),
-      timeout: REQUEST_TIMEOUT,
-    };
-
     try {
-      const connection = new Connection(
-        process.env.SOLANA_RPC_URL_WRITE,
-        'confirmed',
+      const umi = createUmi(process.env.SOLANA_RPC_URL_WRITE);
+
+      const authorityPk = await this.getPK(org.wallet, org.password);
+      const userWallet = umi.eddsa.createKeypairFromSecretKey(
+        decode(authorityPk),
       );
-      const response = await firstValueFrom(
-        this.http.post(
-          `${this.shyftBaseUrl}/token/create_detach`,
-          body,
-          config,
-        ),
-      );
-      const encodedTxn = get(response, 'data.result.encoded_transaction');
-      const mint = get(response, 'data.result.mint');
-      const txn = Transaction.from(Buffer.from(encodedTxn, 'base64'));
-      const pk = await this.getPK(org.wallet, org.password);
+      const userWalletSigner = createSignerFromKeypair(umi, userWallet);
       const feePayerPk = await this.getPK(
         process.env.FEE_PAYER,
         process.env.FEE_PAYER_PWD,
       );
-      const serializedTxn = this.createSignedSerializedTxn(txn, [
-        pk,
-        feePayerPk,
-      ]);
-      const txnHash = await connection.sendRawTransaction(
-        Buffer.from(serializedTxn, 'base64'),
+      const feePayerWallet = umi.eddsa.createKeypairFromSecretKey(
+        decode(feePayerPk),
       );
-      const latestBlockHash = await connection.getLatestBlockhash();
-      const confirmStrategy = {
-        blockhash: latestBlockHash.blockhash,
-        lastValidBlockHeight: latestBlockHash.lastValidBlockHeight,
-        signature: txnHash,
+      const feePayerWalletSigner = createSignerFromKeypair(umi, feePayerWallet);
+
+      const metadata = {
+        name: org.name.substring(0, 32),
+        symbol: org.username.toUpperCase().substring(0, 10),
+        uri: '',
       };
-      await connection.confirmTransaction(confirmStrategy);
-      return { mint, txnHash };
+
+      const mint = generateSigner(umi);
+      umi.use(signerIdentity(userWalletSigner));
+      umi.use(signerIdentity(feePayerWalletSigner));
+
+      const priorityFee = +process.env.PRIORITY_FEE_MICRO_LAMPORTS;
+
+      const { signature } = await createFungible(umi, {
+        mint,
+        authority: userWalletSigner,
+        name: metadata.name,
+        symbol: metadata.symbol,
+        uri: metadata.uri,
+        sellerFeeBasisPoints: percentAmount(0),
+        decimals: 6,
+        payer: feePayerWalletSigner,
+      })
+        .add(setComputeUnitPrice(umi, { microLamports: priorityFee }))
+        .sendAndConfirm(umi);
+
+      console.log('Successfully token (', mint.publicKey, ')');
+
+      return { mint: mint.publicKey.toString(), txnHash: encode(signature) };
     } catch (err) {
       err.message = `Error creating token: ${err.message}`;
       throw err;
@@ -651,6 +656,7 @@ export class ApiService {
 
   async getParsedTransaction(
     signature: TransactionSignature,
+    maxSupportedTransactionVersion?: number,
     retries = RETRIES,
   ): Promise<ParsedTransactionWithMeta> {
     const fn = async (r: number) => {
@@ -659,7 +665,12 @@ export class ApiService {
       try {
         txn = await this.connection.getParsedTransaction(
           signature,
-          'confirmed',
+          isNil(maxSupportedTransactionVersion)
+            ? 'confirmed'
+            : {
+                maxSupportedTransactionVersion,
+                commitment: 'confirmed',
+              },
         );
       } catch (err) {
         error = err;
@@ -762,9 +773,13 @@ export class ApiService {
   async confirmTxnWithRetry(
     txnHash: string,
     retryFn: () => Promise<any>,
+    maxSupportedTransactionVersion?: number,
     retries = 5,
   ): Promise<string> {
-    const parsedTxn = await this.getParsedTransaction(txnHash);
+    const parsedTxn = await this.getParsedTransaction(
+      txnHash,
+      maxSupportedTransactionVersion,
+    );
     let txnError = get(parsedTxn, 'meta.err');
     if (!isNil(parsedTxn) && isNil(txnError)) {
       return txnHash;
