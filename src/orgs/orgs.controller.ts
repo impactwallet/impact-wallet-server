@@ -28,8 +28,6 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { OrgsService } from './orgs.service';
 import { CreateOrgDto, OrgSettingsDto } from './dto/create-org.dto';
 import { OrgsFilter } from './dto/orgs.filter.dto';
-import { MemberDto } from 'src/members/dto/members.dto';
-import { Member } from 'src/members/schema/member.schema';
 import { Request, Response } from 'express';
 import { OrgUsernameFilter } from './dto/org-username.filter.dto';
 import { ApiMockHeader } from '../headers/mock';
@@ -48,6 +46,8 @@ import { DeleteLogosRequestDto } from './dto/delete-logos.request.dto';
 import { MembersFilterDto } from '../members/dto/members.filter.dto';
 import { OrgRevenueFilterDto } from './dto/org-revenue.filter.dto';
 import { OrgSplitDto } from './dto/org-split.dto';
+import { MemberDto } from '../members/dto/members.dto';
+import { Member } from '../members/schema/member.schema';
 
 @ApiTags('Orgs')
 @Controller('orgs')

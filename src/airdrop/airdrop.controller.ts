@@ -6,11 +6,4 @@ import { AirdropService } from './airdrop.service';
 @Controller('airdrop')
 export class AirdropController {
   constructor(private readonly airdropService: AirdropService) {}
-
-  @ApiOperation({ summary: 'Calculate airdrop' })
-  @ApiResponse({ status: 200, description: 'Successful calculate' })
-  @Post('/calculate')
-  calculate(@Body() body: any) {
-    return this.airdropService.calculate();
-  }
 }

@@ -5,18 +5,17 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import mongoose, { Model } from 'mongoose';
-import { ApiService } from 'src/api-service/api.service';
 import { get, isNil, set } from 'lodash';
 import { SendAssetsDto } from './dto/send-assets.dto';
-import { LAMPORTS_PER_SOL } from '@solana/web3.js';
-import { Member, MemberDocument } from 'src/members/schema/member.schema';
-import { Org, OrgDocument } from 'src/orgs/schema/org.schema';
 import { Role } from '../members/enum/roles.enum';
 import { User, UserDocument } from './schema/user.schema';
 import { UsersServiceBase } from './users.service.base';
 import { EquityType } from '../members/enum/equity-type.enum';
 import { AccountModel } from '../auth/models/account.model';
 import { toBigJs } from '../utils/bigjs';
+import { ApiService } from '../api-service/api.service';
+import { Member, MemberDocument } from '../members/schema/member.schema';
+import { Org, OrgDocument } from '../orgs/schema/org.schema';
 
 @Injectable()
 export class UsersServiceLite extends UsersServiceBase {

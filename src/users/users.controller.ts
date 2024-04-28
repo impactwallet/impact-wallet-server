@@ -20,16 +20,9 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { CreateUserDto } from './dto/create-user.dto';
-import { User } from './schema/user.schema';
-import { UsersService } from './users.service';
-import { CreateUserResponseDto } from './dto/create-user.response.dto';
-import { UsersFilter } from './dto/users.filter.dto';
-import { SearchUserByNicknameDto } from './dto/search-user-by-nickname.dto';
 import { Request, Response } from 'express';
 import { ApiMockHeader } from '../headers/mock';
 import { Member } from '../members/schema/member.schema';
-import { SendAssetsDto } from 'src/users/dto/send-assets.dto';
 import { SendUsdcDto } from './dto/send-usdc.dto';
 import { TxnHistoryItemDto } from '../common/dto/txn-history-item.dto';
 import { AuthService } from '../auth/auth.service';
@@ -37,6 +30,13 @@ import { DeleteAvatarsRequestDto } from './dto/delete-avatars.request.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { CreditsWithdrawDto } from './dto/credits-withdraw.dto';
 import { CreditsBurnDto } from './dto/credits-burn.dto';
+import { CreateUserDto } from './dto/create-user.dto';
+import { CreateUserResponseDto } from './dto/create-user.response.dto';
+import { SearchUserByNicknameDto } from './dto/search-user-by-nickname.dto';
+import { SendAssetsDto } from './dto/send-assets.dto';
+import { UsersFilter } from './dto/users.filter.dto';
+import { User } from './schema/user.schema';
+import { UsersService } from './users.service';
 
 @ApiTags('Users')
 @Controller('users')

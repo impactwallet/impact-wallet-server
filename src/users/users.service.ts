@@ -8,11 +8,6 @@ import {
 import { InjectModel, InjectConnection } from '@nestjs/mongoose';
 import { v4 as uuid } from 'uuid';
 import mongoose, { Model } from 'mongoose';
-import { CreateUserDto } from './dto/create-user.dto';
-import { User, UserDocument } from './schema/user.schema';
-import { ApiService } from 'src/api-service/api.service';
-import { CreateUserResponseDto } from './dto/create-user.response.dto';
-import { UsersFilter } from './dto/users.filter.dto';
 import {
   defaultTo,
   get,
@@ -22,12 +17,9 @@ import {
   omitBy,
   toNumber,
 } from 'lodash';
-import { SearchUserByNicknameDto } from './dto/search-user-by-nickname.dto';
 import { Request } from 'express';
 import { MembersService } from '../members/members.service';
 import { resizeBuffer } from '../utils/images';
-import { S3Service } from 'src/s3/s3.service';
-import { SendAssetsDto } from './dto/send-assets.dto';
 import {
   LAMPORTS_PER_SOL,
   ParsedInstruction,
@@ -35,10 +27,7 @@ import {
   PublicKey,
   TokenAmount,
 } from '@solana/web3.js';
-import { Member, MemberDocument } from 'src/members/schema/member.schema';
-import { Org, OrgDocument } from 'src/orgs/schema/org.schema';
 import { Role } from '../members/enum/roles.enum';
-import { SendUsdcDto } from './dto/send-usdc.dto';
 import { TxnHistoryItemDto } from '../common/dto/txn-history-item.dto';
 import { Payment, PaymentDocument } from '../payment/schema/payment.schema';
 import { PaymentType } from '../payment/enum/payment-type.enum';
@@ -54,17 +43,28 @@ import {
   ContributionDocument,
 } from '../contributions/schema/contribution.schema';
 import { areObjectIdsEqual } from '../utils/mongo';
-import { UsersServiceBase } from './users.service.base';
 import { AuthService } from '../auth/auth.service';
 import { JwtService } from '@nestjs/jwt';
 import { AccountModel } from '../auth/models/account.model';
 import { isDefined } from 'class-validator';
-import { UpdateUserDto } from './dto/update-user.dto';
 import { toBigJs } from '../utils/bigjs';
-import { BalanceDto } from './dto/balance.dto';
 import * as moment from 'moment';
-import { CreditsWithdrawDto } from './dto/credits-withdraw.dto';
+import { ApiService } from '../api-service/api.service';
+import { S3Service } from '../s3/s3.service';
+import { Member, MemberDocument } from '../members/schema/member.schema';
+import { Org, OrgDocument } from '../orgs/schema/org.schema';
+import { BalanceDto } from './dto/balance.dto';
+import { CreateUserDto } from './dto/create-user.dto';
+import { CreateUserResponseDto } from './dto/create-user.response.dto';
 import { CreditsBurnDto } from './dto/credits-burn.dto';
+import { CreditsWithdrawDto } from './dto/credits-withdraw.dto';
+import { SearchUserByNicknameDto } from './dto/search-user-by-nickname.dto';
+import { SendAssetsDto } from './dto/send-assets.dto';
+import { SendUsdcDto } from './dto/send-usdc.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
+import { UsersFilter } from './dto/users.filter.dto';
+import { User, UserDocument } from './schema/user.schema';
+import { UsersServiceBase } from './users.service.base';
 
 @Injectable()
 export class UsersService extends UsersServiceBase {
