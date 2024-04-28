@@ -14,6 +14,7 @@ import { Connection } from 'mongoose';
 import { AccountModule } from './account/account.module';
 import { JobsModule } from './jobs-service/jobs.module';
 import { DepositModule } from './deposit/deposit.module';
+import { AirdropModule } from './airdrop/airdrop.module';
 
 export let connection: Connection;
 
@@ -38,6 +39,7 @@ export let connection: Connection;
     AccountModule,
     JobsModule,
     DepositModule,
+    AirdropModule,
   ],
 })
 export class AppModule {}
