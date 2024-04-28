@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ApiService } from '../api-service/api.service';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { delay, map } from 'bluebird';
-import { get } from 'lodash';
+import { get, isEmpty, isNil } from 'lodash';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Airdrop, AirdropDocument } from './schema/airdrop.schema';
@@ -43,6 +43,20 @@ export class AirdropService {
       // );
 
       const ownerWallet = get(holder, 'account.data.parsed.info.owner');
+      const errors = await this.airdropRepository.find({
+        wallet: ownerWallet,
+        error: { $ne: null },
+      });
+      const finalResult = await this.airdropRepository.findOne({
+        wallet: ownerWallet,
+        typeTransaction: TypeTransaction.RESULT,
+      });
+      if (isEmpty(errors) && !isNil(finalResult)) {
+        continue;
+      }
+      await this.airdropRepository.deleteMany({
+        wallet: ownerWallet,
+      });
       // console.log('3: OwnerWallet: ' + ownerWallet);
       // console.log(
       //   '------------------------------------------------------------------------------------------------------------------------------',
@@ -54,23 +68,28 @@ export class AirdropService {
 
       if (!this.excludeWallets.includes(ownerWallet) && balance.gt(0)) {
         //Parse all transactions by the holder
-        await delay(3000);
         const txns = await this.connection.getSignaturesForAddress(
           new PublicKey(associatedAddress),
         );
 
         const signatures = txns.map((txn) => txn.signature);
+        let parsedTxns = [];
 
-        await delay(5000);
-        const parsedTxns = await map(
-          signatures,
-          (signature) => {
-            return this.connection.getParsedTransaction(signature, {
-              maxSupportedTransactionVersion: 0,
-            });
-          },
-          { concurrency: 2 },
-        );
+        try {
+          parsedTxns = await map(
+            signatures,
+            (signature) => {
+              return this.connection.getParsedTransaction(signature, {
+                maxSupportedTransactionVersion: 0,
+              });
+            },
+            { concurrency: 2 },
+          );
+        } catch (e) {}
+
+        if (isEmpty(parsedTxns)) {
+          continue;
+        }
 
         const listTransactions: AirdropDto[] = [];
 
@@ -84,7 +103,11 @@ export class AirdropService {
           // );
 
           const transactionTime = get(transaction, 'blockTime');
-          const postTokenBalances = get(transaction, 'meta.postTokenBalances');
+          const postTokenBalances = get(
+            transaction,
+            'meta.postTokenBalances',
+            [],
+          );
           const postTokenBalance = postTokenBalances.find(
             (token) =>
               token.mint === process.env.DEPLAN_TOKEN &&
@@ -98,7 +121,11 @@ export class AirdropService {
           //   '------------------------------------------------------------------------------------------------------------------------------',
           // );
 
-          const preTokenBalances = get(transaction, 'meta.preTokenBalances');
+          const preTokenBalances = get(
+            transaction,
+            'meta.preTokenBalances',
+            [],
+          );
 
           const preTokenBalance = preTokenBalances.find(
             (token) =>
@@ -169,10 +196,7 @@ export class AirdropService {
           }
         }
         const results = await this.finalCalculations(listTransactions);
-        for (const result of results) {
-          const airDropFoHolder = new this.airdropRepository(result);
-          await airDropFoHolder.save();
-        }
+        await this.airdropRepository.insertMany(results);
       }
     }
 
