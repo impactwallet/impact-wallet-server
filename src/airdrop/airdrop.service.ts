@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ApiService } from '../api-service/api.service';
-import { Connection, PublicKey } from '@solana/web3.js';
+import { Connection, Keypair, PublicKey, Transaction } from '@solana/web3.js';
 import { delay, map } from 'bluebird';
 import { get, isEmpty, isNil } from 'lodash';
 import { InjectModel } from '@nestjs/mongoose';
@@ -8,7 +8,9 @@ import { Model } from 'mongoose';
 import { Airdrop, AirdropDocument } from './schema/airdrop.schema';
 import { TypeTransaction } from './enum/type-transaction.enum';
 import { AirdropDto } from './dto/airdrop.dto';
-import { toBigJs } from '../utils/bigjs';
+import { bigJsToNumber, toBigJs } from '../utils/bigjs';
+import { createTransferInstruction } from '@solana/spl-token';
+import base58 from 'bs58';
 
 @Injectable()
 export class AirdropService {
@@ -78,7 +80,8 @@ export class AirdropService {
         try {
           parsedTxns = await map(
             signatures,
-            (signature) => {
+            async (signature) => {
+              await delay(2000);
               return this.connection.getParsedTransaction(signature, {
                 maxSupportedTransactionVersion: 0,
               });
@@ -199,9 +202,11 @@ export class AirdropService {
         await this.airdropRepository.insertMany(results);
       }
     }
+    console.log('Successfully received data for each holder');
+
+    await this.airdropCalculations();
 
     console.log('The calculation was completed successfully');
-    return 'The calculation was completed successfully';
   }
 
   private async getDaysDifference(
@@ -214,6 +219,108 @@ export class AirdropService {
     const timeDifference = endDateTime.getTime() - startDateTime.getTime();
 
     return Math.floor(timeDifference / (1000 * 60 * 60 * 24));
+  }
+
+  async sentClaimTransaction(wallet: string) {
+    const claim = await this.getClaimByWallet(wallet);
+
+    if (claim.claimAmount !== 0) {
+      const senderAssociatedTokenAddress = process.env.DEPLAN_TOKEN;
+      const senderPublicKey = process.env.AIRDROP_SENDER_PUBLIC_KEY;
+      const airdropWalletSecretKey = process.env.AIRDROP_WALLET_SECRET_KEY;
+
+      const txn = new Transaction();
+
+      const ixs = createTransferInstruction(
+        new PublicKey(senderAssociatedTokenAddress),
+        new PublicKey(wallet),
+        new PublicKey(senderPublicKey),
+        claim.claimAmount,
+      );
+
+      txn.add(ixs);
+
+      const blockhash = await this.connection.getLatestBlockhash('finalized');
+      txn.recentBlockhash = blockhash.blockhash;
+
+      txn.partialSign(
+        Keypair.fromSecretKey(base58.decode(airdropWalletSecretKey)),
+      );
+
+      const txnHash = txn
+        .serialize({ requireAllSignatures: false })
+        .toString('base64');
+
+      claim.txnHash = txnHash;
+
+      await this.airdropRepository.findOneAndUpdate(
+        {
+          wallet: wallet,
+          typeTransaction: TypeTransaction.RESULT,
+          $or: [{ error: { $eq: null } }, { error: { $exists: false } }],
+        },
+        {
+          txnHash: txnHash,
+          isClaim: true,
+        },
+      );
+    }
+
+    return claim;
+  }
+
+  async getClaimByWallet(wallet: string) {
+    const airdropResult = {
+      HoldFromDate: '1711152000',
+      HoldToDate: '1714521599',
+      ClaimFromDate: '1714521600',
+      ClaimToDate: '1717804800',
+      claimAmount: 0,
+      txnHash: '',
+    };
+
+    const holder = await this.airdropRepository.findOne({
+      wallet: wallet,
+      typeTransaction: TypeTransaction.RESULT,
+      $or: [{ error: { $eq: null } }, { error: { $exists: false } }],
+    });
+    if (holder.isClaim === false) {
+      airdropResult.claimAmount = holder.claimAmount;
+    }
+    return airdropResult;
+  }
+
+  private async airdropCalculations() {
+    console.log('Start calculating percentages for each holder');
+
+    const allHolders = await this.airdropRepository.find({
+      typeTransaction: TypeTransaction.RESULT,
+    });
+
+    let totalAmount = toBigJs(0);
+
+    for (const holder of allHolders) {
+      totalAmount = totalAmount.plus(holder.finalAmount);
+    }
+
+    for (const holder of allHolders) {
+      const airdropSize = toBigJs(process.env.AIRDROP_SIZE);
+      const claimPercent = toBigJs(holder.finalAmount).div(totalAmount);
+      const claimAmount = airdropSize.times(claimPercent);
+
+      holder.claimPercent = bigJsToNumber(claimPercent);
+      holder.claimAmount = bigJsToNumber(claimAmount);
+    }
+
+    let checkTotalPercent = toBigJs(0);
+    for (const holder of allHolders) {
+      checkTotalPercent = checkTotalPercent.plus(holder.claimPercent);
+    }
+
+    await this.airdropRepository.bulkSave(allHolders);
+
+    console.log('Total amount: ' + bigJsToNumber(totalAmount));
+    console.log('Total percent: ' + bigJsToNumber(checkTotalPercent));
   }
 
   private async finalCalculations(
@@ -261,7 +368,6 @@ export class AirdropService {
     }
 
     for (const transaction of transactions) {
-      // Добавляем транзакцию в результат, если ее сумма не равна нулю
       if (!transaction.amount.eq(0)) {
         const holderAmount = transaction.amount.times(transaction.holderOfDays);
         finalAmount = finalAmount.plus(holderAmount);
@@ -388,5 +494,9 @@ export class AirdropService {
     '7yPUz7dVM1y4xDvAoowfAmt1u4v2TJ4S2zQCm1uHMpgU',
     'BVcW33GXQQtLfxEU9CjoALQzyyTXuxthNAUhrD4AJLpa',
     '9jyP4CNxST2oHLpfKJGtAkDMnvo7ztaAUqvsvDcnAME7',
+    '8RozHW6oDgYpEPwW3A5bUVn1bDXDXqFUeAwQaCH97a6E',
+    'DaQM6b6dbxShqjRdaxPEgMorgjtRtdpfPJWkWYrKgNPa',
+    '6U91aKa8pmMxkJwBCfPTmUEfZi6dHe7DcFq2ALvB2tbB',
+    'CpoD6tWAsMDeyvVG2q2rD1JbDY6d4AujnvAn2NdrhZV2',
   ];
 }

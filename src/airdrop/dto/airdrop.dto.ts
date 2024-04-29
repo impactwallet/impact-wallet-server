@@ -31,4 +31,13 @@ export class AirdropDto {
 
   @ApiProperty({ description: 'Error' })
   error: string;
+
+  @ApiProperty({ description: 'Claim percent for the wallet' })
+  claimPercent: Big.Big;
+
+  @ApiProperty({ description: 'Claim for the wallet' })
+  claim: Big.Big;
+
+  @ApiProperty({ description: 'Has the holder received a claim' })
+  isClaim: boolean;
 }

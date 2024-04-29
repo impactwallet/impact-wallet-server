@@ -50,6 +50,22 @@ export class Airdrop {
   @ApiProperty({ description: 'Error' })
   @Prop({ type: String })
   error: string;
+
+  @ApiProperty({ description: 'Claim percent for the wallet' })
+  @Prop({ type: Number })
+  claimPercent: number;
+
+  @ApiProperty({ description: 'Claim amount for the wallet' })
+  @Prop({ type: Number })
+  claimAmount: number;
+
+  @ApiProperty({ description: 'Transaction hash' })
+  @Prop({ type: String })
+  txnHash: string;
+
+  @ApiProperty({ description: 'Has the holder received a claim' })
+  @Prop({ default: false, type: Boolean })
+  isClaim: boolean;
 }
 
 export const AirdropSchema = SchemaFactory.createForClass(Airdrop);
