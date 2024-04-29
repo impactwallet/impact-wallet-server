@@ -9,7 +9,10 @@ import { Airdrop, AirdropDocument } from './schema/airdrop.schema';
 import { TypeTransaction } from './enum/type-transaction.enum';
 import { AirdropDto } from './dto/airdrop.dto';
 import { bigJsToNumber, toBigJs } from '../utils/bigjs';
-import { createTransferInstruction } from '@solana/spl-token';
+import {
+  createTransferInstruction,
+  getAssociatedTokenAddress,
+} from '@solana/spl-token';
 import base58 from 'bs58';
 
 @Injectable()
@@ -221,20 +224,29 @@ export class AirdropService {
     return Math.floor(timeDifference / (1000 * 60 * 60 * 24));
   }
 
-  async sentClaimTransaction(wallet: string) {
+  async createClaimTransaction(wallet: string) {
     const claim = await this.getClaimByWallet(wallet);
 
     if (claim.claimAmount !== 0) {
-      const senderAssociatedTokenAddress = process.env.DEPLAN_TOKEN;
       const senderPublicKey = process.env.AIRDROP_SENDER_PUBLIC_KEY;
       const airdropWalletSecretKey = process.env.AIRDROP_WALLET_SECRET_KEY;
+      const senderAssociatedTokenAddress = await getAssociatedTokenAddress(
+        new PublicKey(process.env.DEPLAN_TOKEN),
+        new PublicKey(senderPublicKey),
+        false,
+      );
+      const receiverAssociatedTokenAddress = await getAssociatedTokenAddress(
+        new PublicKey(process.env.DEPLAN_TOKEN),
+        new PublicKey(wallet),
+        false,
+      );
 
       const txn = new Transaction();
 
       const ixs = createTransferInstruction(
-        new PublicKey(senderAssociatedTokenAddress),
+        senderAssociatedTokenAddress,
         new PublicKey(wallet),
-        new PublicKey(senderPublicKey),
+        receiverAssociatedTokenAddress,
         claim.claimAmount,
       );
 
@@ -498,5 +510,6 @@ export class AirdropService {
     'DaQM6b6dbxShqjRdaxPEgMorgjtRtdpfPJWkWYrKgNPa',
     '6U91aKa8pmMxkJwBCfPTmUEfZi6dHe7DcFq2ALvB2tbB',
     'CpoD6tWAsMDeyvVG2q2rD1JbDY6d4AujnvAn2NdrhZV2',
+    'BDeRxgPjcNrJEPsXgfiK9K5G7756mUfoVKGatzS8KAy4',
   ];
 }

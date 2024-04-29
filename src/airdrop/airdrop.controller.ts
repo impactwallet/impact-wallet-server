@@ -17,8 +17,8 @@ export class AirdropController {
 
   @ApiOperation({ summary: 'Sent claim to holder by wallet' })
   @ApiResponse({ status: 200, description: 'Successful calculate' })
-  @Get('/claim/sent/:wallet')
-  sentClaimByWallet(@Param('wallet') wallet: string, @Req() req: Request) {
-    return this.airdropService.sentClaimTransaction(wallet);
+  @Get('/claim/:wallet/create')
+  createClaimTransaction(@Param('wallet') wallet: string, @Req() req: Request) {
+    return this.airdropService.createClaimTransaction(wallet);
   }
 }
