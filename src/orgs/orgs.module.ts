@@ -3,10 +3,6 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { Org, OrgSchema } from './schema/org.schema';
 import { OrgsController } from './orgs.controller';
 import { OrgsService } from './orgs.service';
-import { UsersModule } from 'src/users/users.module';
-import { ApiServiceModule } from 'src/api-service/api.module';
-import { MembersModule } from 'src/members/members.module';
-import { S3Module } from 'src/s3/s3.module';
 import { PaymentModule } from '../payment/payment.module';
 import { OrgsLiteController } from './orgs.controller.lite';
 import { OrgsServiceLite } from './orgs.service.lite';
@@ -14,6 +10,10 @@ import { AuthModule } from '../auth/auth.module';
 import { JwtModule } from '@nestjs/jwt';
 import { Member, MemberSchema } from '../members/schema/member.schema';
 import { Payment, PaymentSchema } from '../payment/schema/payment.schema';
+import { ApiServiceModule } from '../api-service/api.module';
+import { MembersModule } from '../members/members.module';
+import { S3Module } from '../s3/s3.module';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [

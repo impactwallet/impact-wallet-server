@@ -22,11 +22,6 @@ import {
 } from 'lodash';
 import mongoose, { ClientSession, Model, PipelineStage, Types } from 'mongoose';
 import { delay, firstValueFrom, of } from 'rxjs';
-import { ApiService } from 'src/api-service/api.service';
-import { MemberDto } from 'src/members/dto/members.dto';
-import { MembersService } from 'src/members/members.service';
-import { Member, MemberDocument } from 'src/members/schema/member.schema';
-import { S3Service } from 'src/s3/s3.service';
 import { v4 as uuid } from 'uuid';
 import { AuthService } from '../auth/auth.service';
 import { AccountModel } from '../auth/models/account.model';
@@ -59,6 +54,11 @@ import {
 import { OrgSplitDto } from './dto/org-split.dto';
 import { UserDocument } from '../users/schema/user.schema';
 import { PaymentService } from '../payment/payment.service';
+import { ApiService } from '../api-service/api.service';
+import { MemberDto } from '../members/dto/members.dto';
+import { MembersService } from '../members/members.service';
+import { Member, MemberDocument } from '../members/schema/member.schema';
+import { S3Service } from '../s3/s3.service';
 
 const MINT_STATUS_RETRIES = 5;
 
