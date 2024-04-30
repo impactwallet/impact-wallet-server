@@ -8,6 +8,7 @@ import {
   Connection,
   Keypair,
   LAMPORTS_PER_SOL,
+  NONCE_ACCOUNT_LENGTH,
   ParsedTransactionWithMeta,
   PublicKey,
   sendAndConfirmTransaction,
@@ -400,7 +401,7 @@ export class ApiService {
     }
   }
 
-  async airdrop(walletAddress: string, password: string) {
+  async airdrop(walletAddress: string) {
     if (this.isMainnet) {
       return;
     }
@@ -858,5 +859,36 @@ export class ApiService {
     }
 
     return simulation.value.unitsConsumed;
+  }
+
+  async createNonceAccount() {
+    const authoritySk = await this.getPK(
+      process.env.FEE_PAYER,
+      process.env.FEE_PAYER_PWD,
+    );
+    const authorityAccount = Keypair.fromSecretKey(decode(authoritySk));
+    let nonceAccount = Keypair.generate();
+
+    let minimumAmount = await this.connection.getMinimumBalanceForRentExemption(
+      NONCE_ACCOUNT_LENGTH,
+    );
+
+    let transaction = new Transaction().add(
+      SystemProgram.createNonceAccount({
+        fromPubkey: authorityAccount.publicKey,
+        noncePubkey: nonceAccount.publicKey,
+        authorizedPubkey: authorityAccount.publicKey,
+        lamports: minimumAmount,
+      }),
+    );
+    const priorityFee = this.configService.get<number>(
+      'PRIORITY_FEE_MICRO_LAMPORTS',
+    );
+    const priorityFeeInstruction = ComputeBudgetProgram.setComputeUnitPrice({
+      microLamports: priorityFee,
+    });
+    transaction.add(priorityFeeInstruction);
+    await this.sendTxn(transaction, [authorityAccount, nonceAccount]);
+    return nonceAccount;
   }
 }

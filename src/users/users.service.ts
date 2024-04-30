@@ -65,6 +65,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { UsersFilter } from './dto/users.filter.dto';
 import { User, UserDocument } from './schema/user.schema';
 import { UsersServiceBase } from './users.service.base';
+import { UserNonce } from './schema/user-nonce.schema';
 
 @Injectable()
 export class UsersService extends UsersServiceBase {
@@ -80,13 +81,14 @@ export class UsersService extends UsersServiceBase {
     @InjectModel(SaleOffer.name)
     private saleOfferRepository: SaleOfferModel,
     @InjectConnection() private readonly connection: mongoose.Connection,
-    private apiService: ApiService,
+    protected apiService: ApiService,
     private membersService: MembersService,
     private jwtService: JwtService,
     private s3Service: S3Service,
     private authService: AuthService,
+    @InjectModel(UserNonce.name) userNonceModel: Model<UserNonce>,
   ) {
-    super(userRepository);
+    super(userRepository, userNonceModel, apiService);
   }
 
   async getUsersByNicknamePrivate(name: string): Promise<User[]> {

@@ -16,6 +16,7 @@ import { toBigJs } from '../utils/bigjs';
 import { ApiService } from '../api-service/api.service';
 import { Member, MemberDocument } from '../members/schema/member.schema';
 import { Org, OrgDocument } from '../orgs/schema/org.schema';
+import { UserNonce } from './schema/user-nonce.schema';
 
 @Injectable()
 export class UsersServiceLite extends UsersServiceBase {
@@ -23,9 +24,10 @@ export class UsersServiceLite extends UsersServiceBase {
     @InjectModel(User.name) userRepository: Model<UserDocument>,
     @InjectModel(Member.name) private memberRepository: Model<MemberDocument>,
     @InjectModel(Org.name) private orgRepository: Model<OrgDocument>,
-    private apiService: ApiService,
+    @InjectModel(Org.name) userNonceModel: Model<UserNonce>,
+    protected apiService: ApiService,
   ) {
-    super(userRepository);
+    super(userRepository, userNonceModel, apiService);
   }
 
   async sendAssets(

@@ -1,6 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { ApiService } from '../api-service/api.service';
-import { Connection, Keypair, PublicKey, Transaction } from '@solana/web3.js';
+import {
+  Connection,
+  Keypair,
+  NonceAccount,
+  PublicKey,
+  SystemProgram,
+  Transaction,
+} from '@solana/web3.js';
 import { delay, map } from 'bluebird';
 import { get, isEmpty, isNil } from 'lodash';
 import { InjectModel } from '@nestjs/mongoose';
@@ -13,7 +20,8 @@ import {
   createTransferInstruction,
   getAssociatedTokenAddress,
 } from '@solana/spl-token';
-import base58 from 'bs58';
+import { decode } from 'bs58';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class AirdropService {
@@ -21,6 +29,7 @@ export class AirdropService {
     @InjectModel(Airdrop.name)
     private airdropRepository: Model<AirdropDocument>,
     private readonly apiService: ApiService,
+    private readonly userService: UsersService,
   ) {}
 
   connection = new Connection(process.env.SOLANA_RPC_URL, 'confirmed');
@@ -229,35 +238,46 @@ export class AirdropService {
 
     if (claim.claimAmount !== 0) {
       const senderPublicKey = process.env.AIRDROP_SENDER_PUBLIC_KEY;
-      const airdropWalletSecretKey = process.env.AIRDROP_WALLET_SECRET_KEY;
+      const airdropWalletSecretKey = process.env.AIRDROP_SENDER_SK;
       const senderAssociatedTokenAddress = await getAssociatedTokenAddress(
         new PublicKey(process.env.DEPLAN_TOKEN),
         new PublicKey(senderPublicKey),
         false,
       );
-      const receiverAssociatedTokenAddress = await getAssociatedTokenAddress(
+      const receiptAssociatedTokenAddress = await getAssociatedTokenAddress(
         new PublicKey(process.env.DEPLAN_TOKEN),
         new PublicKey(wallet),
         false,
       );
+      const senderNonce = await this.userService.getNonce(senderPublicKey);
+      const senderAccount = Keypair.fromSecretKey(decode(senderNonce.nonce));
 
       const txn = new Transaction();
 
+      txn.add(
+        SystemProgram.nonceAdvance({
+          authorizedPubkey: new PublicKey(senderPublicKey),
+          noncePubkey: senderAccount.publicKey,
+        }),
+      );
+
       const ixs = createTransferInstruction(
         senderAssociatedTokenAddress,
-        new PublicKey(wallet),
-        receiverAssociatedTokenAddress,
+        receiptAssociatedTokenAddress,
+        new PublicKey(senderPublicKey),
         claim.claimAmount,
       );
 
       txn.add(ixs);
 
-      const blockhash = await this.connection.getLatestBlockhash('finalized');
-      txn.recentBlockhash = blockhash.blockhash;
-
-      txn.partialSign(
-        Keypair.fromSecretKey(base58.decode(airdropWalletSecretKey)),
+      const accountInfo = await this.connection.getAccountInfo(
+        senderAccount.publicKey,
       );
+      const nonceAccountData = NonceAccount.fromAccountData(accountInfo.data);
+      txn.recentBlockhash = nonceAccountData.nonce;
+      txn.feePayer = new PublicKey(wallet);
+
+      txn.partialSign(Keypair.fromSecretKey(decode(airdropWalletSecretKey)));
 
       const txnHash = txn
         .serialize({ requireAllSignatures: false })
@@ -297,7 +317,7 @@ export class AirdropService {
       $or: [{ error: { $eq: null } }, { error: { $exists: false } }],
     });
     if (holder.isClaim === false) {
-      airdropResult.claimAmount = holder.claimAmount;
+      airdropResult.claimAmount = Math.floor(holder.claimAmount);
     }
     return airdropResult;
   }

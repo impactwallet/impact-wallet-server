@@ -18,6 +18,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { ApiServiceModule } from '../api-service/api.module';
 import { S3Module } from '../s3/s3.module';
 import { Member, MemberSchema } from '../members/schema/member.schema';
+import { UserNonce, UserNonceSchema } from './schema/user-nonce.schema';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { Member, MemberSchema } from '../members/schema/member.schema';
       { name: Payment.name, schema: PaymentSchema },
       { name: Contribution.name, schema: ContributionSchema },
       { name: SaleOffer.name, schema: SaleOfferSchema },
+      { name: UserNonce.name, schema: UserNonceSchema },
     ]),
     JwtModule.register({
       secret: process.env.PRIVATE_KEY || 'SECRET',
