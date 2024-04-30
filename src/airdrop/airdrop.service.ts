@@ -215,10 +215,6 @@ export class AirdropService {
       }
     }
     console.log('Successfully received data for each holder');
-
-    await this.airdropCalculations();
-
-    console.log('The calculation was completed successfully');
   }
 
   private async getDaysDifference(
@@ -322,7 +318,7 @@ export class AirdropService {
     return airdropResult;
   }
 
-  private async airdropCalculations() {
+  async airdropCalculations() {
     console.log('Start calculating percentages for each holder');
 
     const allHolders = await this.airdropRepository.find({
@@ -353,6 +349,8 @@ export class AirdropService {
 
     console.log('Total amount: ' + bigJsToNumber(totalAmount));
     console.log('Total percent: ' + bigJsToNumber(checkTotalPercent));
+
+    console.log('The calculation was completed successfully');
   }
 
   private async finalCalculations(
