@@ -283,10 +283,10 @@ export class AirdropService {
 
   async getClaimByWallet(wallet: string) {
     const airdropResult = {
-      HoldFromDate: '1711152000',
-      HoldToDate: '1714521599',
-      ClaimFromDate: '1714521600',
-      ClaimToDate: '1717804800',
+      holdFromDate: 1711152000,
+      holdToDate: 1714521599,
+      claimFromDate: 1714521600,
+      claimToDate: 1717804800,
       claimAmount: 0,
       txnHash: '',
     };
