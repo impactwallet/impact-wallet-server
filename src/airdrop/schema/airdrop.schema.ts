@@ -63,6 +63,10 @@ export class Airdrop {
   @Prop({ type: String })
   txnHash: string;
 
+  @ApiProperty({ description: 'Transaction error' })
+  @Prop({ type: String })
+  txnError: string;
+
   @ApiProperty({ description: 'Has the holder received a claim' })
   @Prop({ default: false, type: Boolean })
   isClaim: boolean;

@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { ApiService } from '../api-service/api.service';
 import {
+  ComputeBudgetProgram,
   Connection,
   Keypair,
   NonceAccount,
@@ -233,11 +234,12 @@ export class AirdropService {
     const claim = await this.getClaimByWallet(wallet);
 
     if (claim.claimAmount !== 0) {
-      const senderPublicKey = process.env.AIRDROP_SENDER_PUBLIC_KEY;
-      const airdropWalletSecretKey = process.env.AIRDROP_SENDER_SK;
+      const airdropAccount = Keypair.fromSecretKey(
+        decode(process.env.AIRDROP_SENDER_SK),
+      );
       const senderAssociatedTokenAddress = await getAssociatedTokenAddress(
         new PublicKey(process.env.DEPLAN_TOKEN),
-        new PublicKey(senderPublicKey),
+        airdropAccount.publicKey,
         false,
       );
       const receiptAssociatedTokenAddress = await getAssociatedTokenAddress(
@@ -245,56 +247,93 @@ export class AirdropService {
         new PublicKey(wallet),
         false,
       );
-      const senderNonce = await this.userService.getNonce(senderPublicKey);
-      const senderAccount = Keypair.fromSecretKey(decode(senderNonce.nonce));
+      const airdropNonce = await this.userService.getNonce(
+        airdropAccount.publicKey.toBase58(),
+      );
+      const airdropNonceAccount = Keypair.fromSecretKey(
+        decode(airdropNonce.nonce),
+      );
+      const payer = new PublicKey(wallet);
 
       const txn = new Transaction();
-
-      txn.add(
-        SystemProgram.nonceAdvance({
-          authorizedPubkey: new PublicKey(senderPublicKey),
-          noncePubkey: senderAccount.publicKey,
-        }),
-      );
 
       const ixs = createTransferInstruction(
         senderAssociatedTokenAddress,
         receiptAssociatedTokenAddress,
-        new PublicKey(senderPublicKey),
+        airdropAccount.publicKey,
         claim.claimAmount,
       );
 
+      txn.add(
+        SystemProgram.nonceAdvance({
+          authorizedPubkey: new PublicKey(process.env.FEE_PAYER),
+          noncePubkey: airdropNonceAccount.publicKey,
+        }),
+      );
       txn.add(ixs);
 
       const accountInfo = await this.connection.getAccountInfo(
-        senderAccount.publicKey,
+        airdropNonceAccount.publicKey,
       );
       const nonceAccountData = NonceAccount.fromAccountData(accountInfo.data);
       txn.recentBlockhash = nonceAccountData.nonce;
-      txn.feePayer = new PublicKey(wallet);
+      let units = await this.apiService.getSimulationUnits(
+        this.connection,
+        txn.instructions,
+        payer,
+      );
+      if (units) {
+        units = Math.ceil(units * 1.05); // margin of error
+        txn.add(ComputeBudgetProgram.setComputeUnitLimit({ units }));
+      }
+      txn.feePayer = payer;
 
-      txn.partialSign(Keypair.fromSecretKey(decode(airdropWalletSecretKey)));
+      txn.partialSign(airdropAccount);
+      await this.apiService.signByFeePayer(txn);
 
       const txnHash = txn
         .serialize({ requireAllSignatures: false })
         .toString('base64');
 
       claim.txnHash = txnHash;
+    }
 
+    return claim;
+  }
+
+  async sendClaimTransaction(wallet: string, body: any) {
+    const airdropNonce = await this.userService.getNonce(wallet);
+    const airdropNonceAccount = Keypair.fromSecretKey(
+      decode(airdropNonce.nonce),
+    );
+    try {
+      const txnHash = await this.apiService.sendEncodedTxn(
+        body.txn,
+        airdropNonceAccount,
+      );
       await this.airdropRepository.findOneAndUpdate(
         {
           wallet: wallet,
           typeTransaction: TypeTransaction.RESULT,
-          $or: [{ error: { $eq: null } }, { error: { $exists: false } }],
         },
         {
           txnHash: txnHash,
           isClaim: true,
         },
       );
+    } catch (e) {
+      const message = get(e, 'message', e);
+      await this.airdropRepository.findOneAndUpdate(
+        {
+          wallet: wallet,
+          typeTransaction: TypeTransaction.RESULT,
+        },
+        {
+          txnError: message,
+        },
+      );
+      throw new InternalServerErrorException({ message });
     }
-
-    return claim;
   }
 
   async getClaimByWallet(wallet: string) {
@@ -312,9 +351,10 @@ export class AirdropService {
       typeTransaction: TypeTransaction.RESULT,
       $or: [{ error: { $eq: null } }, { error: { $exists: false } }],
     });
-    if (holder.isClaim === false) {
-      airdropResult.claimAmount = Math.floor(holder.claimAmount);
+    if (isNil(holder) || holder.isClaim) {
+      return airdropResult;
     }
+    airdropResult.claimAmount = Math.floor(holder.claimAmount);
     return airdropResult;
   }
 

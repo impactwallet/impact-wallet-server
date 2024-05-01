@@ -3,12 +3,15 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { AxiosRequestConfig } from 'axios';
 import {
+  BlockheightBasedTransactionConfirmationStrategy,
   Cluster,
   ComputeBudgetProgram,
   Connection,
+  DurableNonceTransactionConfirmationStrategy,
   Keypair,
   LAMPORTS_PER_SOL,
   NONCE_ACCOUNT_LENGTH,
+  NonceAccount,
   ParsedTransactionWithMeta,
   PublicKey,
   sendAndConfirmTransaction,
@@ -890,5 +893,70 @@ export class ApiService {
     transaction.add(priorityFeeInstruction);
     await this.sendTxn(transaction, [authorityAccount, nonceAccount]);
     return nonceAccount;
+  }
+
+  async sendEncodedTxn(txn: string, nonceAccount?: any) {
+    try {
+      const txnHash = await this.connection.sendEncodedTransaction(txn);
+      const latestBlockHash = await this.connection.getLatestBlockhash();
+      if (!isNil(nonceAccount)) {
+        const accountInfo = await this.connection.getAccountInfoAndContext(
+          nonceAccount.publicKey,
+        );
+        const nonceAccountData = NonceAccount.fromAccountData(
+          accountInfo.value.data,
+        );
+        const confirmStrategy: DurableNonceTransactionConfirmationStrategy = {
+          nonceValue: nonceAccountData.nonce,
+          nonceAccountPubkey: nonceAccount.publicKey,
+          signature: txnHash,
+          minContextSlot: accountInfo.context.slot,
+        };
+        await this.connection.confirmTransaction(confirmStrategy);
+      } else {
+        const confirmStrategy: BlockheightBasedTransactionConfirmationStrategy =
+          {
+            blockhash: latestBlockHash.blockhash,
+            lastValidBlockHeight: latestBlockHash.lastValidBlockHeight,
+            signature: txnHash,
+          };
+        await this.connection.confirmTransaction(confirmStrategy);
+      }
+      return txnHash;
+    } catch (err) {
+      err.message = `Error sending transaction: ${err.message}`;
+      throw err;
+    }
+  }
+
+  async advanceNonce(noncePubkey: string) {
+    const txn = new Transaction();
+
+    txn.add(
+      SystemProgram.nonceAdvance({
+        authorizedPubkey: new PublicKey(process.env.FEE_PAYER),
+        noncePubkey: new PublicKey(noncePubkey),
+      }),
+    );
+
+    const { blockhash } = await this.connection.getLatestBlockhash();
+    txn.recentBlockhash = blockhash;
+    txn.feePayer = new PublicKey(process.env.FEE_PAYER);
+    const feePayerPk = await this.getPK(
+      process.env.FEE_PAYER,
+      process.env.FEE_PAYER_PWD,
+    );
+    const signature = await this.sendTxn(txn, [
+      Keypair.fromSecretKey(decode(feePayerPk)),
+    ]);
+    return signature;
+  }
+
+  async signByFeePayer(txn: Transaction) {
+    const feePayerPk = await this.getPK(
+      process.env.FEE_PAYER,
+      process.env.FEE_PAYER_PWD,
+    );
+    txn.partialSign(Keypair.fromSecretKey(decode(feePayerPk)));
   }
 }

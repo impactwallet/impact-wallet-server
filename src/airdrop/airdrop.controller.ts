@@ -1,5 +1,5 @@
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { Controller, Get, Param, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
 import { AirdropService } from './airdrop.service';
 import { Request } from 'express';
 
@@ -15,10 +15,17 @@ export class AirdropController {
     return this.airdropService.getClaimByWallet(wallet);
   }
 
-  @ApiOperation({ summary: 'Sent claim to holder by wallet' })
+  @ApiOperation({ summary: 'Create claim to holder by wallet' })
   @ApiResponse({ status: 200, description: 'Successful calculate' })
   @Get('/claim/:wallet/create')
   createClaimTransaction(@Param('wallet') wallet: string, @Req() req: Request) {
     return this.airdropService.createClaimTransaction(wallet);
+  }
+
+  @ApiOperation({ summary: 'Sent claim to holder by wallet' })
+  @ApiResponse({ status: 200, description: 'Successful calculate' })
+  @Post('/claim/:wallet/create')
+  sendClaimTransaction(@Param('wallet') wallet: string, @Body() body: any) {
+    return this.airdropService.sendClaimTransaction(wallet, body);
   }
 }
