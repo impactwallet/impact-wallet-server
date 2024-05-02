@@ -272,6 +272,11 @@ export class AirdropService {
       );
       txn.add(ixs);
 
+      const priorityFeeInstruction = ComputeBudgetProgram.setComputeUnitPrice({
+        microLamports: 50000,
+      });
+      txn.add(priorityFeeInstruction);
+
       const accountInfo = await this.connection.getAccountInfo(
         airdropNonceAccount.publicKey,
       );
@@ -302,36 +307,29 @@ export class AirdropService {
   }
 
   async sendClaimTransaction(wallet: string, body: any) {
+    const query = {
+      wallet: wallet,
+      typeTransaction: TypeTransaction.RESULT,
+    };
     const airdropNonce = await this.userService.getNonce(wallet);
     const airdropNonceAccount = Keypair.fromSecretKey(
       decode(airdropNonce.nonce),
     );
     try {
+      await this.airdropRepository.findOneAndUpdate(query, { isClaim: true });
       const txnHash = await this.apiService.sendEncodedTxn(
         body.txn,
         airdropNonceAccount,
       );
-      await this.airdropRepository.findOneAndUpdate(
-        {
-          wallet: wallet,
-          typeTransaction: TypeTransaction.RESULT,
-        },
-        {
-          txnHash: txnHash,
-          isClaim: true,
-        },
-      );
+      await this.airdropRepository.findOneAndUpdate(query, {
+        txnHash,
+      });
     } catch (e) {
       const message = get(e, 'message', e);
-      await this.airdropRepository.findOneAndUpdate(
-        {
-          wallet: wallet,
-          typeTransaction: TypeTransaction.RESULT,
-        },
-        {
-          txnError: message,
-        },
-      );
+      await this.airdropRepository.findOneAndUpdate(query, {
+        txnError: message,
+        isClaim: false,
+      });
       throw new InternalServerErrorException({ message });
     }
   }
