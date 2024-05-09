@@ -3,6 +3,7 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { AxiosRequestConfig } from 'axios';
 import {
+  AddressLookupTableAccount,
   BlockheightBasedTransactionConfirmationStrategy,
   Cluster,
   ComputeBudgetProgram,
@@ -154,8 +155,6 @@ export class ApiService {
     const mintPublicKey = new PublicKey(mint);
     const instructionsPromises = recepients.map(
       async ({ senderPk, wallet, amount }) => {
-        console.log('amount:', amount);
-        console.log('wallet:', wallet);
         const senderKeypair = Keypair.fromSecretKey(decode(senderPk));
         const senderAssociatedTokenAddress = await getAssociatedTokenAddress(
           mintPublicKey,
@@ -313,7 +312,91 @@ export class ApiService {
     }
   }
 
-  async transferUSDC(
+  async createAndSendVersionedTxn(
+    instructions: TransactionInstruction[],
+    pks: string[],
+    retries = 0,
+    addressLookupTableAccounts?: AddressLookupTableAccount[],
+  ) {
+    try {
+      const connection = new Connection(
+        process.env.SOLANA_RPC_URL_WRITE,
+        'confirmed',
+      );
+
+      const messageV0 = new TransactionMessage({
+        payerKey: null,
+        recentBlockhash: null,
+        instructions: [],
+      });
+
+      instructions.forEach((instruction) => {
+        if (!isNil(instruction)) {
+          messageV0.instructions.push(instruction);
+        }
+      });
+
+      if (isEmpty(messageV0.instructions)) {
+        return;
+      }
+
+      const priorityFee = +process.env.PRIORITY_FEE_MICRO_LAMPORTS;
+      const priorityFeeInstruction = ComputeBudgetProgram.setComputeUnitPrice({
+        microLamports: priorityFee,
+      });
+      messageV0.instructions.push(priorityFeeInstruction);
+
+      let units = await this.getSimulationUnits(
+        this.connection,
+        messageV0.instructions,
+        new PublicKey(process.env.FEE_PAYER),
+        addressLookupTableAccounts,
+      );
+      console.log('units:', units);
+      if (units) {
+        units = Math.ceil(units * 1.05); // margin of error
+        messageV0.instructions.push(
+          ComputeBudgetProgram.setComputeUnitLimit({ units }),
+        );
+      }
+
+      const feePayerPk = await this.getPK(
+        process.env.FEE_PAYER,
+        process.env.FEE_PAYER_PWD,
+      );
+      messageV0.payerKey = new PublicKey(process.env.FEE_PAYER);
+      const signers = pks.map((pk) => Keypair.fromSecretKey(decode(pk)));
+      const { blockhash } = await connection.getLatestBlockhash('finalized');
+      messageV0.recentBlockhash = blockhash;
+
+      const txn = new VersionedTransaction(
+        messageV0.compileToV0Message(addressLookupTableAccounts),
+      );
+
+      const signature = await this.sendTxn(
+        txn,
+        signers.concat(Keypair.fromSecretKey(decode(feePayerPk))),
+      );
+      return signature;
+    } catch (err) {
+      if (retries > 0) {
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+        console.log(
+          `Retrying createAndSendVersionedTxn, retries left: ${retries}`,
+        );
+        return this.createAndSendVersionedTxn(
+          instructions,
+          pks,
+          --retries,
+          addressLookupTableAccounts,
+        );
+      }
+      err.message = `Error in createAndSendVersionedTxn: ${err.message}`;
+      throw err;
+    }
+  }
+
+  async transferNativeToken(
     recepients: { senderPk: string; wallet: string; amount: number }[],
   ) {
     if (isEmpty(recepients)) {
@@ -321,7 +404,7 @@ export class ApiService {
     }
     try {
       const signature = await this.transfer(
-        process.env.CREDITS_MINT,
+        process.env.DEPLAN_MINT,
         recepients,
       );
       return signature;
@@ -363,7 +446,7 @@ export class ApiService {
       const toKeypair = Keypair.fromSecretKey(decode(walletPk));
       const rentExemptionAmount =
         await connection.getMinimumBalanceForRentExemption(space);
-      const USDCMintPublicKey = new PublicKey(process.env.CREDITS_MINT);
+      const nativeMintPublicKey = new PublicKey(process.env.DEPLAN_MINT);
 
       const createAccountParams = {
         fromPubkey: new PublicKey(process.env.FEE_PAYER),
@@ -374,7 +457,7 @@ export class ApiService {
       };
 
       const associatedToken = await getAssociatedTokenAddress(
-        USDCMintPublicKey,
+        nativeMintPublicKey,
         toKeypair.publicKey,
         false,
       );
@@ -384,7 +467,7 @@ export class ApiService {
           new PublicKey(process.env.FEE_PAYER),
           associatedToken,
           toKeypair.publicKey,
-          USDCMintPublicKey,
+          nativeMintPublicKey,
         ),
       );
       const blockhash = await connection.getLatestBlockhash('finalized');
@@ -447,13 +530,20 @@ export class ApiService {
     }
   }
 
-  async sendTxn(txn: Transaction, signers: Signer[]) {
+  async sendTxn(txn: Transaction | VersionedTransaction, signers: Signer[]) {
     try {
       const connection = new Connection(
         process.env.SOLANA_RPC_URL_WRITE,
         'confirmed',
       );
-      const txnHash = await sendAndConfirmTransaction(connection, txn, signers);
+      let txnHash: string;
+      if (this._isVersionedTransaction(txn)) {
+        txn.sign(signers);
+        const txnBase64 = Buffer.from(txn.serialize()).toString('base64');
+        txnHash = await this.sendEncodedTxn(txnBase64);
+      } else {
+        txnHash = await sendAndConfirmTransaction(connection, txn, signers);
+      }
       return txnHash;
     } catch (err) {
       err.message = `Error sending transaction: ${err.message}`;
@@ -654,28 +744,22 @@ export class ApiService {
     }
   }
 
-  getUSDCBalance(wallet: string) {
-    return this.getTokenBalance(process.env.CREDITS_MINT, wallet);
+  getNativeTokenBalance(wallet: string) {
+    return this.getTokenBalance(process.env.DEPLAN_MINT, wallet);
   }
 
   async getParsedTransaction(
     signature: TransactionSignature,
-    maxSupportedTransactionVersion?: number,
     retries = RETRIES,
   ): Promise<ParsedTransactionWithMeta> {
     const fn = async (r: number) => {
       let txn: ParsedTransactionWithMeta;
       let error: any;
       try {
-        txn = await this.connection.getParsedTransaction(
-          signature,
-          isNil(maxSupportedTransactionVersion)
-            ? 'confirmed'
-            : {
-                maxSupportedTransactionVersion,
-                commitment: 'confirmed',
-              },
-        );
+        txn = await this.connection.getParsedTransaction(signature, {
+          maxSupportedTransactionVersion: 0,
+          commitment: 'confirmed',
+        });
       } catch (err) {
         error = err;
       }
@@ -710,30 +794,32 @@ export class ApiService {
     const parsedTxns = await map(
       signatures,
       (signature) => {
-        return this.connection.getParsedTransaction(signature);
+        return this.connection.getParsedTransaction(signature, {
+          maxSupportedTransactionVersion: 0,
+        });
       },
       { concurrency: 2 },
     );
     return { associatedAddress, parsedTxns };
   }
 
-  async getRootAssociatedAddress(): Promise<PublicKey> {
+  async getRootNativeAssociatedAddress(): Promise<PublicKey> {
     const rootWallet = process.env.ROOT_PUBKEY;
-    const mintPublicKey = new PublicKey(process.env.CREDITS_MINT);
+    const mintPublicKey = new PublicKey(process.env.DEPLAN_MINT);
     return await getAssociatedTokenAddress(
       mintPublicKey,
       new PublicKey(rootWallet),
     );
   }
 
-  async getUSDCHistory(
+  async getNativeTokenHistory(
     wallet: string,
     options?: SignaturesForAddressOptions,
   ): Promise<{
     associatedAddress: PublicKey;
     parsedTxns: ParsedTransactionWithMeta[];
   }> {
-    return this.getTokenHistory(wallet, process.env.CREDITS_MINT, options);
+    return this.getTokenHistory(wallet, process.env.DEPLAN_MINT, options);
   }
 
   async getAccountInfo(address: string) {
@@ -838,6 +924,7 @@ export class ApiService {
     connection: Connection,
     instructions: TransactionInstruction[],
     payer: PublicKey,
+    addressLookupTableAccounts?: AddressLookupTableAccount[],
   ): Promise<number | undefined> {
     const testInstructions = [
       ComputeBudgetProgram.setComputeUnitLimit({ units: 1_400_000 }),
@@ -849,7 +936,7 @@ export class ApiService {
         instructions: testInstructions,
         payerKey: payer,
         recentBlockhash: PublicKey.default.toString(),
-      }).compileToV0Message(),
+      }).compileToV0Message(addressLookupTableAccounts),
     );
 
     const simulation = await connection.simulateTransaction(testVersionedTxn, {
@@ -958,5 +1045,33 @@ export class ApiService {
       process.env.FEE_PAYER_PWD,
     );
     txn.partialSign(Keypair.fromSecretKey(decode(feePayerPk)));
+  }
+
+  async getAddressLookupTableAccounts(
+    keys: string[],
+  ): Promise<AddressLookupTableAccount[]> {
+    const addressLookupTableAccountInfos =
+      await this.connection.getMultipleAccountsInfo(
+        keys.map((key) => new PublicKey(key)),
+      );
+
+    return addressLookupTableAccountInfos.reduce((acc, accountInfo, index) => {
+      const addressLookupTableAddress = keys[index];
+      if (accountInfo) {
+        const addressLookupTableAccount = new AddressLookupTableAccount({
+          key: new PublicKey(addressLookupTableAddress),
+          state: AddressLookupTableAccount.deserialize(accountInfo.data),
+        });
+        acc.push(addressLookupTableAccount);
+      }
+
+      return acc;
+    }, new Array<AddressLookupTableAccount>());
+  }
+
+  _isVersionedTransaction(
+    transaction: Transaction | VersionedTransaction,
+  ): transaction is VersionedTransaction {
+    return 'version' in transaction;
   }
 }

@@ -8,10 +8,18 @@ export class BalanceDto {
   @ApiProperty({ description: 'Bonus balance of user' })
   readonly bonusBalance: TokenAmount;
 
-  static create(balance: TokenAmount, bonusBalance: TokenAmount): BalanceDto {
+  @ApiProperty({ description: 'USDC balance of user' })
+  readonly usdcBalance: number;
+
+  static create(
+    balance: TokenAmount,
+    bonusBalance: TokenAmount,
+    usdcBalance: number,
+  ): BalanceDto {
     return {
       balance,
       bonusBalance,
+      usdcBalance,
     };
   }
 }

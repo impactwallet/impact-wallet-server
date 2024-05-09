@@ -47,7 +47,7 @@ import { AuthService } from '../auth/auth.service';
 import { JwtService } from '@nestjs/jwt';
 import { AccountModel } from '../auth/models/account.model';
 import { isDefined } from 'class-validator';
-import { toBigJs } from '../utils/bigjs';
+import { toBigJs, toFixed } from '../utils/bigjs';
 import * as moment from 'moment';
 import { ApiService } from '../api-service/api.service';
 import { S3Service } from '../s3/s3.service';
@@ -57,7 +57,10 @@ import { BalanceDto } from './dto/balance.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { CreateUserResponseDto } from './dto/create-user.response.dto';
 import { CreditsBurnDto } from './dto/credits-burn.dto';
-import { CreditsWithdrawDto } from './dto/credits-withdraw.dto';
+import {
+  CreditsWithdrawDto,
+  CreditsWithdrawToken,
+} from './dto/credits-withdraw.dto';
 import { SearchUserByNicknameDto } from './dto/search-user-by-nickname.dto';
 import { SendAssetsDto } from './dto/send-assets.dto';
 import { SendUsdcDto } from './dto/send-usdc.dto';
@@ -66,6 +69,7 @@ import { UsersFilter } from './dto/users.filter.dto';
 import { User, UserDocument } from './schema/user.schema';
 import { UsersServiceBase } from './users.service.base';
 import { UserNonce } from './schema/user-nonce.schema';
+import { DexService, TokenSymbol } from '../api-service/dex.service';
 
 @Injectable()
 export class UsersService extends UsersServiceBase {
@@ -86,6 +90,7 @@ export class UsersService extends UsersServiceBase {
     private jwtService: JwtService,
     private s3Service: S3Service,
     private authService: AuthService,
+    private dexService: DexService,
     @InjectModel(UserNonce.name) userNonceModel: Model<UserNonce>,
   ) {
     super(userRepository, userNonceModel, apiService);
@@ -286,13 +291,19 @@ export class UsersService extends UsersServiceBase {
         ? await this.getByUserId(account.id.toString(), '+password')
         : null;
       if (!isNil(user)) {
-        bonusBalance = await this.apiService.getUSDCBalance(user.bonusWallet);
+        bonusBalance = await this.apiService.getNativeTokenBalance(
+          user.bonusWallet,
+        );
       }
     }
+    const priceData = await this.dexService.getUsdcPrice(TokenSymbol.DPLN);
+    const balance = await this.apiService.getNativeTokenBalance(account.wallet);
+    const usdcBalance = toFixed(
+      toBigJs(balance.uiAmount).mul(priceData.price),
+      6,
+    ).toNumber();
 
-    const balance = await this.apiService.getUSDCBalance(account.wallet);
-
-    return BalanceDto.create(balance, bonusBalance);
+    return BalanceDto.create(balance, bonusBalance, usdcBalance);
   }
 
   async getUserAssetHistory(account: AccountModel, orgId: string) {
@@ -307,7 +318,7 @@ export class UsersService extends UsersServiceBase {
 
   async sendUsdc(account: AccountModel, sendUsdcDto: SendUsdcDto) {
     const balance = toBigJs(
-      (await this.apiService.getUSDCBalance(account.wallet)).uiAmount,
+      (await this.apiService.getNativeTokenBalance(account.wallet)).uiAmount,
     );
     if (balance.lt(sendUsdcDto.amount)) {
       throw new BadRequestException('Not enough Credit$ to send');
@@ -327,7 +338,7 @@ export class UsersService extends UsersServiceBase {
       },
     ];
 
-    const signature = await this.apiService.transferUSDC(recipients);
+    const signature = await this.apiService.transferNativeToken(recipients);
     this.apiService.sendNotification(
       `User ${account.username} sent ${sendUsdcDto.amount} Credit$ to ${
         sendUsdcDto.recipient
@@ -342,49 +353,24 @@ export class UsersService extends UsersServiceBase {
       throw new BadRequestException('Recipient is required');
     }
     const balance = toBigJs(
-      (await this.apiService.getUSDCBalance(account.wallet)).uiAmount,
+      (await this.apiService.getNativeTokenBalance(account.wallet)).uiAmount,
     );
     if (balance.lt(body.amount)) {
       throw new BadRequestException('Not enough Credit$ to withdraw');
     }
-    const rootOrg = await this.orgRepository.findOne(
-      { wallet: process.env.ROOT_PUBKEY },
-      '+password',
-    );
-    const rootOrgPk = await this.apiService.getPK(
-      rootOrg.wallet,
-      rootOrg.password,
-    );
-    const accountPk = await this.apiService.getPK(
-      account.wallet,
-      await account.password,
-    );
-    const createUSDCAccountInstruction =
-      await this.apiService.createTokenAccountInstruction(
-        process.env.USDC_MINT,
-        body.recipient,
-      );
-    const transferUSDCInstructions =
-      await this.apiService.createTransferInstructions(process.env.USDC_MINT, [
-        { senderPk: rootOrgPk, wallet: body.recipient, amount: body.amount },
-      ]);
-    const burnCreditsInstruction =
-      await this.apiService.createBurnTokenInstruction(
-        process.env.CREDITS_MINT,
-        account.wallet,
-        body.amount,
-      );
-    const txnFn = this.apiService.createAndSendTxn.bind(
-      this.apiService,
-      [
-        createUSDCAccountInstruction,
-        ...transferUSDCInstructions,
-        burnCreditsInstruction,
-      ],
-      [accountPk, rootOrgPk],
-    );
-    let txnHash = await txnFn();
-    txnHash = await this.apiService.confirmTxnWithRetry(txnHash, txnFn);
+
+    let txnHash: string;
+
+    switch (body.token) {
+      case CreditsWithdrawToken.USDC:
+        txnHash = await this.withdrawAsUsdc(account, body);
+        break;
+      case CreditsWithdrawToken.DPLN:
+        txnHash = await this.withdrawAsDpln(account, body);
+        break;
+      default:
+        return;
+    }
 
     this.apiService.sendNotification(
       `User ${account.username} has succesfuly withdrawn ${
@@ -393,36 +379,57 @@ export class UsersService extends UsersServiceBase {
     );
   }
 
-  async burnCredits(account: AccountModel, body: CreditsBurnDto) {
-    const balance = toBigJs(
-      (await this.apiService.getUSDCBalance(account.wallet)).uiAmount,
-    );
-    if (balance.lt(body.amount)) {
-      throw new BadRequestException('Not enough Credit$ to burn');
-    }
+  async withdrawAsUsdc(account: AccountModel, body: CreditsWithdrawDto) {
     const accountPk = await this.apiService.getPK(
       account.wallet,
       await account.password,
     );
-    const burnCreditsInstruction =
-      await this.apiService.createBurnTokenInstruction(
-        process.env.CREDITS_MINT,
-        account.wallet,
+    const { swapInstructions, addressLookupTableAccounts } =
+      await this.dexService.getSwapInstructions(
+        accountPk,
         body.amount,
+        body.recipient,
       );
-    const txnFn = this.apiService.createAndSendTxn.bind(
-      this.apiService,
-      [burnCreditsInstruction],
+    const createUsdcAccountInstruction =
+      await this.apiService.createTokenAccountInstruction(
+        process.env.USDC_MINT,
+        body.recipient,
+      );
+    const txnHash = await this.apiService.createAndSendVersionedTxn(
+      [createUsdcAccountInstruction, ...swapInstructions],
+      [accountPk],
+      0,
+      addressLookupTableAccounts,
+    );
+    return txnHash;
+  }
+
+  async withdrawAsDpln(account: AccountModel, body: CreditsWithdrawDto) {
+    const accountPk = await this.apiService.getPK(
+      account.wallet,
+      await account.password,
+    );
+    const createDplnAccountInstruction =
+      await this.apiService.createTokenAccountInstruction(
+        process.env.DEPLAN_MINT,
+        body.recipient,
+      );
+    const [transferDplnInstruction] =
+      await this.apiService.createTransferInstructions(
+        process.env.DEPLAN_MINT,
+        [
+          {
+            senderPk: accountPk,
+            wallet: body.recipient,
+            amount: body.amount,
+          },
+        ],
+      );
+    const txnHash = this.apiService.createAndSendTxn(
+      [createDplnAccountInstruction, transferDplnInstruction],
       [accountPk],
     );
-    let txnHash = await txnFn();
-    txnHash = await this.apiService.confirmTxnWithRetry(txnHash, txnFn);
-
-    this.apiService.sendNotification(
-      `User ${account.username} has succesfuly burnt ${
-        body.amount
-      } credits:\n\n${this.apiService.buildExplorerLink('/tx/' + txnHash)}`,
-    );
+    return txnHash;
   }
 
   async sendAssets(
@@ -833,13 +840,14 @@ export class UsersService extends UsersServiceBase {
     );
 
     const balance = toBigJs(
-      (await this.apiService.getUSDCBalance(process.env.FEE_PAYER)).uiAmount,
+      (await this.apiService.getNativeTokenBalance(process.env.FEE_PAYER))
+        .uiAmount,
     );
     if (balance.lt(onboardingBonus)) {
       throw new BadRequestException('Not enough Credit$ to send BONUS');
     }
 
-    const signature = await this.apiService.transferUSDC([
+    const signature = await this.apiService.transferNativeToken([
       {
         senderPk: senderPk,
         wallet: user.bonusWallet,
@@ -873,7 +881,7 @@ export class UsersService extends UsersServiceBase {
     const rootWallet = process.env.ROOT_PUBKEY;
 
     const bonusBalance = (
-      await this.apiService.getUSDCBalance(user.bonusWallet)
+      await this.apiService.getNativeTokenBalance(user.bonusWallet)
     ).uiAmount;
 
     if (bonusBalance === 0) {
@@ -898,7 +906,7 @@ export class UsersService extends UsersServiceBase {
       },
     ];
 
-    const signature = await this.apiService.transferUSDC(recipients);
+    const signature = await this.apiService.transferNativeToken(recipients);
 
     this.apiService.sendNotification(
       `User ${

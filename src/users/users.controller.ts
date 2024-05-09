@@ -211,19 +211,6 @@ export class UsersController {
     return this.userService.withdrawCredits(account, body);
   }
 
-  @ApiOperation({ summary: 'Burn Credit$' })
-  @ApiResponse({ status: 200 })
-  @Post('credits/burn')
-  @HttpCode(HttpStatus.OK)
-  async burnCredits(
-    @Body(new ValidationPipe()) body: CreditsBurnDto,
-    @Req() req: Request,
-  ) {
-    const account = await this.authService.getAccountFromToken(req);
-
-    return this.userService.burnCredits(account, body);
-  }
-
   @ApiOperation({ summary: 'Restore user' })
   @ApiResponse({ status: 200, type: CreateUserResponseDto })
   @Post('restore')

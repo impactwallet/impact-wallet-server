@@ -118,7 +118,7 @@ export class OffersLiteService extends OffersServiceBase {
       }
 
       const balance = toBigJs(
-        (await this.apiService.getUSDCBalance(account.wallet)).uiAmount,
+        (await this.apiService.getNativeTokenBalance(account.wallet)).uiAmount,
       );
       if (balance.lt(body.amount)) {
         throw new BadRequestException({
@@ -289,11 +289,8 @@ export class OffersLiteService extends OffersServiceBase {
         equityAllocation,
         Array.from(investedMembersMap.values()),
       );
-      const { txnHash, commissionAmount } = await this.transferUSDCFromInvestor(
-        org,
-        payment,
-        account,
-      );
+      const { txnHash, commissionAmount } =
+        await this.transferNativeTokenFromInvestor(org, payment, account);
       payment.txnHash = txnHash;
       const txnsHashes = await this.collectEquity(org, memberDataMap, account);
       payment.txnHash += `\n${txnsHashes}`;
@@ -513,7 +510,7 @@ export class OffersLiteService extends OffersServiceBase {
     return txnsHashes;
   }
 
-  async transferUSDCFromInvestor(
+  async transferNativeTokenFromInvestor(
     org: OrgDocument,
     payment: PaymentDocument,
     account: AccountModel,
@@ -530,14 +527,14 @@ export class OffersLiteService extends OffersServiceBase {
       await account.password,
     );
     const orgPk = await this.apiService.getPK(org.wallet, org.password);
-    const createUSDCAccountInstruction =
+    const createNativeAccountInstruction =
       await this.apiService.createTokenAccountInstruction(
-        process.env.CREDITS_MINT,
+        process.env.DEPLAN_MINT,
         org.wallet,
       );
-    const transferUSDCInstructions =
+    const transferNativeInstructions =
       await this.apiService.createTransferInstructions(
-        process.env.CREDITS_MINT,
+        process.env.DEPLAN_MINT,
         [
           {
             senderPk: accountPk,
@@ -558,8 +555,8 @@ export class OffersLiteService extends OffersServiceBase {
       );
     const txnHash = await this.apiService.createAndSendTxn(
       [
-        createUSDCAccountInstruction,
-        ...transferUSDCInstructions,
+        createNativeAccountInstruction,
+        ...transferNativeInstructions,
         createTokenAccountInstruction,
       ],
       [accountPk, orgPk],
@@ -605,14 +602,14 @@ export class OffersLiteService extends OffersServiceBase {
       );
 
       const balance = toBigJs(
-        (await this.apiService.getUSDCBalance(buyer.wallet)).uiAmount,
+        (await this.apiService.getNativeTokenBalance(buyer.wallet)).uiAmount,
       );
 
       if (process.env.ONBOARDING_ENABLED === 'true') {
         bonusWallet = buyerUser ? buyerUser?.bonusWallet : null;
         if (bonusWallet) {
           bonusBalance = toBigJs(
-            (await this.apiService.getUSDCBalance(bonusWallet)).uiAmount,
+            (await this.apiService.getNativeTokenBalance(bonusWallet)).uiAmount,
           );
         }
 
@@ -661,14 +658,14 @@ export class OffersLiteService extends OffersServiceBase {
           seller.wallet,
           seller.password,
         );
-        const createUSDCAccountInstruction =
+        const createNativeAccountInstruction =
           await this.apiService.createTokenAccountInstruction(
-            process.env.CREDITS_MINT,
+            process.env.DEPLAN_MINT,
             seller.wallet,
           );
-        const transferUSDCInstructions =
+        const transferNativeInstructions =
           await this.apiService.createTransferInstructions(
-            process.env.CREDITS_MINT,
+            process.env.DEPLAN_MINT,
             [
               {
                 senderPk: buyerPk,
@@ -691,8 +688,8 @@ export class OffersLiteService extends OffersServiceBase {
           await this.paymentService.handleAssetsSale(payment, session);
         const txnHash = await this.apiService.createAndSendTxn(
           [
-            createUSDCAccountInstruction,
-            ...transferUSDCInstructions,
+            createNativeAccountInstruction,
+            ...transferNativeInstructions,
             createTokenAccountInstruction,
             ...transferTokenInstructions,
           ],

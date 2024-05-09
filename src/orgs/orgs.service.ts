@@ -658,13 +658,13 @@ export class OrgsService {
 
   async getOrgBalance(orgId: string) {
     const org = await this.getByOrgId(orgId);
-    return this.apiService.getUSDCBalance(org.wallet);
+    return this.apiService.getNativeTokenBalance(org.wallet);
   }
 
   async sendUsdc(orgId: string, sendUsdcDto: SendUsdcDto) {
     const org = await this.getByOrgId(orgId, '+password');
     const balance = toBigJs(
-      (await this.apiService.getUSDCBalance(org.wallet)).uiAmount,
+      (await this.apiService.getNativeTokenBalance(org.wallet)).uiAmount,
     );
     if (balance.lt(sendUsdcDto.amount)) {
       throw new BadRequestException('Not enough Credit$ to send');
@@ -679,7 +679,7 @@ export class OrgsService {
       },
     ];
 
-    const signature = await this.apiService.transferUSDC(recipients);
+    const signature = await this.apiService.transferNativeToken(recipients);
     this.apiService.sendNotification(
       `Org ${org.username} sent ${sendUsdcDto.amount} Credit$ to ${
         sendUsdcDto.recipient

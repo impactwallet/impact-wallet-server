@@ -54,7 +54,7 @@ export class AccountService {
     options?: SignaturesForAddressOptions,
   ): Promise<TxnHistoryItemDto[]> {
     const { associatedAddress, parsedTxns } =
-      await this.apiService.getUSDCHistory(account.wallet, options);
+      await this.apiService.getNativeTokenHistory(account.wallet, options);
     return this._buildUsdcHistory(account, associatedAddress, parsedTxns);
   }
 
@@ -68,7 +68,7 @@ export class AccountService {
     });
     const history: TxnHistoryItemDto[] = [];
     const rootAssociatedAddress =
-      await this.apiService.getRootAssociatedAddress();
+      await this.apiService.getRootNativeAssociatedAddress();
     for (const txn of parsedTxns) {
       let count = 0;
       if (!isNil(txn.meta.err)) {

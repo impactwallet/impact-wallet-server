@@ -41,7 +41,7 @@ export class AirdropService {
 
     //Get all our token holders
     const orgHolders = await this.apiService.getTokenHolders(
-      process.env.DEPLAN_TOKEN,
+      process.env.DEPLAN_MINT,
     );
 
     // console.log('1: Holders: ' + JSON.stringify(orgHolders[0]));
@@ -126,7 +126,7 @@ export class AirdropService {
           );
           const postTokenBalance = postTokenBalances.find(
             (token) =>
-              token.mint === process.env.DEPLAN_TOKEN &&
+              token.mint === process.env.DEPLAN_MINT &&
               token.owner === ownerWallet,
           );
 
@@ -145,7 +145,7 @@ export class AirdropService {
 
           const preTokenBalance = preTokenBalances.find(
             (token) =>
-              token.mint === process.env.DEPLAN_TOKEN &&
+              token.mint === process.env.DEPLAN_MINT &&
               token.owner === ownerWallet,
           );
 
@@ -238,12 +238,12 @@ export class AirdropService {
         decode(process.env.AIRDROP_SENDER_SK),
       );
       const senderAssociatedTokenAddress = await getAssociatedTokenAddress(
-        new PublicKey(process.env.DEPLAN_TOKEN),
+        new PublicKey(process.env.DEPLAN_MINT),
         airdropAccount.publicKey,
         false,
       );
       const receiptAssociatedTokenAddress = await getAssociatedTokenAddress(
-        new PublicKey(process.env.DEPLAN_TOKEN),
+        new PublicKey(process.env.DEPLAN_MINT),
         new PublicKey(wallet),
         false,
       );

@@ -406,22 +406,22 @@ export class PaymentService {
       let lowerIndex = i * batchSize;
       let upperIndex = (i + 1) * batchSize;
       const membersToProcess = membersWithAmount.slice(lowerIndex, upperIndex);
-      const createCreditsAccountInstructions = await mapSeries(
+      const createNativeAccountInstructions = await mapSeries(
         membersToProcess,
         ({ wallet }) =>
           this.apiService.createTokenAccountInstruction(
-            process.env.CREDITS_MINT,
+            process.env.DEPLAN_MINT,
             wallet,
           ),
       );
-      const transferUSDCInstructions =
+      const transferNativeInstructions =
         await this.apiService.createTransferInstructions(
-          process.env.CREDITS_MINT,
+          process.env.DEPLAN_MINT,
           membersToProcess,
         );
       const txnFn = this.apiService.createAndSendTxn.bind(
         this.apiService,
-        [...createCreditsAccountInstructions, ...transferUSDCInstructions],
+        [...createNativeAccountInstructions, ...transferNativeInstructions],
         [orgPk],
         3,
       );
@@ -552,14 +552,14 @@ export class PaymentService {
       '+password',
     );
     const balance = toBigJs(
-      (await this.apiService.getUSDCBalance(account.wallet)).uiAmount,
+      (await this.apiService.getNativeTokenBalance(account.wallet)).uiAmount,
     );
 
     if (process.env.ONBOARDING_ENABLED === 'true') {
       bonusWallet = user ? user?.bonusWallet : null;
       if (bonusWallet) {
         bonusBalance = toBigJs(
-          (await this.apiService.getUSDCBalance(bonusWallet)).uiAmount,
+          (await this.apiService.getNativeTokenBalance(bonusWallet)).uiAmount,
         );
       }
 
@@ -590,14 +590,14 @@ export class PaymentService {
       await account.password,
     );
 
-    const createUSDCAccountInstructions =
+    const createNativeAccountInstructions =
       await this.apiService.createTokenAccountInstruction(
-        process.env.CREDITS_MINT,
+        process.env.DEPLAN_MINT,
         org.wallet,
       );
-    const transferUSDCInstructions =
+    const transferNativeInstructions =
       await this.apiService.createTransferInstructions(
-        process.env.CREDITS_MINT,
+        process.env.DEPLAN_MINT,
         [
           { senderPk, wallet: org.wallet, amount: payment.amount },
           {
@@ -608,7 +608,7 @@ export class PaymentService {
         ],
       );
     const txnHash = await this.apiService.createAndSendTxn(
-      [createUSDCAccountInstructions, ...transferUSDCInstructions],
+      [createNativeAccountInstructions, ...transferNativeInstructions],
       [senderPk, orgPk],
     );
     payment.txnHash = txnHash;

@@ -142,7 +142,7 @@ export class OffersService extends OffersServiceBase {
 
         if (offer.memberProspects[0].role === Role.Investor) {
           const balance = toBigJs(
-            (await this.apiService.getUSDCBalance(user.wallet)).uiAmount,
+            (await this.apiService.getNativeTokenBalance(user.wallet)).uiAmount,
           );
           const paymentInfo = {
             info: `Investing $${offer.memberProspects[0].investorSettings.investmentAmount} for ${offer.memberProspects[0].investorSettings.equityAllocation}% of equity allocation`,
@@ -162,7 +162,7 @@ export class OffersService extends OffersServiceBase {
             user.wallet,
             user.password,
           );
-          const txnHash = await this.apiService.transferUSDC([
+          const txnHash = await this.apiService.transferNativeToken([
             { senderPk, wallet: org.wallet, amount: payment.amount },
           ]);
 
@@ -213,7 +213,7 @@ export class OffersService extends OffersServiceBase {
           org: org._id,
         });
         const balance = toBigJs(
-          (await this.apiService.getUSDCBalance(buyer.wallet)).uiAmount,
+          (await this.apiService.getNativeTokenBalance(buyer.wallet)).uiAmount,
         );
         const lamportsAmount = offer.tokensAmount * LAMPORTS_PER_SOL;
 
@@ -238,7 +238,7 @@ export class OffersService extends OffersServiceBase {
           buyer.wallet,
           buyer.password,
         );
-        const txnHash = await this.apiService.transferUSDC([
+        const txnHash = await this.apiService.transferNativeToken([
           { senderPk, wallet: seller.wallet, amount: payment.amount },
         ]);
 
