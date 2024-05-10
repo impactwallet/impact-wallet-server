@@ -299,6 +299,9 @@ export class AccountService {
           return entity;
         }
         const parsed = get(instruction, 'parsed');
+        if (parsed.type === 'burn') {
+          return;
+        }
         const authority = get(
           parsed,
           'info.authority',
