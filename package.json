@@ -56,6 +56,7 @@
     "sharp": "^0.32.1",
     "stripe": "^13.9.0",
     "swagger-ui-express": "^4.6.2",
+    "twitter-api-sdk": "^1.2.1",
     "uuid": "^9.0.0"
   },
   "devDependencies": {

@@ -15,6 +15,7 @@ import { AccountModule } from './account/account.module';
 import { JobsModule } from './jobs-service/jobs.module';
 import { DepositModule } from './deposit/deposit.module';
 import { AirdropModule } from './airdrop/airdrop.module';
+import { SocialsModule } from './socials/socials.module';
 
 export let connection: Connection;
 
@@ -40,6 +41,7 @@ export let connection: Connection;
     JobsModule,
     DepositModule,
     AirdropModule,
+    SocialsModule,
   ],
 })
 export class AppModule {}
