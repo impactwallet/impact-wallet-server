@@ -15,5 +15,6 @@ import {
   ],
   controllers: [SocialsController],
   providers: [SocialsService],
+  exports: [SocialsService],
 })
 export class SocialsModule {}

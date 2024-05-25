@@ -1,4 +1,8 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { ApiService } from '../api-service/api.service';
 import {
   ComputeBudgetProgram,
@@ -15,7 +19,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Airdrop, AirdropDocument } from './schema/airdrop.schema';
 import { TypeTransaction } from './enum/type-transaction.enum';
-import { AirdropDto } from './dto/airdrop.dto';
+import { AirdropClaimQueryDto, AirdropDto } from './dto/airdrop.dto';
 import { bigJsToNumber, toBigJs } from '../utils/bigjs';
 import {
   createTransferInstruction,
@@ -23,6 +27,7 @@ import {
 } from '@solana/spl-token';
 import { decode } from 'bs58';
 import { UsersService } from '../users/users.service';
+import { SocialsService } from '../socials/socials.service';
 
 @Injectable()
 export class AirdropService {
@@ -31,6 +36,7 @@ export class AirdropService {
     private airdropRepository: Model<AirdropDocument>,
     private readonly apiService: ApiService,
     private readonly userService: UsersService,
+    private readonly socialsService: SocialsService,
   ) {}
 
   connection = new Connection(process.env.SOLANA_RPC_URL, 'confirmed');
@@ -230,7 +236,13 @@ export class AirdropService {
     return Math.floor(timeDifference / (1000 * 60 * 60 * 24));
   }
 
-  async createClaimTransaction(wallet: string) {
+  async deplanWalletCheck(wallet: string) {
+    throw new BadRequestException({ message: 'Poshol nahui' });
+  }
+
+  async createClaimTransaction(wallet: string, query: AirdropClaimQueryDto) {
+    await this.socialsService.twitterFollowCheck(wallet);
+    // await this.deplanWalletCheck(query.dePlanWallet);
     const claim = await this.getClaimByWallet(wallet);
 
     if (claim.claimAmount !== 0) {
@@ -342,6 +354,7 @@ export class AirdropService {
       claimToDate: 1717804800,
       claimAmount: 0,
       txnHash: '',
+      isClaim: false,
     };
 
     const holder = await this.airdropRepository.findOne({
@@ -349,10 +362,11 @@ export class AirdropService {
       typeTransaction: TypeTransaction.RESULT,
       $or: [{ error: { $eq: null } }, { error: { $exists: false } }],
     });
-    if (isNil(holder) || holder.isClaim) {
+    if (isNil(holder)) {
       return airdropResult;
     }
-    airdropResult.claimAmount = Math.floor(holder.claimAmount);
+    airdropResult.claimAmount = Math.round(holder.claimAmount);
+    airdropResult.isClaim = holder.isClaim;
     return airdropResult;
   }
 

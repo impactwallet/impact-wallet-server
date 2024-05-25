@@ -5,12 +5,14 @@ import { AirdropController } from './airdrop.controller';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Airdrop, AirdropSchema } from './schema/airdrop.schema';
 import { UsersModule } from '../users/users.module';
+import { SocialsModule } from '../socials/socials.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: Airdrop.name, schema: AirdropSchema }]),
     ApiServiceModule,
     UsersModule,
+    SocialsModule,
   ],
   providers: [AirdropService],
   controllers: [AirdropController],

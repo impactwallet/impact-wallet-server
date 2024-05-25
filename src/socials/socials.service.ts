@@ -50,7 +50,7 @@ export class SocialsService {
     const updatedAtMoment = moment.utc(updatedAt);
     const diff = moment.utc().diff(updatedAtMoment, 'minutes');
     const isFollowing = get(walletSocial, 'isFollowing', false);
-    if (!isFollowing || diff > 2) {
+    if (!isFollowing || diff > 5) {
       throw new HttpException('Not following', HttpStatus.I_AM_A_TEAPOT);
     }
     return { isFollowing };
