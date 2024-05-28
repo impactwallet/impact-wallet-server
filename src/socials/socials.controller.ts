@@ -19,6 +19,6 @@ export class SocialsController {
   @Get('twitter/callback')
   async twitterCallback(@Query() query: any, @Res() res: Response) {
     await this.socialsService.twitterCallback(query);
-    res.send('<script>window.close()</script>');
+    res.redirect('https://airdrop.deplan.xyz');
   }
 }
