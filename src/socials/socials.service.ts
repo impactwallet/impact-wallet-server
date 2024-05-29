@@ -48,9 +48,9 @@ export class SocialsService {
     });
     const updatedAt = get(walletSocial, 'updatedAt');
     const updatedAtMoment = moment.utc(updatedAt);
-    const diff = moment.utc().diff(updatedAtMoment, 'minutes');
+    const diff = moment.utc().diff(updatedAtMoment, 'days');
     const isFollowing = get(walletSocial, 'isFollowing', false);
-    if (!isFollowing || diff > 5) {
+    if (!isFollowing || diff > 3) {
       throw new HttpException('Not following', HttpStatus.I_AM_A_TEAPOT);
     }
     return { isFollowing };
@@ -71,6 +71,12 @@ export class SocialsService {
     if (errors) {
       throw new Error(JSON.stringify(errors));
     }
+
+    try {
+      await this.getTwitterClient(wallet).createTweet(
+        'DePlan is the new plan @DePlan_xyz',
+      );
+    } catch (e) {}
 
     await this.walletSocialModel.findOneAndUpdate(
       { wallet },

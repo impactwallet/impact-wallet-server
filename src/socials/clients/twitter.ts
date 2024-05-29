@@ -9,6 +9,7 @@ class TwitterClient {
     callback: `${process.env.SERVER_URL}/socials/twitter/callback`,
     scopes: [
       'tweet.read',
+      'tweet.write',
       'users.read',
       'offline.access',
       'follows.write',
@@ -95,6 +96,18 @@ class TwitterClient {
       throw error;
     }
   };
+
+  async createTweet(text: string) {
+    try {
+      const result = await this.client.tweets.createTweet({
+        text,
+      });
+      return result;
+    } catch (error) {
+      console.log('error createTweet --->', JSON.stringify(error));
+      throw error;
+    }
+  }
 }
 
 export default TwitterClient;
