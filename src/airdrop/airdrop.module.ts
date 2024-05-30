@@ -6,6 +6,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { Airdrop, AirdropSchema } from './schema/airdrop.schema';
 import { UsersModule } from '../users/users.module';
 import { SocialsModule } from '../socials/socials.module';
+import { OrgsModule } from '../orgs/orgs.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { SocialsModule } from '../socials/socials.module';
     ApiServiceModule,
     UsersModule,
     SocialsModule,
+    OrgsModule,
   ],
   providers: [AirdropService],
   controllers: [AirdropController],

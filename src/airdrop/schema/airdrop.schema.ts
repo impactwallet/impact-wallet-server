@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { ApiProperty } from '@nestjs/swagger';
 import { HydratedDocument } from 'mongoose';
@@ -70,6 +71,9 @@ export class Airdrop {
   @ApiProperty({ description: 'Has the holder received a claim' })
   @Prop({ default: false, type: Boolean })
   isClaim: boolean;
+
+  @Prop({ type: mongoose.Schema.Types.Mixed })
+  stats: object;
 }
 
 export const AirdropSchema = SchemaFactory.createForClass(Airdrop);

@@ -14,7 +14,7 @@ import {
   Transaction,
 } from '@solana/web3.js';
 import { delay, map } from 'bluebird';
-import { get, isEmpty, isNil } from 'lodash';
+import { get, isEmpty, isNil, last } from 'lodash';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Airdrop, AirdropDocument } from './schema/airdrop.schema';
@@ -28,6 +28,9 @@ import {
 import { decode } from 'bs58';
 import { UsersService } from '../users/users.service';
 import { SocialsService } from '../socials/socials.service';
+import { OrgsService } from '../orgs/orgs.service';
+
+const TRANSFER_IX_TYPES = ['transferchecked', 'transfer'];
 
 @Injectable()
 export class AirdropService {
@@ -37,6 +40,7 @@ export class AirdropService {
     private readonly apiService: ApiService,
     private readonly userService: UsersService,
     private readonly socialsService: SocialsService,
+    private readonly orgService: OrgsService,
   ) {}
 
   connection = new Connection(process.env.SOLANA_RPC_URL, 'confirmed');
@@ -236,13 +240,94 @@ export class AirdropService {
     return Math.floor(timeDifference / (1000 * 60 * 60 * 24));
   }
 
-  async deplanWalletCheck(wallet: string) {
-    throw new BadRequestException({ message: 'Poshol nahui' });
+  async deplanWalletCheck(airdropWallet: string, deplanWallet: string) {
+    const requiredUsagePerDayMinutes = 10;
+    const claimPeriod = this.getClaimPeriod();
+    const claimFromDate = claimPeriod.claimFromDate;
+    const claimToDate = claimPeriod.claimToDate;
+    const daysInPeriod = Math.ceil((claimToDate - claimFromDate) / 86400);
+    const requiredUsagePerPeriodMinutes =
+      daysInPeriod * requiredUsagePerDayMinutes;
+    const currentDate = Math.round(Date.now() / 1000);
+    const currentDayOfPeriod = Math.ceil((currentDate - claimFromDate) / 86400);
+    const usageMsg = `Please use DePlan at least for ${requiredUsagePerDayMinutes} minutes per day until the end of the claim period`;
+    if (currentDayOfPeriod < daysInPeriod) {
+      throw new BadRequestException({ message: usageMsg });
+    }
+    let parsedTxns: any;
+    let lastBlocktime = 0;
+    let usagePerDay = {};
+    do {
+      const history = await this.apiService.getTokenHistory(
+        deplanWallet,
+        process.env.DEPLAN_MINT,
+        {
+          limit: 6,
+          before: get(last(parsedTxns), 'transaction.signatures[0]'),
+        },
+      );
+      parsedTxns = history.parsedTxns;
+      for (let i = 0; i < parsedTxns.length; i++) {
+        const txn = parsedTxns[i];
+        const blocktime = txn.blockTime;
+        if (blocktime >= claimFromDate) {
+          const ixs = get(txn, 'transaction.message.instructions', []);
+          const transferIx = ixs.find((ix: any) => {
+            const type = get(ix, 'parsed.type', '');
+            const authority = get(ix, 'parsed.info.authority');
+            if (
+              TRANSFER_IX_TYPES.includes(type.toLowerCase()) &&
+              authority === deplanWallet
+            ) {
+              return true;
+            }
+          });
+          if (!isNil(transferIx)) {
+            const memoIx = ixs.find((ix: any) => {
+              return ix.programId.toString() === this.apiService.memoProgramId;
+            });
+            if (!isNil(memoIx)) {
+              const dayOfPeriod = Math.ceil(
+                (blocktime - claimFromDate) / 86400,
+              );
+              usagePerDay[dayOfPeriod] = {
+                times: get(usagePerDay, `[${dayOfPeriod}].times`, 0) + 1,
+                duration:
+                  get(usagePerDay, `[${dayOfPeriod}].duration`, 0) +
+                  +memoIx.parsed,
+              };
+            }
+          }
+        }
+        if (i === parsedTxns.length - 1) {
+          lastBlocktime = blocktime;
+        }
+      }
+    } while (!isEmpty(parsedTxns) && lastBlocktime >= claimFromDate);
+    const usageDays = Object.keys(usagePerDay);
+    const totalUsageMinutes = usageDays.reduce(
+      (res, key) => res + usagePerDay[key].duration,
+      0,
+    );
+    if (totalUsageMinutes < requiredUsagePerPeriodMinutes) {
+      throw new BadRequestException({ message: usageMsg });
+    }
+    await this.airdropRepository.findOneAndUpdate(
+      {
+        wallet: airdropWallet,
+        typeTransaction: TypeTransaction.RESULT,
+      },
+      {
+        $set: {
+          [`stats.round${claimPeriod.round}`]: usagePerDay,
+        },
+      },
+    );
   }
 
   async createClaimTransaction(wallet: string, query: AirdropClaimQueryDto) {
     await this.socialsService.twitterFollowCheck(wallet);
-    // await this.deplanWalletCheck(query.dePlanWallet);
+    await this.deplanWalletCheck(wallet, query.dePlanWallet);
     const claim = await this.getClaimByWallet(wallet);
 
     if (claim.claimAmount !== 0) {
@@ -328,30 +413,41 @@ export class AirdropService {
       decode(airdropNonce.nonce),
     );
     try {
-      await this.airdropRepository.findOneAndUpdate(query, { isClaim: true });
+      await this.airdropRepository.findOneAndUpdate(query, {
+        $set: { isClaim: true },
+      });
       const txnHash = await this.apiService.sendEncodedTxn(
         body.txn,
         airdropNonceAccount,
       );
       await this.airdropRepository.findOneAndUpdate(query, {
-        txnHash,
+        $set: { txnHash },
       });
     } catch (e) {
       const message = get(e, 'message', e);
       await this.airdropRepository.findOneAndUpdate(query, {
-        txnError: message,
-        isClaim: false,
+        $set: {
+          txnError: message,
+          isClaim: false,
+        },
       });
       throw new InternalServerErrorException({ message });
     }
   }
 
-  async getClaimByWallet(wallet: string) {
-    const airdropResult = {
+  getClaimPeriod() {
+    return {
       holdFromDate: 1711152000,
       holdToDate: 1714521599,
-      claimFromDate: 1714521600,
-      claimToDate: 1717804800,
+      claimFromDate: 1717372800,
+      claimToDate: 1717891201,
+      round: 1,
+    };
+  }
+
+  async getClaimByWallet(wallet: string) {
+    const airdropResult = {
+      ...this.getClaimPeriod(),
       claimAmount: 0,
       txnHash: '',
       isClaim: false,
