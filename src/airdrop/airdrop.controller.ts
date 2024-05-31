@@ -3,10 +3,10 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   Param,
   Post,
   Query,
-  Req,
   ValidationPipe,
 } from '@nestjs/common';
 import { AirdropService } from './airdrop.service';
@@ -21,8 +21,11 @@ export class AirdropController {
   @ApiOperation({ summary: 'Get claim for holder' })
   @ApiResponse({ status: 200, description: 'Successful calculate' })
   @Get('/claim/:wallet')
-  getClaimByWallet(@Param('wallet') wallet: string, @Req() req: Request) {
-    return this.airdropService.getClaimByWallet(wallet);
+  getClaimByWallet(
+    @Param('wallet') wallet: string,
+    @Headers('x-tzoffset') tzOffset: string,
+  ) {
+    return this.airdropService.getClaimByWallet(wallet, +tzOffset);
   }
 
   @ApiOperation({ summary: 'Create claim to holder by wallet' })

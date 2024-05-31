@@ -242,7 +242,7 @@ export class AirdropService {
 
   async deplanWalletCheck(airdropWallet: string, deplanWallet: string) {
     const requiredUsagePerDayMinutes = 10;
-    const claimPeriod = this.getClaimPeriod();
+    const claimPeriod = this.getClaimPeriod(0);
     const claimFromDate = claimPeriod.claimFromDate;
     const claimToDate = claimPeriod.claimToDate;
     const daysInPeriod = Math.ceil((claimToDate - claimFromDate) / 86400);
@@ -328,7 +328,7 @@ export class AirdropService {
   async createClaimTransaction(wallet: string, query: AirdropClaimQueryDto) {
     await this.socialsService.twitterFollowCheck(wallet);
     await this.deplanWalletCheck(wallet, query.dePlanWallet);
-    const claim = await this.getClaimByWallet(wallet);
+    const claim = await this.getClaimByWallet(wallet, 0);
 
     if (claim.claimAmount !== 0) {
       const airdropAccount = Keypair.fromSecretKey(
@@ -435,19 +435,20 @@ export class AirdropService {
     }
   }
 
-  getClaimPeriod() {
+  getClaimPeriod(tzOffset: number) {
+    const tzOffsetSeconds = tzOffset * 60;
     return {
       holdFromDate: 1711152000,
       holdToDate: 1714521599,
-      claimFromDate: 1717372800,
-      claimToDate: 1717891201,
+      claimFromDate: 1717372800 + tzOffsetSeconds,
+      claimToDate: 1717891201 + tzOffsetSeconds,
       round: 1,
     };
   }
 
-  async getClaimByWallet(wallet: string) {
+  async getClaimByWallet(wallet: string, tzOffset: number) {
     const airdropResult = {
-      ...this.getClaimPeriod(),
+      ...this.getClaimPeriod(tzOffset),
       claimAmount: 0,
       txnHash: '',
       isClaim: false,

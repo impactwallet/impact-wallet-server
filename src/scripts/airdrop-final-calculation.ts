@@ -8,5 +8,6 @@ async function bootstrap() {
   console.log(`Starting  final calculation...${new Date().toISOString()}`);
   await service.airdropCalculations();
   console.log(`Finished final calculation...${new Date().toISOString()}`);
+  await app.close();
 }
 bootstrap();
