@@ -264,6 +264,7 @@ export class AirdropService {
         {
           limit: 6,
           before: get(last(parsedTxns), 'transaction.signatures[0]'),
+          from: claimFromDate,
         },
       );
       parsedTxns = history.parsedTxns;

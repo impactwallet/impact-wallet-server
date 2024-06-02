@@ -776,7 +776,7 @@ export class ApiService {
   async getTokenHistory(
     wallet: string,
     mint: string,
-    options?: SignaturesForAddressOptions,
+    options?: SignaturesForAddressOptions & { from?: number },
   ): Promise<{
     associatedAddress: PublicKey;
     parsedTxns: ParsedTransactionWithMeta[];
@@ -786,10 +786,13 @@ export class ApiService {
       mintPublicKey,
       new PublicKey(wallet),
     );
-    const txns = await this.connection.getSignaturesForAddress(
+    let txns = await this.connection.getSignaturesForAddress(
       associatedAddress,
       options,
     );
+    if (!isNil(options.from)) {
+      txns = txns.filter((txn) => txn.blockTime >= options.from);
+    }
     const signatures = txns.map((txn) => txn.signature);
     const parsedTxns = await map(
       signatures,
