@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { TypeTransaction } from '../enum/type-transaction.enum';
-import { IsString } from 'class-validator';
+import { IsNotEmpty, IsString } from 'class-validator';
 
 export class AirdropDto {
   @ApiProperty({ description: 'Transaction date in epoch' })
@@ -46,5 +46,6 @@ export class AirdropDto {
 export class AirdropClaimQueryDto {
   @ApiProperty({ description: 'DePlan wallet address' })
   @IsString()
+  @IsNotEmpty()
   dePlanWallet: string;
 }
