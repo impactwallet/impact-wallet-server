@@ -245,7 +245,7 @@ export class AirdropService {
     const claimPeriod = this.getClaimPeriod(0);
     const claimFromDate = claimPeriod.claimFromDate;
     const claimToDate = claimPeriod.claimToDate;
-    const daysInPeriod = Math.ceil((claimToDate - claimFromDate) / 86400);
+    const daysInPeriod = Math.ceil((claimToDate - claimFromDate) / 86400) - 2; // TODO: remove -2
     const requiredUsagePerPeriodMinutes =
       daysInPeriod * requiredUsagePerDayMinutes;
     const currentDate = Math.round(Date.now() / 1000);
