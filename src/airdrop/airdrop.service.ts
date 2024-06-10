@@ -245,7 +245,7 @@ export class AirdropService {
     const claimPeriod = this.getClaimPeriod(0);
     const claimFromDate = claimPeriod.claimFromDate;
     const claimToDate = claimPeriod.claimToDate;
-    const daysInPeriod = Math.ceil((claimToDate - claimFromDate) / 86400) - 2; // TODO: remove -2
+    const daysInPeriod = Math.ceil((claimToDate - claimFromDate) / 86400);
     const requiredUsagePerPeriodMinutes =
       daysInPeriod * requiredUsagePerDayMinutes;
     const currentDate = Math.round(Date.now() / 1000);
@@ -450,10 +450,10 @@ export class AirdropService {
     const tzOffsetSeconds = tzOffset * 60;
     return {
       holdFromDate: 1711152000,
-      holdToDate: 1714521599,
-      claimFromDate: 1717372800 + tzOffsetSeconds,
-      claimToDate: 1717891201 + tzOffsetSeconds,
-      round: 1,
+      holdToDate: 1717891201,
+      claimFromDate: 1717977600 + tzOffsetSeconds,
+      claimToDate: 1718496001 + tzOffsetSeconds,
+      round: 2, // TODO: increment
     };
   }
 
