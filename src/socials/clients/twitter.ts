@@ -97,10 +97,11 @@ class TwitterClient {
     }
   };
 
-  async createTweet(text: string) {
+  async createTweet(text: string, quoteTweetId?: string) {
     try {
       const result = await this.client.tweets.createTweet({
         text,
+        quote_tweet_id: quoteTweetId,
       });
       return result;
     } catch (error) {
