@@ -11,7 +11,7 @@ async function bootstrap() {
     readFileSync(join(__dirname, 'data/airdrop_exclude.json')).toString('utf8'),
   );
   console.log(`Starting calculation...${new Date().toISOString()}`);
-  // await service.calculate(excludeWallets);
+  await service.calculate(excludeWallets);
   console.log(`Finished calculation...${new Date().toISOString()}`);
   await app.close();
 }

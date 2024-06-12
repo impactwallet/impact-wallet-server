@@ -1,6 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { TypeTransaction } from '../enum/type-transaction.enum';
 import { IsNotEmpty, IsString } from 'class-validator';
+import { AirdropDocument } from '../schema/airdrop.schema';
+import { toBigJs } from '../../utils/bigjs';
 
 export class AirdropDto {
   @ApiProperty({ description: 'Transaction date in epoch' })
@@ -36,11 +38,21 @@ export class AirdropDto {
   @ApiProperty({ description: 'Claim percent for the wallet' })
   claimPercent: Big.Big;
 
-  @ApiProperty({ description: 'Claim for the wallet' })
-  claim: Big.Big;
-
   @ApiProperty({ description: 'Has the holder received a claim' })
   isClaim: boolean;
+
+  static fromAirdropDoc(airdropDoc: AirdropDocument) {
+    const airdropDto = new AirdropDto();
+    airdropDto.transactionDate = airdropDoc.transactionDate;
+    airdropDto.amount = toBigJs(airdropDoc.amount);
+    airdropDto.wallet = airdropDoc.wallet;
+    airdropDto.typeTransaction = airdropDoc.typeTransaction;
+    airdropDto.holderOfDays = airdropDoc.holderOfDays;
+    airdropDto.currentBalance = toBigJs(airdropDoc.currentBalance);
+    airdropDto.balanceCheck = toBigJs(airdropDoc.balanceCheck);
+    airdropDto.transaction = airdropDoc.transaction;
+    return airdropDto;
+  }
 }
 
 export class AirdropClaimQueryDto {

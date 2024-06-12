@@ -9,6 +9,7 @@ import {
   Connection,
   Keypair,
   NonceAccount,
+  ParsedTransactionWithMeta,
   PublicKey,
   SystemProgram,
   Transaction,
@@ -28,7 +29,6 @@ import {
 import { decode } from 'bs58';
 import { UsersService } from '../users/users.service';
 import { SocialsService } from '../socials/socials.service';
-import { OrgsService } from '../orgs/orgs.service';
 
 const TRANSFER_IX_TYPES = ['transferchecked', 'transfer'];
 
@@ -40,19 +40,39 @@ export class AirdropService {
     private readonly apiService: ApiService,
     private readonly userService: UsersService,
     private readonly socialsService: SocialsService,
-    private readonly orgService: OrgsService,
   ) {}
 
   connection = new Connection(process.env.SOLANA_RPC_URL, 'confirmed');
 
-  async calculate(excludeWallets: any) {
+  private async removeNotHolders(
+    excludeWallets: string[],
+    currentHolders: any[] = [],
+  ) {
+    const ownerWallets = currentHolders.map((holder: any) => {
+      return get(holder, 'account.data.parsed.info.owner', '');
+    });
+    await this.airdropRepository.deleteMany({
+      $or: [
+        { wallet: { $nin: ownerWallets } },
+        { wallet: { $in: excludeWallets } },
+      ],
+    });
+  }
+
+  async calculate(excludeWalletsMap: any) {
     const holdPeriodStartDate = 1714521600;
-    const holdPeriodEndDate = 1717891140;
+    const holdPeriodEndDate = 1717977599;
 
     //Get all our token holders
-    const orgHolders = await this.apiService.getTokenHolders(
+    let orgHolders = await this.apiService.getTokenHolders(
       process.env.DEPLAN_MINT,
     );
+    orgHolders = orgHolders.filter((holder) => {
+      return (
+        get(holder, 'account.data.parsed.info.tokenAmount.uiAmount', 0) > 0
+      );
+    });
+    await this.removeNotHolders(Object.keys(excludeWalletsMap), orgHolders);
 
     // console.log('1: Holders: ' + JSON.stringify(orgHolders[0]));
     // console.log(
@@ -67,39 +87,51 @@ export class AirdropService {
       //   '------------------------------------------------------------------------------------------------------------------------------',
       // );
 
-      const ownerWallet = get(holder, 'account.data.parsed.info.owner');
-      const errors = await this.airdropRepository.find({
-        wallet: ownerWallet,
-        error: { $ne: null },
-      });
-      const finalResult = await this.airdropRepository.findOne({
-        wallet: ownerWallet,
-        typeTransaction: TypeTransaction.RESULT,
-      });
-      if (isEmpty(errors) && !isNil(finalResult)) {
-        continue;
-      }
-      await this.airdropRepository.deleteMany({
-        wallet: ownerWallet,
-      });
+      const ownerWallet: string = get(
+        holder,
+        'account.data.parsed.info.owner',
+        '',
+      );
       // console.log('3: OwnerWallet: ' + ownerWallet);
       // console.log(
       //   '------------------------------------------------------------------------------------------------------------------------------',
       // );
 
-      const balance = toBigJs(
-        get(holder, 'account.data.parsed.info.tokenAmount.amount'),
-      );
+      if (!excludeWalletsMap[ownerWallet]) {
+        const listTransactions: AirdropDto[] = (
+          await this.airdropRepository
+            .find({
+              wallet: ownerWallet,
+            })
+            .sort({ transactionDate: 1 })
+        ).map((doc) => AirdropDto.fromAirdropDoc(doc));
 
-      if (!excludeWallets.includes(ownerWallet) && balance.gt(0)) {
+        listTransactions.forEach((t) => {
+          t.holderOfDays =
+            t.holderOfDays +
+            this.getDaysDifference(holdPeriodStartDate, holdPeriodEndDate);
+        });
+
         //Parse all transactions by the holder
-        const txns = await this.connection.getSignaturesForAddress(
+        let txns = await this.connection.getSignaturesForAddress(
           new PublicKey(associatedAddress),
         );
+        txns = txns.filter((txn) => {
+          return (
+            txn.blockTime >= holdPeriodStartDate &&
+            txn.blockTime <= holdPeriodEndDate
+          );
+        });
+
+        if (txns.length > 20) {
+          console.log(ownerWallet, 'potential bot');
+          continue;
+        }
 
         const signatures = txns.map((txn) => txn.signature);
-        let parsedTxns = [];
+        let parsedTxns: ParsedTransactionWithMeta[] = [];
 
+        const parsingStart = Date.now();
         try {
           parsedTxns = await map(
             signatures,
@@ -112,126 +144,146 @@ export class AirdropService {
             { concurrency: 2 },
           );
         } catch (e) {}
-
-        if (isEmpty(parsedTxns)) {
-          continue;
+        const parsingTime = Date.now() - parsingStart;
+        if (parsingTime > 60 * 1000) {
+          console.log(ownerWallet, parsingTime);
         }
 
-        const listTransactions: AirdropDto[] = [];
-
-        //Parse each transaction by holder
-        for (const transaction of parsedTxns) {
-          // console.log(
-          //   '4: Parsed transaction: ' + JSON.stringify(transaction),
-          // );
-          // console.log(
-          //   '------------------------------------------------------------------------------------------------------------------------------',
-          // );
-
-          const transactionTime = get(transaction, 'blockTime');
-          const postTokenBalances = get(
-            transaction,
+        if (!isEmpty(parsedTxns)) {
+          const firstPostTokenBalance = get(
+            parsedTxns[0],
             'meta.postTokenBalances',
             [],
-          );
-          const postTokenBalance = postTokenBalances.find(
+          ).find(
             (token) =>
               token.mint === process.env.DEPLAN_MINT &&
               token.owner === ownerWallet,
           );
-
-          // console.log(
-          //   '5: PostTokenBalance: ' + JSON.stringify(postTokenBalance),
-          // );
-          // console.log(
-          //   '------------------------------------------------------------------------------------------------------------------------------',
-          // );
-
-          const preTokenBalances = get(
-            transaction,
-            'meta.preTokenBalances',
-            [],
+          const balanceBeforeEndDate = toBigJs(
+            get(firstPostTokenBalance, 'uiTokenAmount.amount'),
           );
 
-          const preTokenBalance = preTokenBalances.find(
-            (token) =>
-              token.mint === process.env.DEPLAN_MINT &&
-              token.owner === ownerWallet,
-          );
+          listTransactions.forEach((t) => {
+            t.currentBalance = balanceBeforeEndDate;
+          });
 
-          // console.log(
-          //   '6: PreTokenBalance: ' + JSON.stringify(preTokenBalance),
-          // );
-          // console.log(
-          //   '------------------------------------------------------------------------------------------------------------------------------',
-          // );
-          let transactionAmount = toBigJs(0);
-          let typeOfTransaction: TypeTransaction;
-          let postAmount = toBigJs(0);
-          let preAmount = toBigJs(0);
-
-          //Calculate the transaction amount and type of operation
-          if (postTokenBalance !== undefined && postTokenBalance !== null) {
-            if (preTokenBalance !== undefined && preTokenBalance !== null) {
-              postAmount = toBigJs(
-                get(postTokenBalance, 'uiTokenAmount.amount'),
-              );
-
-              preAmount = toBigJs(get(preTokenBalance, 'uiTokenAmount.amount'));
-
-              if (postAmount.gt(preAmount)) {
-                transactionAmount = postAmount.minus(preAmount);
-                typeOfTransaction = TypeTransaction.CREDIT;
-              }
-              if (postAmount.lt(preAmount)) {
-                transactionAmount = preAmount.minus(postAmount);
-                typeOfTransaction = TypeTransaction.DEBIT;
-              }
-
-              if (postAmount.eq(preAmount)) {
-                transactionAmount = toBigJs(0);
-                typeOfTransaction = TypeTransaction.UNKNOWN;
-              }
-            } else {
-              transactionAmount = toBigJs(
-                get(postTokenBalance, 'uiTokenAmount.amount'),
-              );
-              typeOfTransaction = TypeTransaction.CREDIT;
+          //Parse each transaction by holder
+          for (const transaction of parsedTxns) {
+            if (!isNil(transaction.meta.err)) {
+              continue;
             }
-            //
-            // console.log('7: Balance: ' + balanceAmount);
+            // console.log(
+            //   '4: Parsed transaction: ' + JSON.stringify(transaction),
+            // );
             // console.log(
             //   '------------------------------------------------------------------------------------------------------------------------------',
             // );
 
-            //Save transaction to database
-            const airdropDto = new AirdropDto();
-            airdropDto.transactionDate = transactionTime;
-            airdropDto.amount = transactionAmount;
-            airdropDto.wallet = ownerWallet;
-            airdropDto.typeTransaction = typeOfTransaction;
-            airdropDto.holderOfDays = await this.getDaysDifference(
-              transactionTime,
-              holdPeriodEndDate,
+            const transactionTime = get(transaction, 'blockTime');
+            const postTokenBalances = get(
+              transaction,
+              'meta.postTokenBalances',
+              [],
             );
-            airdropDto.currentBalance = balance;
-            airdropDto.balanceCheck = toBigJs(0);
-            airdropDto.transaction = JSON.stringify(transaction);
+            const postTokenBalance = postTokenBalances.find(
+              (token) =>
+                token.mint === process.env.DEPLAN_MINT &&
+                token.owner === ownerWallet,
+            );
 
-            listTransactions.push(airdropDto);
+            // console.log(
+            //   '5: PostTokenBalance: ' + JSON.stringify(postTokenBalance),
+            // );
+            // console.log(
+            //   '------------------------------------------------------------------------------------------------------------------------------',
+            // );
+
+            const preTokenBalances = get(
+              transaction,
+              'meta.preTokenBalances',
+              [],
+            );
+
+            const preTokenBalance = preTokenBalances.find(
+              (token) =>
+                token.mint === process.env.DEPLAN_MINT &&
+                token.owner === ownerWallet,
+            );
+
+            // console.log(
+            //   '6: PreTokenBalance: ' + JSON.stringify(preTokenBalance),
+            // );
+            // console.log(
+            //   '------------------------------------------------------------------------------------------------------------------------------',
+            // );
+            let transactionAmount = toBigJs(0);
+            let typeOfTransaction: TypeTransaction;
+            let postAmount = toBigJs(0);
+            let preAmount = toBigJs(0);
+
+            //Calculate the transaction amount and type of operation
+            if (postTokenBalance !== undefined && postTokenBalance !== null) {
+              if (preTokenBalance !== undefined && preTokenBalance !== null) {
+                postAmount = toBigJs(
+                  get(postTokenBalance, 'uiTokenAmount.amount'),
+                );
+
+                preAmount = toBigJs(
+                  get(preTokenBalance, 'uiTokenAmount.amount'),
+                );
+
+                if (postAmount.gt(preAmount)) {
+                  transactionAmount = postAmount.minus(preAmount);
+                  typeOfTransaction = TypeTransaction.CREDIT;
+                }
+                if (postAmount.lt(preAmount)) {
+                  transactionAmount = preAmount.minus(postAmount);
+                  typeOfTransaction = TypeTransaction.DEBIT;
+                }
+
+                if (postAmount.eq(preAmount)) {
+                  transactionAmount = toBigJs(0);
+                  typeOfTransaction = TypeTransaction.UNKNOWN;
+                }
+              } else {
+                transactionAmount = toBigJs(
+                  get(postTokenBalance, 'uiTokenAmount.amount'),
+                );
+                typeOfTransaction = TypeTransaction.CREDIT;
+              }
+              //
+              // console.log('7: Balance: ' + balanceAmount);
+              // console.log(
+              //   '------------------------------------------------------------------------------------------------------------------------------',
+              // );
+
+              //Save transaction to database
+              const airdropDto = new AirdropDto();
+              airdropDto.transactionDate = transactionTime;
+              airdropDto.amount = transactionAmount;
+              airdropDto.wallet = ownerWallet;
+              airdropDto.typeTransaction = typeOfTransaction;
+              airdropDto.holderOfDays = this.getDaysDifference(
+                transactionTime,
+                holdPeriodEndDate,
+              );
+              airdropDto.currentBalance = balanceBeforeEndDate;
+              airdropDto.balanceCheck = toBigJs(0);
+              airdropDto.transaction = JSON.stringify(transaction);
+
+              listTransactions.push(airdropDto);
+            }
           }
         }
-        const results = await this.finalCalculations(listTransactions);
+        const results = this.finalCalculations(listTransactions);
+        await this.airdropRepository.deleteMany({ wallet: ownerWallet });
         await this.airdropRepository.insertMany(results);
       }
     }
     console.log('Successfully received data for each holder');
   }
 
-  private async getDaysDifference(
-    startDate: number,
-    transactionDate: number,
-  ): Promise<number> {
+  private getDaysDifference(startDate: number, transactionDate: number) {
     const startDateTime = new Date(startDate * 1000);
     const endDateTime = new Date(transactionDate * 1000);
 
@@ -513,9 +565,7 @@ export class AirdropService {
     console.log('The calculation was completed successfully');
   }
 
-  private async finalCalculations(
-    transactions: AirdropDto[],
-  ): Promise<AirdropDto[]> {
+  private finalCalculations(transactions: AirdropDto[]): AirdropDto[] {
     //Sort transactions by date ascending
     transactions.sort((a, b) => a.transactionDate - b.transactionDate);
 
@@ -569,19 +619,21 @@ export class AirdropService {
       }
     }
 
-    const result: AirdropDto = new AirdropDto();
-    result.finalAmount = finalAmount;
-    result.balanceCheck = balanceCheck;
-    result.typeTransaction = TypeTransaction.RESULT;
-    result.transaction = transactionByWallet;
-    result.currentBalance = currentBalanceByWallet;
-    result.wallet = wallet;
+    if (resultTransactions.length > 0) {
+      const result: AirdropDto = new AirdropDto();
+      result.finalAmount = finalAmount;
+      result.balanceCheck = balanceCheck;
+      result.typeTransaction = TypeTransaction.RESULT;
+      result.transaction = transactionByWallet;
+      result.currentBalance = currentBalanceByWallet;
+      result.wallet = wallet;
 
-    if (!currentBalanceByWallet.eq(balanceCheck)) {
-      result.error = 'Error in calculations';
+      if (!currentBalanceByWallet.eq(balanceCheck)) {
+        result.error = 'Error in calculations';
+      }
+
+      resultTransactions.push(result);
     }
-
-    resultTransactions.push(result);
     return resultTransactions;
   }
 }
