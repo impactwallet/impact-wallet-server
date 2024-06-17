@@ -362,9 +362,6 @@ export class AirdropService {
       (res, key) => res + usagePerDay[key].duration,
       0,
     );
-    if (totalUsageMinutes < requiredUsagePerPeriodMinutes) {
-      throw new BadRequestException({ message: usageMsg });
-    }
     await this.airdropRepository.findOneAndUpdate(
       {
         wallet: airdropWallet,
@@ -376,6 +373,9 @@ export class AirdropService {
         },
       },
     );
+    if (totalUsageMinutes < requiredUsagePerPeriodMinutes) {
+      throw new BadRequestException({ message: usageMsg });
+    }
   }
 
   async createClaimTransaction(wallet: string, query: AirdropClaimQueryDto) {
@@ -501,11 +501,11 @@ export class AirdropService {
   getClaimPeriod(tzOffset: number) {
     const tzOffsetSeconds = tzOffset * 60;
     return {
-      holdFromDate: 1711152000,
-      holdToDate: 1717891201,
-      claimFromDate: 1717977600 + tzOffsetSeconds,
-      claimToDate: 1718496001 + tzOffsetSeconds,
-      round: 2, // TODO: increment
+      holdFromDate: 1711155600 + tzOffsetSeconds,
+      holdToDate: 1718496001 + tzOffsetSeconds,
+      claimFromDate: 1718582400 + tzOffsetSeconds,
+      claimToDate: 1719100801 + tzOffsetSeconds,
+      round: 3, // TODO: increment
     };
   }
 
