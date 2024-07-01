@@ -60,8 +60,8 @@ export class AirdropService {
   }
 
   async calculate(excludeWalletsMap: any) {
-    const holdPeriodStartDate = 1717977600;
-    const holdPeriodEndDate = 1718582399;
+    const holdPeriodStartDate = 1719187200;
+    const holdPeriodEndDate = 1719705599;
 
     //Get all our token holders
     let orgHolders = await this.apiService.getTokenHolders(
@@ -502,10 +502,10 @@ export class AirdropService {
     const tzOffsetSeconds = tzOffset * 60;
     return {
       holdFromDate: 1711155600 + tzOffsetSeconds,
-      holdToDate: 1719187199 + tzOffsetSeconds,
-      claimFromDate: 1719187200 + tzOffsetSeconds,
-      claimToDate: 1719791999 + tzOffsetSeconds,
-      round: 4, // TODO: increment
+      holdToDate: 1719705599 + tzOffsetSeconds,
+      claimFromDate: 1719792000 + tzOffsetSeconds,
+      claimToDate: 1720396799 + tzOffsetSeconds,
+      round: 5, // TODO: increment
     };
   }
 
