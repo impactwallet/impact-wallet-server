@@ -502,10 +502,10 @@ export class AirdropService {
     const tzOffsetSeconds = tzOffset * 60;
     return {
       holdFromDate: 1711155600 + tzOffsetSeconds,
-      holdToDate: 1719705599 + tzOffsetSeconds,
-      claimFromDate: 1719792000 + tzOffsetSeconds,
-      claimToDate: 1720396799 + tzOffsetSeconds,
-      round: 5, // TODO: increment
+      holdToDate: 1720396799 + tzOffsetSeconds,
+      claimFromDate: 1720396800 + tzOffsetSeconds,
+      claimToDate: 1721001599 + tzOffsetSeconds,
+      round: 6, // TODO: increment
     };
   }
 
