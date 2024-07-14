@@ -75,7 +75,7 @@ export class SocialsService {
     try {
       await this.getTwitterClient(wallet).createTweet(
         'Join subscription rEvolution @DePlan_xyz',
-        '1796170825558585438',
+        '1811478730373480708',
       );
     } catch (e) {}
 
