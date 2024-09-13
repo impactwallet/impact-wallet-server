@@ -18,7 +18,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBody,
-  ApiConsumes,
+  ApiConsumes, ApiExcludeEndpoint,
   ApiOperation,
   ApiResponse,
   ApiTags,
@@ -26,7 +26,7 @@ import {
 import { Org } from './schema/org.schema';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { OrgsService } from './orgs.service';
-import { CreateOrgDto, OrgSettingsDto } from './dto/create-org.dto';
+import { CreateOrgDto } from './dto/create-org.dto';
 import { OrgsFilter } from './dto/orgs.filter.dto';
 import { Request, Response } from 'express';
 import { OrgUsernameFilter } from './dto/org-username.filter.dto';
@@ -39,13 +39,9 @@ import { PaymentService } from '../payment/payment.service';
 import { SendUsdcDto } from '../users/dto/send-usdc.dto';
 import { AuthService } from '../auth/auth.service';
 import { UpdateOrgDto } from './dto/update-org.dto';
-import { DeleteAvatarsRequestDto } from '../users/dto/delete-avatars.request.dto';
-import { User } from '../users/schema/user.schema';
-import { UpdateUserDto } from '../users/dto/update-user.dto';
 import { DeleteLogosRequestDto } from './dto/delete-logos.request.dto';
 import { MembersFilterDto } from '../members/dto/members.filter.dto';
 import { OrgRevenueFilterDto } from './dto/org-revenue.filter.dto';
-import { OrgSplitDto } from './dto/org-split.dto';
 import { MemberDto } from '../members/dto/members.dto';
 import { Member } from '../members/schema/member.schema';
 
@@ -243,6 +239,12 @@ export class OrgsController {
   @Get(':orgId')
   async getByOrgId(@Param('orgId') orgId: string, @Req() req: Request) {
     await this.authService.getAccountFromToken(req);
+    return this.orgsService.getByOrgId(orgId);
+  }
+
+  @Get(':orgId/phorevr')
+  @ApiExcludeEndpoint()
+  async getOrgById(@Param('orgId') orgId: string) {
     return this.orgsService.getByOrgId(orgId);
   }
 
