@@ -15,6 +15,7 @@ import { PaymentService } from './payment.service';
 import { Request } from 'express';
 import { AuthService } from '../auth/auth.service';
 import { MerchantWebhookDto } from './dto/merchant-webhook.dto';
+import { NewDeplanWebhookDto } from './dto/new-deplan-webhook.dto';
 
 @ApiTags('Payment')
 @Controller('payment')
@@ -40,6 +41,14 @@ export class PaymentController {
   @Post('deplan-webhook')
   handleDeplanPayment(@Body(new ValidationPipe()) body: MerchantWebhookDto) {
     return this.paymentService.handleDeplanPayment(body);
+  }
+
+  @ApiResponse({ status: 200 })
+  @Post('new-deplan-webhook')
+  handleNewDeplanPayment(
+    @Body(new ValidationPipe()) body: NewDeplanWebhookDto,
+  ) {
+    return this.paymentService.handleNewDeplanPayment(body);
   }
 
   @ApiResponse({ status: 200 })

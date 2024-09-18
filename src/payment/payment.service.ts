@@ -39,6 +39,8 @@ import { MerchantWebhookDto } from './dto/merchant-webhook.dto';
 import { StripeService } from '../api-service/stripe.service';
 import Stripe from 'stripe';
 import { DepositService } from '../deposit/deposit.service';
+import { NewDeplanWebhookDto } from './dto/new-deplan-webhook.dto';
+import { DexService, TokenSymbol } from '../api-service/dex.service';
 
 @Injectable()
 export class PaymentService {
@@ -53,6 +55,7 @@ export class PaymentService {
     private http: HttpService,
     private stripeService: StripeService,
     private depositService: DepositService,
+    private dexService: DexService,
   ) {}
 
   async receivePayment(org: OrgDocument, body: ReceivePaymentDto) {
@@ -230,6 +233,49 @@ export class PaymentService {
     }).catch((err: any) =>
       console.log(`Error handling regular payment for ${org.name}: ${err}`),
     );
+  }
+
+  async handleNewDeplanPayment(body: NewDeplanWebhookDto) {
+    try {
+      const rootOrg = await this.orgModel.findOne(
+        { wallet: process.env.ROOT_PUBKEY },
+        '+password',
+      );
+      const rootOrgPk = await this.apiService.getPK(
+        rootOrg.wallet,
+        rootOrg.password,
+      );
+      const priceData = await this.dexService.getUsdcPrice(TokenSymbol.DPLN);
+      const orgIds = Object.keys(body.orgToAmount);
+      for (let orgId of orgIds) {
+        const usdAmount = body.orgToAmount[orgId];
+        const org = await this.orgModel.findById(orgId, '+password');
+        const deplanAmount = toFixed(
+          toBigJs(usdAmount).div(priceData.price),
+          6,
+        ).toNumber();
+        this.apiService
+          .transfer(process.env.DEPLAN_MINT, [
+            {
+              senderPk: rootOrgPk,
+              wallet: org.wallet,
+              amount: deplanAmount,
+            },
+          ])
+          .then(() => {
+            return this.handleRegularPayment(org, {
+              payment_amount: deplanAmount,
+            });
+          })
+          .catch((err: any) =>
+            console.log(
+              `Error handling regular payment for ${org.name}: ${err}`,
+            ),
+          );
+      }
+    } catch (err) {
+      console.log(`Error handling new deplan payment: ${err}`);
+    }
   }
 
   handleStripeEvent(body: any, headers: any) {
