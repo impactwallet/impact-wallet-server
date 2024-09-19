@@ -245,7 +245,8 @@ export class PaymentService {
         rootOrg.wallet,
         rootOrg.password,
       );
-      const priceData = await this.dexService.getUsdcPrice(TokenSymbol.DPLN);
+      // const priceData = await this.dexService.getUsdcPrice(TokenSymbol.DPLN);
+      const priceData = { price: 0.15 };
       const orgIds = Object.keys(body.orgToAmount);
       for (let orgId of orgIds) {
         const usdAmount = body.orgToAmount[orgId];
