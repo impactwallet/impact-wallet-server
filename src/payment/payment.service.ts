@@ -245,14 +245,17 @@ export class PaymentService {
         rootOrg.wallet,
         rootOrg.password,
       );
-      // const priceData = await this.dexService.getUsdcPrice(TokenSymbol.DPLN);
-      const priceData = { price: 0.15 };
+      const priceData = await this.dexService.getUsdcPrice(TokenSymbol.DPLN);
+      const dplnPrice = get(priceData, 'price', 0.15);
       const orgIds = Object.keys(body.orgToAmount);
       for (let orgId of orgIds) {
+        if (rootOrg._id.toString() === orgId) {
+          continue;
+        }
         const usdAmount = body.orgToAmount[orgId];
         const org = await this.orgModel.findById(orgId, '+password');
         const deplanAmount = toFixed(
-          toBigJs(usdAmount).div(priceData.price),
+          toBigJs(usdAmount).div(dplnPrice),
           6,
         ).toNumber();
         this.apiService
