@@ -18,6 +18,7 @@ import { delay, map } from 'bluebird';
 import { get, isEmpty, isNil, last } from 'lodash';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import * as moment from 'moment';
 import { Airdrop, AirdropDocument } from './schema/airdrop.schema';
 import { TypeTransaction } from './enum/type-transaction.enum';
 import { AirdropClaimQueryDto, AirdropDto } from './dto/airdrop.dto';
@@ -369,7 +370,7 @@ export class AirdropService {
       },
       {
         $set: {
-          [`stats.round${claimPeriod.round}`]: usagePerDay,
+          [`stats.round${claimPeriod.claimFromDate}`]: usagePerDay,
         },
       },
     );
@@ -500,12 +501,13 @@ export class AirdropService {
 
   getClaimPeriod(tzOffset: number) {
     const tzOffsetSeconds = tzOffset * 60;
+    const claimFromDate = moment.unix(1730422800).utc();
+    const claimToDate = claimFromDate.clone().endOf('month');
     return {
       holdFromDate: 1711155600 + tzOffsetSeconds,
-      holdToDate: 1724630399 + tzOffsetSeconds,
-      claimFromDate: 1724630400 + tzOffsetSeconds,
-      claimToDate: 1725235199 + tzOffsetSeconds,
-      round: 13, // TODO: increment
+      holdToDate: 1730422800 + tzOffsetSeconds,
+      claimFromDate: claimFromDate.unix() + tzOffsetSeconds,
+      claimToDate: claimToDate.unix() + tzOffsetSeconds,
     };
   }
 
