@@ -246,7 +246,7 @@ export class PaymentService {
         rootOrg.password,
       );
       const priceData = await this.dexService.getUsdcPrice(TokenSymbol.DPLN);
-      const dplnPrice = get(priceData, 'price', 0.15);
+      const dplnPrice = get(priceData, 'price', 0.11);
       const orgIds = Object.keys(body.orgToAmount);
       for (let orgId of orgIds) {
         if (rootOrg._id.toString() === orgId) {
