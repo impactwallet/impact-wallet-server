@@ -736,6 +736,7 @@ export class OrgsService {
       : org.settings.treasury;
     org.settings.isApp = updateOrgDto.settings.isApp;
     org.settings.pricePerMonth = updateOrgDto.settings.pricePerMonth;
+    org.settings.appUrl = updateOrgDto.settings.appUrl;
 
     return this.orgRepository.findOneAndUpdate(
       { _id: org._id },
@@ -778,7 +779,7 @@ export class OrgsService {
         'settings.isApp': true,
       })
       .select(
-        'username name link description logo wallet settings.pricePerMonth',
+        'username name link description logo wallet settings.pricePerMonth settings.appUrl',
       );
   }
 }

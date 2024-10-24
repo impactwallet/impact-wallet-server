@@ -49,6 +49,10 @@ export class OrgSettings {
     },
   })
   pricePerMonth: number;
+
+  @ApiProperty({ description: 'App url' })
+  @Prop({ type: String })
+  appUrl: string;
 }
 
 export const OrgSettingsSchema = SchemaFactory.createForClass(OrgSettings);

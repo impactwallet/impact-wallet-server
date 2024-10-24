@@ -11,6 +11,7 @@ export class OrgSettingsDto {
 
   isApp: boolean;
   pricePerMonth: number;
+  appUrl: string;
 }
 
 export class UpdateOrgDto {
