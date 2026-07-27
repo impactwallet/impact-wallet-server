@@ -59,6 +59,7 @@ import { MemberDto } from '../members/dto/members.dto';
 import { MembersService } from '../members/members.service';
 import { Member, MemberDocument } from '../members/schema/member.schema';
 import { S3Service } from '../s3/s3.service';
+import { StripeService } from '../api-service/stripe.service';
 
 const MINT_STATUS_RETRIES = 5;
 
@@ -75,6 +76,7 @@ export class OrgsService {
     private s3Service: S3Service,
     private jwtService: JwtService,
     private paymentService: PaymentService,
+    private stripeService: StripeService,
   ) {}
 
   async createOrg(
@@ -738,6 +740,14 @@ export class OrgsService {
     org.settings.pricePerMonth = updateOrgDto.settings.pricePerMonth;
     org.settings.appUrl = updateOrgDto.settings.appUrl;
 
+    if (org.settings.isApp) {
+      const { stripeProductId, stripePriceId } = await this.getOrgStripeData(
+        org,
+      );
+      org.stripeProductId = stripeProductId;
+      org.stripePriceId = stripePriceId;
+    }
+
     return this.orgRepository.findOneAndUpdate(
       { _id: org._id },
       { $set: org.toObject() },
@@ -781,5 +791,36 @@ export class OrgsService {
       .select(
         'username name link description logo wallet settings.pricePerMonth settings.appUrl',
       );
+  }
+
+  async getOrgStripeData(org: OrgDocument) {
+    let stripeProductId = org.stripeProductId;
+    let stripePriceId = org.stripePriceId;
+
+    if (!stripeProductId) {
+      const product = await this.stripeService.createProduct({
+        name: org.name,
+        description: org.description,
+        images: [`${process.env.SERVER_URL}${org.logo}`],
+      });
+      stripeProductId = product.id;
+    }
+
+    if (stripePriceId) {
+      await this.stripeService.updatePrice(stripePriceId, {
+        active: false,
+      });
+    }
+    const price = await this.stripeService.createPrice({
+      product: stripeProductId,
+      currency: 'usd',
+      unit_amount: Math.floor(org.settings.pricePerMonth * 100),
+      recurring: {
+        interval: 'month',
+      },
+    });
+    stripePriceId = price.id;
+
+    return { stripeProductId, stripePriceId };
   }
 }

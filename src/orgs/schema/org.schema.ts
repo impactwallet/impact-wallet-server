@@ -123,6 +123,12 @@ export class Org {
   @ApiProperty({ example: 0 })
   @Prop({ type: Number, default: 0 })
   lamportsMinted: number;
+
+  @Prop({ type: String })
+  stripeProductId: string;
+
+  @Prop({ type: String })
+  stripePriceId: string;
 }
 
 export const OrgSchema = SchemaFactory.createForClass(Org);

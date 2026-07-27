@@ -296,12 +296,9 @@ export class UsersService extends UsersServiceBase {
         );
       }
     }
-    const priceData = await this.dexService.getUsdcPrice(TokenSymbol.DPLN);
+    // const priceData = await this.dexService.getUsdcPrice(TokenSymbol.DPLN);
     const balance = await this.apiService.getNativeTokenBalance(account.wallet);
-    const usdcBalance = toFixed(
-      toBigJs(balance.uiAmount).mul(priceData.price),
-      6,
-    ).toNumber();
+    const usdcBalance = toFixed(toBigJs(balance.uiAmount).mul(1), 6).toNumber();
 
     return BalanceDto.create(balance, bonusBalance, usdcBalance);
   }
