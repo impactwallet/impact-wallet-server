@@ -1,12 +1,37 @@
-version: '3.7'
 services:
-  mongodb_container:
-    image: mongo:latest
+  api:
+    build: .
+    init: true
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: 9898
+      MONGODB_URI: mongodb://mongodb_container:27017/impact_wallet?replicaSet=rs0&directConnection=true
     ports:
-      - 27017:27017
+      - "127.0.0.1:${PORT:-9898}:9898"
+    depends_on:
+      mongodb_container:
+        condition: service_healthy
+    stop_grace_period: 30s
+
+  mongodb_container:
+    image: mongo:7.0
+    ports:
+      - "127.0.0.1:${MONGO_PORT:-27017}:27017"
     volumes:
       - mongodb_data_container:/data/db
-    command: --replSet "rs0"
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    healthcheck:
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - "try { rs.status(); } catch (e) { if (e.code === 94) { rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'localhost:27017'}]}); } else { throw e; } } if (!db.hello().isWritablePrimary) { quit(1); }"
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
 
 volumes:
   mongodb_data_container:

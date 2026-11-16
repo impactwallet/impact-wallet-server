@@ -53,57 +53,116 @@ Many domains expose both full and **`lite`** controllers/services (e.g. `orgs.co
 
 ## Prerequisites
 
-- **Node.js** 18+ (matches `@types/node`)
+- **Node.js** 22 (for running outside Docker)
 - **npm**
 - **MongoDB** with a replica set (required by Agenda / local Docker setup)
 - Solana RPC access and keys for fee payer / mints (see env below)
 
-## Quick start
+## Run with Docker
 
-### 1. Install dependencies
+Requires Docker with Compose v2. The multi-stage image uses Node.js 22,
+installs dependencies with `npm ci`, and runs the compiled API as a non-root user.
+Build tools and development dependencies stay out of the runtime image.
+
+1. Create your local configuration (skip this if `.env` already exists):
+
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Set `PRIVATE_KEY` to your JWT secret and `STRIPE_SK` to a Stripe test key.
+   `SOLANA_RPC_URL` must be a valid HTTP(S) URL; the example uses devnet.
+   Set `BONUS_RETURN_ENABLED=false` and `ONBOARDING_ENABLED=false` if you are
+   only exploring the API without configured wallets. Configure the other
+   provider credentials before exercising their integrations.
+
+3. Build and start:
+
+   ```bash
+   docker compose up --build -d
+   docker compose ps
+   docker compose logs -f api
+   ```
+
+API: `http://localhost:9898`; Swagger: `http://localhost:9898/docs`.
+`PORT` in `.env` changes the host port; the API listens on 9898 inside Docker.
+Compose injects the internal MongoDB URI, overriding `MONGODB_URI` from `.env`.
+Secrets are loaded at runtime and excluded from the Docker build context.
+
+MongoDB 7.0 runs as a single-node replica set, initialized automatically by its
+health check. The API starts after MongoDB becomes primary. The replica set
+advertises `localhost:27017`; clients use `directConnection=true` so the same
+single-node setup works from the host and from the API container.
+Data persists in the existing `mongodb_data_container` named volume.
+If that volume was created by a different MongoDB major version, check its
+upgrade compatibility before reusing it; do not downgrade newer data to 7.0.
+
+Both ports bind to localhost. This Compose setup is for local development;
+MongoDB has no authentication configured. `MONGO_PORT` changes its host port.
+The API health check probes `/docs-json` for HTTP liveness, not external provider
+availability. Shutdown signals reach Node and Nest shutdown hooks stop Agenda.
 
 ```bash
-npm install
+# Rebuild after code changes
+docker compose up --build -d api
+
+# Stop containers, preserving database data
+docker compose down
 ```
 
-### 2. Start MongoDB (Docker)
+`docker compose down -v` also deletes the database volume; use it only when you
+intend to discard local data.
+
+## Develop inside Docker
+
+Configure `.env` as described above, then start the development image:
 
 ```bash
-docker compose up -d
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build -d
+docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f api
 ```
 
-This runs Mongo on `localhost:27017` with replica set `rs0`. Initialize the replica set once if needed:
+Nest runs in watch mode: edit files in `src/` on your host and the API rebuilds
+and restarts automatically. Polling enables file change detection on Docker
+Desktop. TypeScript and Nest configuration files are also bind-mounted.
+Linux dependencies and generated `dist/` stay inside the container, so host
+`node_modules` and build output cannot overwrite them. No host npm install is
+needed. The development image includes all development dependencies.
+
+Swagger is at `http://localhost:9898/docs`. Attach your Node.js debugger to
+`localhost:9339` (or `DEBUG_PORT` from `.env`), with local project root mapped
+to `/app`. The inspector binds to all interfaces inside the container but is
+published only on localhost.
 
 ```bash
-docker compose exec mongodb_container mongosh --eval 'rs.initiate({_id:"rs0", members:[{_id:0, host:"localhost:27017"}]})'
+# Run tests inside the development container
+docker compose -f docker-compose.yml -f docker-compose.dev.yml exec api npm test -- --runInBand
+
+# Rebuild after changing package.json, package-lock.json or the Dockerfile
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build -d api
+
+# Stop development containers and keep MongoDB data
+docker compose -f docker-compose.yml -f docker-compose.dev.yml down
 ```
 
-### 3. Configure environment
+The development override uses the same Compose project and MongoDB volume as
+the default setup. To switch back to the compiled runtime image, run
+`docker compose up --build -d api` without the override.
+
+## Run Node.js on the host
+
+Use Node.js 22 and the same `.env` configuration described above:
 
 ```bash
-cp .env.example .env
-```
-
-Fill in required values (see [Environment variables](#environment-variables)). At minimum for local boot:
-
-- `MONGODB_URI` — e.g. `mongodb://localhost:27017/impact_wallet?replicaSet=rs0`
-- `PORT` — defaults to `9898`
-- `PRIVATE_KEY` — JWT signing secret
-- Solana-related vars when exercising chain features
-
-### 4. Run the server
-
-```bash
-# development (watch mode)
+npm ci
+docker compose up -d mongodb_container
 npm run start:dev
-
-# production build + run
-npm run build
-npm run start:prod
 ```
 
-API: `http://localhost:9898`  
-Swagger: `http://localhost:9898/docs`
+For this mode, set `MONGODB_URI` to
+`mongodb://localhost:27017/impact_wallet?replicaSet=rs0&directConnection=true`.
+If `MONGO_PORT` is customized, update the URI accordingly. Stop the containerized
+API (`docker compose stop api`) before running the host API on the same port.
 
 ## Scripts
 

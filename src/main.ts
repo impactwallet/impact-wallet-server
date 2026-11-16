@@ -8,6 +8,7 @@ async function start() {
     cors: true,
     rawBody: true,
   });
+  app.enableShutdownHooks();
   const config = new DocumentBuilder()
     .setTitle('Equity Wallet')
     .setDescription('Documentation REST API')

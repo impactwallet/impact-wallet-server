@@ -1,0 +1,21 @@
+# Use together with docker-compose.yml.
+services:
+  api:
+    build:
+      context: .
+      target: development
+    environment:
+      NODE_ENV: development
+      # Polling also detects edits through Docker Desktop bind mounts.
+      TSC_WATCHFILE: DynamicPriorityPolling
+      TSC_WATCHDIRECTORY: DynamicPriorityPolling
+    ports:
+      - "127.0.0.1:${DEBUG_PORT:-9339}:9339"
+    volumes:
+      # Keep Linux node_modules and build output inside the container.
+      - ./src:/app/src
+      - ./nest-cli.json:/app/nest-cli.json:ro
+      - ./tsconfig.json:/app/tsconfig.json:ro
+      - ./tsconfig.build.json:/app/tsconfig.build.json:ro
+      - ./.eslintrc.js:/app/.eslintrc.js:ro
+      - ./.prettierrc:/app/.prettierrc:ro
