@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Check source and test types
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test -- --runInBand --no-watchman
+      - name: Build runtime image and start integration stack
+        run: docker compose -p iw-ci -f docker-compose.test.yml up --build -d --wait --wait-timeout 120
+      - name: HTTP and database integration tests
+        run: npm run test:e2e -- --runInBand
+      - name: Container logs on failure
+        if: failure()
+        run: docker compose -p iw-ci -f docker-compose.test.yml logs --no-color
+      - name: Clean up integration stack
+        if: always()
+        run: docker compose -p iw-ci -f docker-compose.test.yml down -v

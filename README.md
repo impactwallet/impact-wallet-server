@@ -164,6 +164,41 @@ For this mode, set `MONGODB_URI` to
 If `MONGO_PORT` is customized, update the URI accordingly. Stop the containerized
 API (`docker compose stop api`) before running the host API on the same port.
 
+## CI and integration tests
+
+GitHub Actions (`.github/workflows/ci.yml`) runs on pushes and pull requests:
+`npm ci` → typecheck → unit tests → Docker runtime build → HTTP/database
+integration tests. Failed runs print container logs; the stack is cleaned up
+after each run. The workflow builds locally without publishing an image or
+deploying the application. Its first GitHub run happens after pushing the files.
+
+Run the same checks locally with Node.js 22 and Docker Compose v2:
+
+```bash
+npm ci
+npm run typecheck
+npm test -- --runInBand --no-watchman
+docker compose -p iw-ci-local -f docker-compose.test.yml up --build -d --wait --wait-timeout 120
+npm run test:e2e -- --runInBand
+docker compose -p iw-ci-local -f docker-compose.test.yml down -v
+```
+
+Always run the final cleanup command, including after failed tests. This test
+stack uses ports **19898** (API) and **27028** (MongoDB), an ephemeral database,
+and dummy integration credentials. It does not load `.env` or reuse the normal
+development database volume. The tests deliberately target these fixed local
+ports; keep them free and run only one integration stack at a time.
+
+Coverage includes Swagger availability, missing authentication, signed JWT user
+lookup and secret-field exclusion, nonexistent users, invalid Stripe signatures,
+merchant DTO validation, and replica-set transaction rollback. External payment
+and blockchain success paths are not exercised. These tests run on the host
+against the compiled API container, not against mocked Nest services.
+
+`npm run typecheck` includes both source and test files. The `--no-watchman`
+option avoids depending on a local Watchman installation for unit test discovery;
+the integration Jest configuration disables Watchman as well.
+
 ## Scripts
 
 | Command | Description |
@@ -171,11 +206,12 @@ API (`docker compose stop api`) before running the host API on the same port.
 | `npm run start:dev` | Nest watch mode |
 | `npm run start:debug` | Watch + Node inspector on `9339` |
 | `npm run build` | Compile to `dist/` |
+| `npm run typecheck` | Check source and test types without emitting files |
 | `npm run start:prod` | Run compiled `dist/main.js` |
 | `npm run lint` | ESLint with autofix |
 | `npm run format` | Prettier |
 | `npm test` | Unit tests (Jest) |
-| `npm run test:e2e` | E2E tests |
+| `npm run test:e2e` | HTTP/database tests against `docker-compose.test.yml` |
 
 ## API overview
 

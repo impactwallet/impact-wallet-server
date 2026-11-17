@@ -14,6 +14,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends procps \
     && rm -rf /var/lib/apt/lists/*
 COPY --chown=node:node nest-cli.json tsconfig.json tsconfig.build.json .eslintrc.js .prettierrc ./
 COPY --chown=node:node src ./src
+COPY --chown=node:node tsconfig.test.json ./
+COPY --chown=node:node test ./test
 RUN chown node:node /app
 USER node
 EXPOSE 9898 9339

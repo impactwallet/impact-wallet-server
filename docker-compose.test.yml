@@ -1,0 +1,46 @@
+# Isolated integration stack: no .env, external credentials or persistent volumes.
+services:
+  mongodb:
+    image: mongo:7.0
+    command: ['mongod', '--replSet', 'rs0', '--bind_ip_all']
+    ports:
+      - '127.0.0.1:27028:27017'
+    tmpfs:
+      - /data/db
+      - /data/configdb
+    healthcheck:
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - "try { rs.status(); } catch (e) { if (e.code === 94) { rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'localhost:27017'}]}); } else { throw e; } } if (!db.hello().isWritablePrimary) { quit(1); }"
+      interval: 2s
+      timeout: 5s
+      retries: 30
+  api:
+    build:
+      context: .
+      target: runtime
+    init: true
+    environment:
+      NODE_ENV: test
+      ENV: DEV
+      PORT: 9898
+      MONGODB_URI: mongodb://mongodb:27017/impact_wallet_e2e?replicaSet=rs0&directConnection=true
+      PRIVATE_KEY: integration-test-only
+      STRIPE_SK: sk_test_placeholder
+      STRIPE_WHSEC: whsec_integration_test
+      SOLANA_RPC_URL: http://127.0.0.1:8899
+      NETWORK: devnet
+      SERVER_URL: http://localhost:19898
+      ONBOARDING_ENABLED: 'false'
+      BONUS_RETURN_ENABLED: 'false'
+      BONUS_RETURN_FREQUENCY: 1minute
+      NOTIFICATIONS_ENABLED: 'false'
+    ports:
+      - '127.0.0.1:19898:9898'
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    stop_grace_period: 30s
