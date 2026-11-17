@@ -877,17 +877,22 @@ export class ApiService {
     if (!isNil(parsedTxn) && isNil(txnError)) {
       return txnHash;
     }
+
+    if (retries <= 0) {
+      throw txnError;
+    }
+
     try {
       txnHash = await retryFn();
       txnHash = get(txnHash, 'txnHash', txnHash);
-    } catch (err) {
-      txnError = err.message;
+    } finally {
+      return this.confirmTxnWithRetry(
+        txnHash,
+        retryFn,
+        maxSupportedTransactionVersion,
+        --retries,
+      );
     }
-    if (!isNil(txnError) && retries > 0) {
-      console.log(`Retrying txn ${txnHash}: ${txnError}`);
-      return this.confirmTxnWithRetry(txnHash, retryFn, --retries);
-    }
-    throw txnError;
   }
 
   async recordMemo(memo: string, keys: { pubKey: string; pk: string }[]) {
@@ -1063,7 +1068,9 @@ export class ApiService {
       if (accountInfo) {
         const addressLookupTableAccount = new AddressLookupTableAccount({
           key: new PublicKey(addressLookupTableAddress),
-          state: AddressLookupTableAccount.deserialize(accountInfo.data),
+          state: AddressLookupTableAccount.deserialize(
+            Uint8Array.from(accountInfo.data),
+          ),
         });
         acc.push(addressLookupTableAccount);
       }
