@@ -6,7 +6,7 @@ export const yearlyRevenuePipeline = (): PipelineStage[] => {
     {
       $match: {
         updatedAt: {
-          $gte: moment().startOf('year').subtract(9, 'years').toDate(),
+          $gte: moment().utc().startOf('year').subtract(9, 'years').toDate(),
         },
       },
     },
@@ -42,7 +42,11 @@ export const quarterlyRevenuePipeline = (): PipelineStage[] => {
     {
       $match: {
         updatedAt: {
-          $gte: moment().startOf('quarter').subtract(9, 'quarters').toDate(),
+          $gte: moment()
+            .utc()
+            .startOf('quarter')
+            .subtract(9, 'quarters')
+            .toDate(),
         },
       },
     },
@@ -90,7 +94,7 @@ export const monthlyRevenuePipeline = (): PipelineStage[] => {
     {
       $match: {
         updatedAt: {
-          $gte: moment().startOf('month').subtract(9, 'month').toDate(),
+          $gte: moment().utc().startOf('month').subtract(9, 'month').toDate(),
         },
       },
     },
@@ -126,7 +130,7 @@ export const weeklyRevenuePipeline = (): PipelineStage[] => {
     {
       $match: {
         updatedAt: {
-          $gte: moment().startOf('week').subtract(9, 'weeks').toDate(),
+          $gte: moment().utc().startOf('week').subtract(9, 'weeks').toDate(),
         },
       },
     },
@@ -185,7 +189,7 @@ export const dailyRevenuePipeline = (): PipelineStage[] => {
     {
       $match: {
         updatedAt: {
-          $gte: moment().startOf('day').subtract(9, 'days').toDate(),
+          $gte: moment().utc().startOf('day').subtract(9, 'days').toDate(),
         },
       },
     },
@@ -223,7 +227,7 @@ export const hourlyRevenuePipeline = (): PipelineStage[] => {
     {
       $match: {
         updatedAt: {
-          $gte: moment().startOf('hour').subtract(9, 'hours').toDate(),
+          $gte: moment().utc().startOf('hour').subtract(9, 'hours').toDate(),
         },
       },
     },

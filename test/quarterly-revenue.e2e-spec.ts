@@ -56,6 +56,23 @@ describe('Quarterly revenue aggregation (MongoDB)', () => {
     ]);
   });
 
+  it('includes the UTC window boundary and excludes payments before it', async () => {
+    // With the clock fixed to November 2026, nine quarters back starts July 2024.
+    // Run Jest separately with TZ=UTC and TZ=Europe/Ljubljana to check both zones.
+    await db.collection(collectionName).insertMany([
+      { amount: 100, updatedAt: new Date('2024-06-30T23:59:59.999Z') },
+      { amount: 20, updatedAt: new Date('2024-07-01T00:00:00.000Z') },
+      { amount: 30, updatedAt: new Date('2024-07-01T00:00:00.001Z') },
+    ]);
+
+    const result = await db
+      .collection(collectionName)
+      .aggregate(quarterlyRevenuePipeline())
+      .toArray();
+
+    expect(result).toEqual([{ date: '2024-07-01', revenue: 50 }]);
+  });
+
   it('separates December and January and does not merge Q1 across years', async () => {
     await db.collection(collectionName).insertMany([
       { amount: 30, updatedAt: new Date('2026-01-01T00:00:00Z') },
