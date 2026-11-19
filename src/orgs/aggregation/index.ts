@@ -49,7 +49,19 @@ export const quarterlyRevenuePipeline = (): PipelineStage[] => {
     {
       $project: {
         amount: 1,
-        date: { $dateToString: { format: '%Y-%m-01', date: '$updatedAt' } },
+        date: {
+          $dateToString: {
+            format: '%Y-%m-%d',
+            timezone: 'UTC',
+            date: {
+              $dateTrunc: {
+                date: '$updatedAt',
+                unit: 'quarter',
+                timezone: 'UTC',
+              },
+            },
+          },
+        },
       },
     },
     {
