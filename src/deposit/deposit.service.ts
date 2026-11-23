@@ -18,46 +18,61 @@ export class DepositService {
   ) {}
 
   async handleDeposit(depositId: string, amount: number) {
-    let deposit: DepositDocument;
+    const deposit = await this.depositModel
+      .findOneAndUpdate(
+        {
+          _id: depositId,
+          status: DepositStatus.Pending,
+        },
+        {
+          $set: { status: DepositStatus.Processing },
+        },
+        {
+          new: true,
+        },
+      )
+      .populate('user orgUser');
     let account: OrgDocument | UserDocument;
-    const session = await this.connection.startSession();
+
     try {
-      await session.withTransaction(async () => {
-        deposit = await this.depositModel
-          .findById(depositId)
-          .populate('user orgUser');
-        if (isNil(deposit)) {
+      if (isNil(deposit)) {
+        let existingDeposit = await this.depositModel.findById(depositId);
+
+        if (isNil(existingDeposit)) {
           throw new NotFoundException('Deposit not found');
+        } else if (
+          existingDeposit.status === DepositStatus.Fulfilled ||
+          existingDeposit.status === DepositStatus.Processing
+        ) {
+          return;
         }
-        deposit.amount = amount;
-        account = isNil(deposit.user)
-          ? (deposit.orgUser as OrgDocument)
-          : (deposit.user as UserDocument);
-        const rootOrg = await this.orgModel.findOne(
-          { wallet: process.env.ROOT_PUBKEY },
-          '+password',
-        );
-        const rootOrgPk = await this.apiService.getPK(
-          rootOrg.wallet,
-          rootOrg.password,
-        );
-        const txnHash = await this.apiService.mintToken(
-          process.env.CREDITS_MINT,
-          rootOrgPk,
-          [{ wallet: account.wallet, amount: deposit.amount }],
-        );
-        deposit.status = DepositStatus.Fulfilled;
-        deposit.txnHash = txnHash;
-        await deposit.save({ session });
-      });
+      }
+      deposit.amount = amount;
+      account = isNil(deposit.user)
+        ? (deposit.orgUser as OrgDocument)
+        : (deposit.user as UserDocument);
+      const rootOrg = await this.orgModel.findOne(
+        { wallet: process.env.ROOT_PUBKEY },
+        '+password',
+      );
+      const rootOrgPk = await this.apiService.getPK(
+        rootOrg.wallet,
+        rootOrg.password,
+      );
+      const txnHash = await this.apiService.mintToken(
+        process.env.CREDITS_MINT,
+        rootOrgPk,
+        [{ wallet: account.wallet, amount: deposit.amount }],
+      );
+      deposit.status = DepositStatus.Fulfilled;
+      deposit.txnHash = txnHash;
+      await deposit.save();
     } catch (err) {
       if (!isNil(deposit)) {
         deposit.error = err.message;
         await deposit.save();
       }
       throw err;
-    } finally {
-      await session.endSession();
     }
 
     const nickname = get(account, 'nickname', get(account, 'username'));
